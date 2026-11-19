@@ -9,6 +9,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { isSelfInstall, SELF_INSTALL_NOTE } from '@shared/consoles';
 import type { InstallProgress, InstalledGame, InstalledRelease, UpdateInfo } from '@shared/types';
 import { type DB, kvGet, kvSet } from '../db';
 import type { AchievementService } from '../achievements/service';
@@ -32,6 +33,7 @@ export class Ports {
     const cat = this.db.prepare('SELECT id, title, console, repo FROM catalog_game WHERE id = ?').get(catalogId) as { id: string; title: string; console: string; repo: string | null } | undefined;
     if (!cat) throw new Error('Esse jogo não está no catálogo.');
     if (!cat.repo) throw new Error('O catálogo não diz em qual projeto do GitHub este jogo está.');
+    if (isSelfInstall(cat.console)) throw new Error(SELF_INSTALL_NOTE);
     const have = this.db.prepare('SELECT id FROM installed_game WHERE catalog_id = ? OR lower(source_repo) = lower(?)').get(catalogId, cat.repo) as { id: string } | undefined;
     if (have) throw new Error('Este jogo já está na sua biblioteca.');
     return this.install(parseRepo(cat.repo), { key: catalogId, catalogId, title: cat.title, console: cat.console });
@@ -113,6 +115,7 @@ export class Ports {
   async update(gameId: string) {
     const g = this.games.getGame(gameId);
     if (!g.sourceRepo) throw new Error('Este jogo não tem um projeto do GitHub ligado a ele.');
+    if (isSelfInstall(g.console)) throw new Error('O Cartucho não atualiza recomps deste console. Baixe a versão nova na página do projeto e instale por cima.');
     if (this.busy.has(gameId)) throw new Error('Já está atualizando.');
     if (this.running(gameId) || isRunning(g.exe)) throw new Error('Feche o jogo antes de atualizar.');
     this.busy.add(gameId);

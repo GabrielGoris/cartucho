@@ -7,6 +7,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import type { CatalogGame, ConsoleId, InstalledGame, PlayStatus, RadarEvent, UpdateInfo } from '@shared/types';
 import { useTRPC } from '../trpc';
 import { useProgress } from '../lib/progress';
+import { isSelfInstall } from '@shared/consoles';
 
 export interface HubGame {
   key: string;                       // id do jogo instalado, ou do catálogo
@@ -68,20 +69,27 @@ export function useHubActions() {
   const quit = useMutation(trpc.play.quit.mutationOptions());
   const install = useMutation(trpc.ports.install.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
   const update = useMutation(trpc.ports.update.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
+  const add = useMutation(trpc.games.addFromDialog.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
   const checkAll = useMutation({ mutationFn: async (ids: string[]) => { await Promise.all(ids.map(id => qc.fetchQuery(trpc.ports.checkUpdate.queryOptions({ id, force: true }, { staleTime: 0 })))); await qc.invalidateQueries({ queryKey: trpc.ports.checkUpdate.pathKey() }); } });
-  const error = play.error ?? install.error ?? update.error ?? quit.error;
+  const error = play.error ?? install.error ?? update.error ?? quit.error ?? add.error;
 
   return {
     error: error?.message ?? null,
-    reset: () => { play.reset(); install.reset(); update.reset(); quit.reset(); },
-    /** Instalado: abre (ou fecha, se já estiver aberto). Não instalado: instala. Devolve o que fez. */
-    primary(g: HubGame): 'play' | 'quit' | 'install' | 'pick' | 'none' {
+    reset: () => { play.reset(); install.reset(); update.reset(); quit.reset(); add.reset(); },
+    /** Instalado: abre (ou fecha, se já estiver aberto). Não instalado: instala, ou pede a pasta (consoles em que o usuário instala sozinho). */
+    primary(g: HubGame): 'play' | 'quit' | 'install' | 'add' | 'pick' | 'none' {
       if (g.installed?.running) { quit.mutate({ id: g.installed.id }); return 'quit'; }
       if (g.installed) { if (!g.installed.exe) return 'pick'; play.mutate({ id: g.installed.id }); return 'play'; }
+      if (g.catalog && isSelfInstall(g.console)) { add.mutate({ catalogId: g.catalog.id }); return 'add'; }
       if (g.catalog?.repo) { install.mutate({ catalogId: g.catalog.id }); return 'install'; }
       return 'none';
     },
-    update: (g: HubGame) => { if (g.installed) update.mutate({ id: g.installed.id }); },
+    /** Atualiza, ou só abre a página de versões quando o usuário instala sozinho. Devolve o que fez. */
+    update: (g: HubGame): 'update' | 'page' | 'none' => {
+      if (!g.installed) return 'none';
+      if (isSelfInstall(g.console)) { if (!g.repo) return 'none'; window.open(`https://github.com/${g.repo}/releases`, '_blank'); return 'page'; }
+      update.mutate({ id: g.installed.id }); return 'update';
+    },
     github: (g: HubGame) => { if (g.repo) window.open(`https://github.com/${g.repo}`, '_blank'); },
     checkAll: (gs: HubGame[]) => checkAll.mutate(gs.filter(g => g.installed?.sourceRepo).map(g => g.installed!.id)),
     checking: checkAll.isPending,

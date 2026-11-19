@@ -2,7 +2,7 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CatalogGame } from '@shared/types';
-import { CONSOLE_NAME, STATUS_LABEL } from '@shared/consoles';
+import { CONSOLE_NAME, isSelfInstall, SELF_INSTALL_NOTE, STATUS_LABEL } from '@shared/consoles';
 import { useTRPC } from '../trpc';
 import { Hints } from '../lib/input';
 import { useSpatialNav } from '../lib/spatial';
@@ -13,7 +13,7 @@ import { GameArt } from '../components/GameArt';
 import { Bars } from '../components/Bars';
 import { ProgressBar } from '../components/ProgressBar';
 
-const gh = (repo: string) => window.open(`https://github.com/${repo}`, '_blank');
+const gh = (repo: string, path = '') => window.open(`https://github.com/${repo}${path}`, '_blank');
 
 export function GamePage({ id, active, onBack, onAchievements }: { id: string; active: boolean; onBack: () => void; onAchievements: () => void }) {
   const trpc = useTRPC(), qc = useQueryClient();
@@ -60,7 +60,9 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
                 ? <button className="hm-go" data-hf data-main disabled={play.isPending || !!progress} onClick={() => { sfx.play('ok'); play.mutate({ id }); }}>▶ JOGAR</button>
                 : <button className="hm-go" data-hf data-main onClick={() => chooseExe.mutate({ id })}>ESCOLHER O .EXE</button>}
             {g.adapter && <button className="hm-go ghost" data-hf onClick={() => { sfx.play('ok'); onAchievements(); }}>★ CONQUISTAS{a?.total ? ` ${a.unlocked}/${a.total}` : ''}</button>}
-            {u?.updateAvailable && !progress && <button className="hm-go ghost upd" data-hf disabled={update.isPending || g.running} onClick={() => update.mutate({ id })}>⬇ ATUALIZAR PARA {u.latest?.tag}</button>}
+            {u?.updateAvailable && !progress && (isSelfInstall(g.console)
+              ? <button className="hm-go ghost upd" data-hf onClick={() => gh(g.sourceRepo!, '/releases')}>{u.latest?.tag} NO PROJETO ↗</button>
+              : <button className="hm-go ghost upd" data-hf disabled={update.isPending || g.running} onClick={() => update.mutate({ id })}>⬇ ATUALIZAR PARA {u.latest?.tag}</button>)}
             <button className="hm-go ghost" data-hf onClick={() => setMore(m => !m)}>⋯</button>
           </div>
 
@@ -93,7 +95,8 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
                     {u?.updateAvailable === false ? 'Você está na versão mais nova.' : u?.updateAvailable ? `Atualização de ${fmtSize(u.latest!.size)}.` : u?.installed === null && u?.latest ? 'Atualizar baixa a versão mais nova e passa a acompanhar.' : ''}
                     {u?.error ? ` ${u.error}` : ''}
                   </p>
-                  {u?.updateAvailable === null && u.latest && !progress && <button className="btn" data-hf onClick={() => update.mutate({ id })}>Baixar {u.latest.tag} por cima</button>}
+                  {isSelfInstall(g.console) && <p className="dim small">O Cartucho não atualiza recomps deste console: baixe a versão nova na página do projeto e instale por cima da pasta.</p>}
+                  {u?.updateAvailable === null && u.latest && !progress && !isSelfInstall(g.console) && <button className="btn" data-hf onClick={() => update.mutate({ id })}>Baixar {u.latest.tag} por cima</button>}
                   <p className="dim small">{u?.checkedAt ? `Conferido ${ago(u.checkedAt)} · ` : ''}<button className="link" data-hf disabled={recheck.isPending} onClick={() => recheck.mutate()}>{recheck.isPending ? 'conferindo…' : 'conferir agora'}</button></p>
                   {u?.latest?.notes && u.updateAvailable && <pre className="notes">{u.latest.notes}</pre>}
                 </>
@@ -111,6 +114,8 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
 export function CatalogPage({ game: c, installedId, active, onBack, onOpenInstalled }: { game: CatalogGame; installedId: string | null; active: boolean; onBack: () => void; onOpenInstalled: (id: string) => void }) {
   const trpc = useTRPC(), qc = useQueryClient();
   const install = useMutation(trpc.ports.install.mutationOptions({ onSuccess: g => { void qc.invalidateQueries(); sfx.play('ok'); onOpenInstalled(g.id); } }));
+  const add = useMutation(trpc.games.addFromDialog.mutationOptions({ onSuccess: g => { void qc.invalidateQueries(); if (g) { sfx.play('ok'); onOpenInstalled(g.id); } } }));
+  const self = isSelfInstall(c.console);
   const portsDir = useQuery(trpc.settings.portsDir.queryOptions());
   const progress = useProgress(c.id);
   const root = useRef<HTMLDivElement>(null);
@@ -131,12 +136,18 @@ export function CatalogPage({ game: c, installedId, active, onBack, onOpenInstal
           <div className="hm-btns">
             {installedId
               ? <button className="hm-go" data-hf data-main onClick={() => onOpenInstalled(installedId)}>NA BIBLIOTECA ▶</button>
-              : c.repo && <button className="hm-go" data-hf data-main disabled={install.isPending || !!progress} onClick={() => { sfx.play('ok'); install.mutate({ catalogId: c.id }); }}>⬇ INSTALAR</button>}
-            {c.repo && <button className="hm-go ghost" data-hf onClick={() => gh(c.repo!)}>VER NO GITHUB</button>}
+              : self
+                ? <>
+                    {c.repo && <button className="hm-go" data-hf data-main onClick={() => gh(c.repo!)}>VER O PROJETO ↗</button>}
+                    <button className={`hm-go ${c.repo ? 'ghost' : ''}`} data-hf data-main={c.repo ? undefined : true} disabled={add.isPending} onClick={() => add.mutate({ catalogId: c.id })}>JÁ INSTALEI: ADICIONAR PASTA</button>
+                  </>
+                : c.repo && <button className="hm-go" data-hf data-main disabled={install.isPending || !!progress} onClick={() => { sfx.play('ok'); install.mutate({ catalogId: c.id }); }}>⬇ INSTALAR</button>}
+            {c.repo && !(self && !installedId) && <button className="hm-go ghost" data-hf onClick={() => gh(c.repo!)}>VER NO GITHUB</button>}
           </div>
           {progress && <ProgressBar p={progress} />}
-          {install.error && !progress && <p className="err" style={{ margin: 0 }}>{install.error.message}</p>}
-          {!installedId && c.repo && <p className="dim small">Instala em {portsDir.data ?? '…'} (dá para mudar nas configurações). O download é conferido pelo hash do GitHub e pelo Windows Defender antes de ser aberto.</p>}
+          {(install.error ?? add.error) && !progress && <p className="err" style={{ margin: 0 }}>{(install.error ?? add.error)!.message}</p>}
+          {!installedId && self && <p className="dim small">{SELF_INSTALL_NOTE}</p>}
+          {!installedId && c.repo && !self && <p className="dim small">Instala em {portsDir.data ?? '…'} (dá para mudar nas configurações). O download é conferido pelo hash do GitHub e pelo Windows Defender antes de ser aberto.</p>}
           <div className="gp-cards">
             {c.needs && <section className="gp-card"><h3>O QUE VOCÊ PRECISA</h3><p className="txt">{c.needs}</p></section>}
             {c.description && <section className="gp-card wide"><h3>SOBRE</h3><p className="txt">{c.description}</p></section>}

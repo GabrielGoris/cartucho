@@ -112,9 +112,10 @@ export function createRouter(deps: RouterDeps) {
         return ach.getGame(input.id);
       }),
       /** Abre o seletor de pasta e adiciona o jogo. Devolve null se o usuário cancelar. */
-      addFromDialog: t.procedure.mutation(async () => {
-        const dir = await pick('Escolha a pasta do jogo', ['openDirectory']);
-        return dir ? ach.addGame(dir) : null;
+      addFromDialog: t.procedure.input(z.object({ catalogId: z.string().optional() }).optional()).mutation(async ({ input }) => {
+        // vindo de um jogo do catálogo, a pasta fica ligada a ele (capa, status, projeto)
+        const dir = await pick(input?.catalogId ? 'Escolha a pasta onde você instalou o jogo' : 'Escolha a pasta do jogo', ['openDirectory']);
+        return dir ? ach.addGame(dir, { catalogId: input?.catalogId ?? null }) : null;
       }),
       remove: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => ach.removeGame(input.id)),
       openFolder: t.procedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {

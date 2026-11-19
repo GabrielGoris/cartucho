@@ -2,13 +2,22 @@
 
 Hub de recomps, ports e emuladores: catálogo do Recompendium, radar de novidades, seus jogos instalados e as conquistas de cada um.
 
+## Aviso legal
+
+O Cartucho é um projeto pessoal e gratuito, sem nenhuma ligação com Nintendo, Sony, Microsoft, Sega ou qualquer outra fabricante ou editora. Os nomes de consoles e jogos aparecem só para identificar com o que cada recomp funciona, e pertencem aos seus donos.
+
+- O Cartucho **não contém nem distribui** jogos, ROMs, chaves, firmware, BIOS ou arquivos de qualquer jogo.
+- Os recomps precisam de uma **cópia do jogo que você comprou**, extraída por você do seu próprio console ou mídia. O Cartucho não ensina nem ajuda a obter esses arquivos de outro jeito.
+- A lista de jogos vem do [Recompendium](https://recompendium.com/) e as imagens do [LaunchBox Games Database](https://gamesdb.launchbox-app.com/), consultados no seu PC; nada disso fica neste repositório.
+- Para os consoles que ainda estão à venda (hoje, **Nintendo Switch e Switch 2**), o Cartucho não baixa nem atualiza nada: mostra quais recomps existem e o link do projeto, e você instala por conta própria e adiciona a pasta.
+
 ## O que já funciona
 
 - **Abertura** com o cartucho entrando no console e o resumo da biblioteca (dá para desligar nas configurações).
 - **Início**: o jogo mais recente em destaque e os outros numa fileira, navegável por setas ou controle.
 - **Palco 3D** (React Three Fiber) com os 15 consoles, a mesa e a linha neon; nome, ano e contagem real de recomps e instalados por console.
 - **Hubs no estilo de cada console**: Nintendo Switch e Switch 2 já têm o seu (fileira de blocos, atalhos redondos, telas com barra lateral, Jogar/Instalar/Atualizar, tempo de jogo e conquistas). Os outros consoles ainda usam o hub provisório.
-- **Instalar e atualizar** pelo GitHub, direto da ficha do jogo no catálogo: escolhe o download certo para Windows, confere o hash publicado, passa no Windows Defender, desempacota numa pasta própria e acha o .exe. Atualizações só entram se vierem da mesma conta, guardam cópia dos arquivos trocados em `_cartucho-backup` e nunca sobrescrevem configurações (.ini, .toml, .cfg…) nem saves. Projetos cujo download não é o jogo pronto (ferramentas que montam o jogo a partir da sua cópia) são avisados antes de baixar.
+- **Instalar e atualizar** pelo GitHub, direto da ficha do jogo no catálogo (exceto Switch e Switch 2, veja o aviso acima): escolhe o download certo para Windows, confere o hash publicado, passa no Windows Defender, desempacota numa pasta própria e acha o .exe. Atualizações só entram se vierem da mesma conta, guardam cópia dos arquivos trocados em `_cartucho-backup` e nunca sobrescrevem configurações (.ini, .toml, .cfg…) nem saves. Projetos cujo download não é o jogo pronto (ferramentas que montam o jogo a partir da sua cópia) são avisados antes de baixar.
 - **Jogar e tempo de jogo**: o Jogar abre o .exe e acompanha até ele fechar, como na Steam (tempo total, sessões, últimos 14 dias). Com um jogo aberto, o palco 3D para de desenhar.
 - **Desinstalar** apaga só o que veio no download; saves e configurações que você mudou ficam.
 - **Imagens em boa resolução**: capas, artes de fundo e logos do [LaunchBox Games Database](https://gamesdb.launchbox-app.com/) (sem conta). Na primeira vez o Cartucho baixa o banco deles (~100 MB, atualizado uma vez por mês) e depois só as imagens dos jogos que aparecem na tela, guardadas em `media/` dentro dos dados do app. Sem o jogo lá, usa a capa do Recompendium.
@@ -90,6 +99,6 @@ docs/                   notas técnicas
 
 - Catálogo: [Recompendium](https://recompendium.com/).
 - Imagens dos jogos: [LaunchBox Games Database](https://gamesdb.launchbox-app.com/).
-- Lógica de instalação e acompanhamento inspirada no [Harbour](https://github.com/) (MIT-0).
+- Lógica de instalação e acompanhamento inspirada no Harbour (MIT-0).
 - Formatos do Xbox 360 conforme [Xenia](https://github.com/xenia-project/xenia) e [XenonRecomp](https://github.com/hedge-dev/XenonRecomp).
 - Nomes das conquistas do Sonic 3 A.I.R. e do RSDKv4 vêm do código desses projetos; veja [docs/conquistas.md](docs/conquistas.md).

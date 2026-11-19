@@ -18,3 +18,12 @@ export const CONSOLE_NAME: Record<ConsoleId, string> = {
   ps1: 'PlayStation', ps2: 'PlayStation 2', psp: 'PSP', ps3: 'PlayStation 3', ps4: 'PlayStation 4', ps5: 'PlayStation 5',
   x360: 'Xbox 360', pc: 'PC', other: 'Outros',
 };
+
+/**
+ * Consoles cujos recomps o Cartucho não baixa nem atualiza sozinho: a geração que a fabricante ainda vende
+ * e protege na Justiça. Para eles o catálogo é só informativo: mostra o que existe e o link do projeto,
+ * e o usuário instala por conta própria (com a cópia dele do jogo) e adiciona a pasta aqui.
+ */
+export const SELF_INSTALL: ReadonlySet<ConsoleId> = new Set<ConsoleId>(['switch', 'switch2']);
+export const isSelfInstall = (c: ConsoleId | string | null | undefined) => SELF_INSTALL.has(c as ConsoleId);
+export const SELF_INSTALL_NOTE = 'O Cartucho não baixa recomps deste console. Siga as instruções do projeto com a sua própria cópia do jogo e depois adicione a pasta aqui.';

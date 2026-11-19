@@ -141,6 +141,20 @@ describe('instalar, atualizar e desinstalar', () => {
     const { ports } = setup();
     await expect(ports.installFromCatalog('recomps/meu')).rejects.toThrow(/não publica uma versão pronta/);
   });
+
+  it('Switch e Switch 2: não baixa nem atualiza, o usuário instala e adiciona a pasta', async () => {
+    releases = []; publish('v1', 'autor', { 'MeuRecomp.exe': 'x' });
+    const { db, ports, ach, dir } = setup();
+    db.prepare("UPDATE catalog_game SET console = 'switch2'").run();
+    await expect(ports.installFromCatalog('recomps/meu')).rejects.toThrow(/não baixa recomps deste console/);
+    expect(existsSync(join(dir, 'MeuRecomp'))).toBe(false);
+    // a pasta que o usuário instalou fica ligada ao jogo do catálogo, mas atualizar continua manual
+    const mine = tmp(); writeFileSync(join(mine, 'MeuRecomp.exe'), 'x');
+    const g = await ach.addGame(mine, { catalogId: 'recomps/meu' });
+    expect(g.catalogId).toBe('recomps/meu');
+    expect(g.sourceRepo).toBe('dono/MeuRecomp');
+    await expect(ports.update(g.id)).rejects.toThrow(/não atualiza recomps/);
+  });
 });
 
 describe.skipIf(process.platform === 'win32')('jogar e contar o tempo', () => {
