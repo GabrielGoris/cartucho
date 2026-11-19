@@ -114,8 +114,8 @@ export class Ports {
   /** Baixa a versão nova e copia por cima (com cópia de segurança dos arquivos trocados). */
   async update(gameId: string) {
     const g = this.games.getGame(gameId);
+    if (isSelfInstall(g.console)) throw new Error('O Cartucho não atualiza recomps deste console: instale a versão nova por cima da pasta do jogo.');
     if (!g.sourceRepo) throw new Error('Este jogo não tem um projeto do GitHub ligado a ele.');
-    if (isSelfInstall(g.console)) throw new Error('O Cartucho não atualiza recomps deste console. Baixe a versão nova na página do projeto e instale por cima.');
     if (this.busy.has(gameId)) throw new Error('Já está atualizando.');
     if (this.running(gameId) || isRunning(g.exe)) throw new Error('Feche o jogo antes de atualizar.');
     this.busy.add(gameId);

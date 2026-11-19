@@ -9,7 +9,7 @@ O Cartucho é um projeto pessoal e gratuito, sem nenhuma ligação com Nintendo,
 - O Cartucho **não contém nem distribui** jogos, ROMs, chaves, firmware, BIOS ou arquivos de qualquer jogo.
 - Os recomps precisam de uma **cópia do jogo que você comprou**, extraída por você do seu próprio console ou mídia. O Cartucho não ensina nem ajuda a obter esses arquivos de outro jeito.
 - A lista de jogos vem do [Recompendium](https://recompendium.com/) e as imagens do [LaunchBox Games Database](https://gamesdb.launchbox-app.com/), consultados no seu PC; nada disso fica neste repositório.
-- Para os consoles que ainda estão à venda (hoje, **Nintendo Switch e Switch 2**), o Cartucho não baixa nem atualiza nada: mostra quais recomps existem e o link do projeto, e você instala por conta própria e adiciona a pasta.
+- Para os consoles que ainda estão à venda (hoje, **Nintendo Switch e Switch 2**), o Cartucho não baixa nem atualiza nada: mostra só quais jogos têm recomp, sem link nem nome do projeto. Você pesquisa e instala por conta própria e depois adiciona a pasta no Cartucho.
 
 ## O que já funciona
 

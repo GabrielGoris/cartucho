@@ -13,7 +13,7 @@ import { GameArt } from '../components/GameArt';
 import { Bars } from '../components/Bars';
 import { ProgressBar } from '../components/ProgressBar';
 
-const gh = (repo: string, path = '') => window.open(`https://github.com/${repo}${path}`, '_blank');
+const gh = (repo: string) => window.open(`https://github.com/${repo}`, '_blank');
 
 export function GamePage({ id, active, onBack, onAchievements }: { id: string; active: boolean; onBack: () => void; onAchievements: () => void }) {
   const trpc = useTRPC(), qc = useQueryClient();
@@ -60,9 +60,7 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
                 ? <button className="hm-go" data-hf data-main disabled={play.isPending || !!progress} onClick={() => { sfx.play('ok'); play.mutate({ id }); }}>▶ JOGAR</button>
                 : <button className="hm-go" data-hf data-main onClick={() => chooseExe.mutate({ id })}>ESCOLHER O .EXE</button>}
             {g.adapter && <button className="hm-go ghost" data-hf onClick={() => { sfx.play('ok'); onAchievements(); }}>★ CONQUISTAS{a?.total ? ` ${a.unlocked}/${a.total}` : ''}</button>}
-            {u?.updateAvailable && !progress && (isSelfInstall(g.console)
-              ? <button className="hm-go ghost upd" data-hf onClick={() => gh(g.sourceRepo!, '/releases')}>{u.latest?.tag} NO PROJETO ↗</button>
-              : <button className="hm-go ghost upd" data-hf disabled={update.isPending || g.running} onClick={() => update.mutate({ id })}>⬇ ATUALIZAR PARA {u.latest?.tag}</button>)}
+            {u?.updateAvailable && !progress && <button className="hm-go ghost upd" data-hf disabled={update.isPending || g.running} onClick={() => update.mutate({ id })}>⬇ ATUALIZAR PARA {u.latest?.tag}</button>}
             <button className="hm-go ghost" data-hf onClick={() => setMore(m => !m)}>⋯</button>
           </div>
 
@@ -88,15 +86,14 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
             </section>
             <section className="gp-card">
               <h3>VERSÃO</h3>
-              {!g.sourceRepo ? <p className="dim">Sem projeto do GitHub ligado, então o Cartucho não procura atualizações.</p> : (
+              {isSelfInstall(g.console) ? <p className="dim">Neste console as atualizações são por sua conta: instale a versão nova por cima da pasta do jogo.</p> : !g.sourceRepo ? <p className="dim">Sem projeto do GitHub ligado, então o Cartucho não procura atualizações.</p> : (
                 <>
                   <p>{u?.installed ? <>Instalada: <b>{u.installed}</b></> : 'Versão instalada desconhecida'}{u?.latest ? <> · mais nova: <b>{u.latest.tag}</b>{u.latest.date ? ` (${fmtDate(Date.parse(u.latest.date))})` : ''}</> : null}</p>
                   <p className="dim">
                     {u?.updateAvailable === false ? 'Você está na versão mais nova.' : u?.updateAvailable ? `Atualização de ${fmtSize(u.latest!.size)}.` : u?.installed === null && u?.latest ? 'Atualizar baixa a versão mais nova e passa a acompanhar.' : ''}
                     {u?.error ? ` ${u.error}` : ''}
                   </p>
-                  {isSelfInstall(g.console) && <p className="dim small">O Cartucho não atualiza recomps deste console: baixe a versão nova na página do projeto e instale por cima da pasta.</p>}
-                  {u?.updateAvailable === null && u.latest && !progress && !isSelfInstall(g.console) && <button className="btn" data-hf onClick={() => update.mutate({ id })}>Baixar {u.latest.tag} por cima</button>}
+                  {u?.updateAvailable === null && u.latest && !progress && <button className="btn" data-hf onClick={() => update.mutate({ id })}>Baixar {u.latest.tag} por cima</button>}
                   <p className="dim small">{u?.checkedAt ? `Conferido ${ago(u.checkedAt)} · ` : ''}<button className="link" data-hf disabled={recheck.isPending} onClick={() => recheck.mutate()}>{recheck.isPending ? 'conferindo…' : 'conferir agora'}</button></p>
                   {u?.latest?.notes && u.updateAvailable && <pre className="notes">{u.latest.notes}</pre>}
                 </>
@@ -132,17 +129,14 @@ export function CatalogPage({ game: c, installedId, active, onBack, onOpenInstal
         <div className="gp-main">
           <span className="k">{(c.console === 'other' ? c.platformName : CONSOLE_NAME[c.console]).toUpperCase()}{c.year ? ` · ${c.year}` : ''}{c.developer ? ` · ${c.developer}` : ''}</span>
           <h1>{c.title}</h1>
-          <p><span className={`st-${c.status}`}>■ {STATUS_LABEL[c.status]}</span>{c.version ? ` · ${c.version}` : ''}{c.stars ? ` · ★ ${c.stars}` : ''}{c.noLink ? ' · sem link no Recompendium' : ''}</p>
+          <p><span className={`st-${c.status}`}>■ {STATUS_LABEL[c.status]}</span>{c.version ? ` · ${c.version}` : ''}{c.stars ? ` · ★ ${c.stars}` : ''}{c.noLink && !self ? ' · sem link no Recompendium' : ''}</p>
           <div className="hm-btns">
             {installedId
               ? <button className="hm-go" data-hf data-main onClick={() => onOpenInstalled(installedId)}>NA BIBLIOTECA ▶</button>
               : self
-                ? <>
-                    {c.repo && <button className="hm-go" data-hf data-main onClick={() => gh(c.repo!)}>VER O PROJETO ↗</button>}
-                    <button className={`hm-go ${c.repo ? 'ghost' : ''}`} data-hf data-main={c.repo ? undefined : true} disabled={add.isPending} onClick={() => add.mutate({ catalogId: c.id })}>JÁ INSTALEI: ADICIONAR PASTA</button>
-                  </>
+                ? <button className="hm-go" data-hf data-main disabled={add.isPending} onClick={() => add.mutate({ catalogId: c.id })}>JÁ INSTALEI: ADICIONAR PASTA</button>
                 : c.repo && <button className="hm-go" data-hf data-main disabled={install.isPending || !!progress} onClick={() => { sfx.play('ok'); install.mutate({ catalogId: c.id }); }}>⬇ INSTALAR</button>}
-            {c.repo && !(self && !installedId) && <button className="hm-go ghost" data-hf onClick={() => gh(c.repo!)}>VER NO GITHUB</button>}
+            {c.repo && <button className="hm-go ghost" data-hf onClick={() => gh(c.repo!)}>VER NO GITHUB</button>}
           </div>
           {progress && <ProgressBar p={progress} />}
           {(install.error ?? add.error) && !progress && <p className="err" style={{ margin: 0 }}>{(install.error ?? add.error)!.message}</p>}

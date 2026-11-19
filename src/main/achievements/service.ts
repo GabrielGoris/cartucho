@@ -7,6 +7,7 @@ import { existsSync, unwatchFile, watchFile } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { isSelfInstall } from '@shared/consoles';
 import type { ConsoleId, GameAchievements, InstalledGame, InstalledRelease, RecentUnlock, UnlockEvent } from '@shared/types';
 import { findGameExe, guessProgram } from '../ports/files';
 import { type DB, kvGet, kvSet, tx } from '../db';
@@ -54,7 +55,7 @@ export class AchievementService {
     return {
       id: r.id, title: r.title, console: r.console as ConsoleId, installDir: r.install_dir, adapter: r.adapter, adapterLabel: adapter?.label ?? null,
       catalogId: r.catalog_id, coverUrl: absUrl(r.cover_url), addedAt: r.added_at, achievements: counts,
-      exe: r.exe, sourceRepo: r.source_repo, version: r.version, managed: !!r.managed,
+      exe: r.exe, sourceRepo: isSelfInstall(r.console) ? null : r.source_repo, version: r.version, managed: !!r.managed,
       playMs: r.play_ms ?? 0, lastPlayed: r.last_played ?? null, running: this.isRunning(r.id),
     };
   }

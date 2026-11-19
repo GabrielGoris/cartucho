@@ -84,12 +84,8 @@ export function useHubActions() {
       if (g.catalog?.repo) { install.mutate({ catalogId: g.catalog.id }); return 'install'; }
       return 'none';
     },
-    /** Atualiza, ou só abre a página de versões quando o usuário instala sozinho. Devolve o que fez. */
-    update: (g: HubGame): 'update' | 'page' | 'none' => {
-      if (!g.installed) return 'none';
-      if (isSelfInstall(g.console)) { if (!g.repo) return 'none'; window.open(`https://github.com/${g.repo}/releases`, '_blank'); return 'page'; }
-      update.mutate({ id: g.installed.id }); return 'update';
-    },
+    /** Consoles em que o usuário instala sozinho também não são atualizados pelo Cartucho. */
+    update: (g: HubGame) => { if (g.installed && !isSelfInstall(g.console)) update.mutate({ id: g.installed.id }); },
     github: (g: HubGame) => { if (g.repo) window.open(`https://github.com/${g.repo}`, '_blank'); },
     checkAll: (gs: HubGame[]) => checkAll.mutate(gs.filter(g => g.installed?.sourceRepo).map(g => g.installed!.id)),
     checking: checkAll.isPending,

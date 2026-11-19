@@ -9,6 +9,7 @@ import { openDb } from '../src/main/db';
 import { AchievementService } from '../src/main/achievements/service';
 import { createGitHub, guessAsset, parseRepo, type Asset } from '../src/main/ports/github';
 import { Ports } from '../src/main/ports/installer';
+import { listCatalog, listRadar, perConsole } from '../src/main/catalog';
 import { Player } from '../src/main/play';
 import { buildZip } from './fixtures';
 
@@ -142,7 +143,7 @@ describe('instalar, atualizar e desinstalar', () => {
     await expect(ports.installFromCatalog('recomps/meu')).rejects.toThrow(/não publica uma versão pronta/);
   });
 
-  it('Switch e Switch 2: não baixa nem atualiza, o usuário instala e adiciona a pasta', async () => {
+  it('Switch e Switch 2: não baixa, não atualiza nem mostra o projeto; o usuário instala e adiciona a pasta', async () => {
     releases = []; publish('v1', 'autor', { 'MeuRecomp.exe': 'x' });
     const { db, ports, ach, dir } = setup();
     db.prepare("UPDATE catalog_game SET console = 'switch2'").run();
@@ -152,8 +153,32 @@ describe('instalar, atualizar e desinstalar', () => {
     const mine = tmp(); writeFileSync(join(mine, 'MeuRecomp.exe'), 'x');
     const g = await ach.addGame(mine, { catalogId: 'recomps/meu' });
     expect(g.catalogId).toBe('recomps/meu');
-    expect(g.sourceRepo).toBe('dono/MeuRecomp');
+    expect(g.sourceRepo).toBeNull();                                    // o projeto não chega na tela
+    expect(listCatalog(db, { console: 'switch2' })[0]!.repo).toBeNull();
+    expect((await ports.checkUpdate(g.id)).latest).toBeNull();          // nem consulta o GitHub
     await expect(ports.update(g.id)).rejects.toThrow(/não atualiza recomps/);
+  });
+
+  it('Switch e Switch 2: vários projetos do mesmo jogo aparecem como um jogo só', async () => {
+    const { db, ach } = setup();
+    const add = db.prepare("INSERT INTO catalog_game (id, title, repo, console, platform_name, status, stars, first_seen_at, updated_at) VALUES (?, ?, ?, ?, 'x', ?, ?, 0, 0)");
+    add.run('p/a', 'Pokemon Pokopia', 'a/a', 'switch2', 'wip', 5);
+    add.run('p/b', 'Pokémon Pokopia', 'b/b', 'switch2', 'play', 1);
+    add.run('p/c', 'Pokémon Pokopia', 'c/c', 'switch2', 'wip', 9);
+    add.run('k/a', 'Mario Kart World', 'd/d', 'switch2', 'full', 0);
+    add.run('n/a', 'Pokémon Pokopia', 'e/e', 'n64', 'wip', 0);        // outro console: não junta
+    db.prepare("INSERT INTO radar_event (game_id, kind, detail, at) VALUES ('p/a', 'new', 'a/a', 1), ('p/c', 'new', 'c/c', 2)").run();
+    let sw2 = listCatalog(db, { console: 'switch2' });
+    expect(sw2.map(g => g.title).sort()).toEqual(['Mario Kart World', 'Pokémon Pokopia']);
+    expect(sw2.find(g => g.title.startsWith('Pok'))).toMatchObject({ id: 'p/b', status: 'play', repo: null });   // melhor status do grupo
+    expect(listRadar(db).filter(e => e.console === 'switch2')).toHaveLength(1);
+    expect(perConsole(db).switch2!.recomps).toBe(2);
+    // a pasta que o usuário ligou passa a representar o jogo
+    const mine = tmp(); writeFileSync(join(mine, 'Pokopia.exe'), 'x');
+    await ach.addGame(mine, { catalogId: 'p/c' });
+    sw2 = listCatalog(db, { console: 'switch2' });
+    expect(sw2.find(g => g.title.startsWith('Pok'))!.id).toBe('p/c');
+    expect(listCatalog(db, { console: 'n64' })).toHaveLength(2);
   });
 });
 

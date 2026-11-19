@@ -70,20 +70,17 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     }
     if (p === 'news') return [{ k: 'all', l: 'Tudo', n: data.feed.length }, { k: 'new', l: 'Novos no catálogo' }, { k: 'upd', l: 'Versões novas' }, { k: 'up', l: 'Mudou de status' }];
     if (p === 'time') return [{ k: 'sum', l: 'Resumo', ic: 'chart' }, ...timeList.map((g, i) => ({ k: 'g:' + g.key, l: g.title, gap: i === 0, v: fmtPlay(g.installed!.playMs) }))];
-    if (p === 'upd') return [{ k: 'all', l: 'Atualizações disponíveis', ic: 'dl', n: data.withUpdate.length }, { k: 'check', l: act.checking ? 'Verificando…' : 'Verificar agora', ic: 'refresh' }];
+    if (p === 'upd') return self ? [{ k: 'all', l: 'Atualizações', ic: 'dl' }] : [{ k: 'all', l: 'Atualizações disponíveis', ic: 'dl', n: data.withUpdate.length }, { k: 'check', l: act.checking ? 'Verificando…' : 'Verificar agora', ic: 'refresh' }];
     if (p === 'cfg') return [{ k: 'dir', l: 'Pasta dos jogos', ic: 'folder' }, { k: 'snd', l: 'Sons da interface', ic: 'sound', v: s.snd ? 'Ligados' : 'Desligados' }, { k: 'radar', l: 'Radar de novidades', ic: 'bell' }, { k: 'about', l: 'Sobre o Cartucho', ic: 'info', gap: true }];
     if (p === 'game' && game) {
       const g = game, inst = g.installed;
-      // consoles em que o usuário instala sozinho: primeiro o projeto, depois "já instalei"
-      if (!inst && self) return [
-        ...(g.repo ? [{ k: 'gh', l: 'Ver o projeto', ic: 'link' as IconName }] : []),
-        { k: 'add', l: 'Já instalei: adicionar pasta', ic: 'folder' }, { k: 'info', l: 'Informações', ic: 'info', gap: true },
-      ];
+      // consoles em que o usuário pesquisa e instala sozinho: aqui ele só liga a pasta
+      if (!inst && self) return [{ k: 'add', l: 'Já instalei: adicionar pasta', ic: 'folder' }, { k: 'info', l: 'Informações', ic: 'info', gap: true }];
       const first: Side = inst?.running ? { k: 'quit', l: 'Fechar o jogo', ic: 'stop' } : inst ? (inst.exe ? { k: 'play', l: 'Jogar', ic: 'play' } : { k: 'exe', l: 'Escolher o .exe', ic: 'folder' }) : { k: 'install', l: 'Instalar', ic: 'dl' };
       return [first, { k: 'info', l: 'Informações', ic: 'info', gap: true },
         ...(inst?.adapter ? [{ k: 'ach', l: 'Conquistas', ic: 'medal' as IconName, v: inst.achievements?.total ? `${inst.achievements.unlocked}/${inst.achievements.total}` : undefined }] : []),
         ...(inst ? [{ k: 'time', l: 'Tempo de jogo', ic: 'clock' as IconName }] : []),
-        ...(inst ? [{ k: 'ver', l: 'Versão e atualização', ic: 'dl' as IconName, n: g.update?.updateAvailable ? 1 : 0 }] : []),
+        ...(inst && !self ? [{ k: 'ver', l: 'Versão e atualização', ic: 'dl' as IconName, n: g.update?.updateAvailable ? 1 : 0 }] : []),
         ...(g.repo ? [{ k: 'gh', l: 'Ver no GitHub', ic: 'link' as IconName }] : []),
         ...(inst ? [{ k: 'folder', l: 'Abrir pasta', ic: 'folder' as IconName }, ...(inst.exe ? [{ k: 'exe', l: 'Escolher o .exe', ic: 'folder' as IconName }] : [])] : []),
       ];
@@ -113,11 +110,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     else if (r === 'quit') { sfx.play('back'); show(`Fechando ${g.title}…`); }
     else if (r === 'pick') { show('Escolha qual programa abre o jogo'); chooseExe.mutate({ id: g.installed!.id }); }
   };
-  const doUpdate = (g: HubGame) => {
-    sfx.play('ok');
-    if (act.update(g) === 'page') return show(`Página de versões de ${g.repo} aberta no navegador · instale por cima da sua pasta`);
-    show(`Atualizando ${g.title} para ${g.update?.latest?.tag}… configurações e saves ficam`);
-  };
+  const doUpdate = (g: HubGame) => { sfx.play('ok'); act.update(g); show(`Atualizando ${g.title} para ${g.update?.latest?.tag}… configurações e saves ficam`); };
   const enter = () => {
     const p = st.page;
     if (p === 'home') {
@@ -139,7 +132,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
       if (sk === 'exe') { sfx.play('ok'); return chooseExe.mutate({ id: game.installed!.id }); }
       if (sk === 'folder') { sfx.play('ok'); return openFolder.mutate({ id: game.installed!.id }); }
       if (sk === 'gh') { sfx.play('ok'); return act.github(game); }
-      if (sk === 'ver' && (game.update?.updateAvailable || (self && game.repo))) return doUpdate(game);
+      if (sk === 'ver' && game.update?.updateAvailable) return doUpdate(game);
     }
     sfx.play('move');
   };
@@ -194,7 +187,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
       if (!g) return [['ok', 'Descobrir']];
       return [['x', 'Detalhes'], ['ok', g.installed?.running ? 'Fechar' : g.installed ? (v1 ? 'Iniciar' : 'Jogar') : 'Instalar']];
     }
-    if (st.zone === 'main') return [['back', 'Voltar'], ['ok', st.page === 'cat' ? 'Ver' : self ? 'Abrir projeto' : 'Atualizar']];
+    if (st.zone === 'main') return [['back', 'Voltar'], ['ok', st.page === 'cat' ? 'Ver' : 'Atualizar']];
     return [['back', 'Voltar'], ['ok', st.page === 'game' && sk === 'add' ? 'Escolher a pasta' : st.page === 'game' && st.si === 0 ? side[0]?.l ?? 'OK' : 'OK']];
   })();
   const Hints = () => <div className="s2h">{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>;
@@ -309,7 +302,6 @@ function Meta({ g, x }: { g: HubGame; x: number }) {
         : <span>{g.isNew ? <span className="pill new">NOVO</span> : 'Não instalado'}</span>}
       {g.status && <Chip s={g.status} />}
       {g.update?.updateAvailable && <span className="pill upd">UPDATE {g.update.latest?.tag}</span>}
-      {g.catalog?.noLink && <span className="pill inst">SEM LINK</span>}
     </div>
   );
 }
@@ -367,12 +359,13 @@ function Main({ page, k, st, cols, self, data, catList, timeList, game, c, onCar
   }
   if (page === 'upd') {
     if (k === 'check') return <div className="desc"><Ic n="refresh" /><div>Confere no GitHub se saiu versão nova dos seus jogos de {c}. O Cartucho já confere sozinho a cada 3 horas; aqui é para forçar agora.</div></div>;
+    if (self) return <Empty>Neste console as atualizações são por sua conta: instale a versão nova do recomp por cima da pasta do jogo e o Cartucho continua contando o tempo e as conquistas.</Empty>;
     if (!data.withUpdate.length) return <Empty>Tudo em dia.{data.lib.some(g => g.installed?.sourceRepo) ? '' : ' (Nenhum jogo deste console tem projeto do GitHub ligado.)'}</Empty>;
     return <>{data.withUpdate.map((g, i) => (
       <button key={g.key} className={`nr nrb ${st.zone === 'main' && i === st.mi ? 'on' : ''}`} onClick={() => onCard(i)}>
         <Art g={g} v="cover" />
         <div>{g.title}<small>{g.repo} · {g.update?.installed ?? '?'} → {g.update?.latest?.tag}</small></div>
-        <div className="r"><span className="pill upd">{g.update?.latest?.tag}</span><span><Glyph a="ok" />{self ? 'abrir projeto' : 'atualizar'}</span></div>
+        <div className="r"><span className="pill upd">{g.update?.latest?.tag}</span><span><Glyph a="ok" />atualizar</span></div>
       </button>
     ))}</>;
   }
@@ -390,7 +383,7 @@ function Main({ page, k, st, cols, self, data, catList, timeList, game, c, onCar
       <dl className="kv2">
         <dt>Instalado</dt><dd>{g.update?.installed ?? inst.version ?? 'versão desconhecida'}</dd>
         <dt>Mais nova</dt><dd>{g.update?.latest ? `${g.update.latest.tag}${g.update.latest.date ? ` (${fmtDate(Date.parse(g.update.latest.date))})` : ''}` : '—'}</dd>
-        <dt>Situação</dt><dd>{g.update?.updateAvailable ? <><Glyph a="ok" />{self ? 'baixar no projeto' : 'atualizar agora'}</> : g.update?.updateAvailable === false ? 'Em dia' : g.repo ? 'Não deu para comparar' : 'Sem projeto do GitHub ligado'}</dd>
+        <dt>Situação</dt><dd>{g.update?.updateAvailable ? <><Glyph a="ok" />atualizar agora</> : g.update?.updateAvailable === false ? 'Em dia' : g.repo ? 'Não deu para comparar' : 'Sem projeto do GitHub ligado'}</dd>
         <dt>Repositório</dt><dd>{g.repo ? `github.com/${g.repo}` : '—'}</dd>
       </dl>
     );
@@ -400,7 +393,7 @@ function Main({ page, k, st, cols, self, data, catList, timeList, game, c, onCar
         <h1 className="gt">{g.title}</h1>
         <div className="gsub">{g.catalog?.developer ?? ''}{g.catalog?.year ? ` · ${g.catalog.year}` : ''} {g.status && <> · <Chip s={g.status} /></>}{g.isNew && <> · <span className="pill new">NOVO</span></>}</div>
         <GameProgress g={g} />
-        {self && !inst && <div className="desc"><Ic n="info" /><div>{SELF_INSTALL_NOTE}{g.catalog?.noLink ? ' O Recompendium não publica o link deste projeto.' : ''}</div></div>}
+        {self && !inst && <div className="desc"><Ic n="info" /><div>{SELF_INSTALL_NOTE}</div></div>}
         <dl className="kv2">
           {g.catalog?.needs && <><dt>Precisa</dt><dd>{g.catalog.needs}</dd></>}
           {g.repo && <><dt>Projeto</dt><dd>github.com/{g.repo}</dd></>}

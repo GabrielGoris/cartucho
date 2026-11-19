@@ -4,7 +4,7 @@
  * à toa, guardamos uma cópia no banco e funcionamos offline com a última versão.
  */
 import { z } from 'zod';
-import { toConsoleId, toStatus } from '@shared/consoles';
+import { isSelfInstall, SELF_INSTALL, toConsoleId, toStatus } from '@shared/consoles';
 import type { CatalogGame, RadarEvent } from '@shared/types';
 import { type DB, kvGet, kvSet, tx } from './db';
 
@@ -91,22 +91,60 @@ export async function refreshCatalog(db: DB, opts: { force?: boolean } = {}): Pr
 }
 
 type Row = { id: string; title: string; repo: string | null; console: string; platform_name: string; status: string; version: string | null; date: string | null; stars: number; year: number | null; developer: string | null; needs: string | null; description: string | null; cover_url: string | null; no_link: number; first_seen_at: number };
+// consoles em que o usuário instala sozinho: o projeto não sai daqui (nem nome, nem link); ele pesquisa por conta própria
 const toGame = (r: Row): CatalogGame => ({
-  id: r.id, title: r.title, repo: r.repo, console: r.console as CatalogGame['console'], platformName: r.platform_name, status: r.status as CatalogGame['status'],
+  id: r.id, title: r.title, repo: isSelfInstall(r.console) ? null : r.repo, console: r.console as CatalogGame['console'], platformName: r.platform_name, status: r.status as CatalogGame['status'],
   version: r.version, date: r.date, stars: r.stars, year: r.year, developer: r.developer, needs: r.needs, description: r.description, coverUrl: absUrl(r.cover_url), noLink: !!r.no_link, firstSeenAt: r.first_seen_at,
 });
+
+/**
+ * Nos consoles em que o usuário instala sozinho, vários projetos do mesmo jogo viram um item só: o Cartucho não
+ * oferece nenhum deles, então só importa que o jogo tem recomp. Devolve id → id que representa o grupo (o que o
+ * usuário já ligou a uma pasta, senão o de melhor status) e o melhor status de cada grupo.
+ */
+const RANK: Record<string, number> = { full: 3, play: 2, wip: 1 };
+export const titleKey = (t: string) => t.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+function selfGroups(db: DB) {
+  const rows = db.prepare(`SELECT c.id, c.title, c.console, c.status, c.stars, EXISTS(SELECT 1 FROM installed_game g WHERE g.catalog_id = c.id) inst
+    FROM catalog_game c WHERE c.retired = 0 AND c.console IN (${[...SELF_INSTALL].map(() => '?').join(',')})`).all(...SELF_INSTALL) as
+    { id: string; title: string; console: string; status: string; stars: number; inst: number }[];
+  const groups = new Map<string, typeof rows>();
+  for (const r of rows) { const k = r.console + ':' + titleKey(r.title); groups.set(k, [...(groups.get(k) ?? []), r]); }
+  const rep = new Map<string, string>(), best = new Map<string, string>();
+  for (const g of groups.values()) {
+    const top = [...g].sort((a, b) => b.inst - a.inst || (RANK[b.status] ?? 0) - (RANK[a.status] ?? 0) || b.stars - a.stars || a.id.localeCompare(b.id))[0]!;
+    for (const r of g) rep.set(r.id, top.id);
+    best.set(top.id, [...g].sort((a, b) => (RANK[b.status] ?? 0) - (RANK[a.status] ?? 0))[0]!.status);
+  }
+  return { rep, best };
+}
 
 export function listCatalog(db: DB, filter: { console?: string; search?: string } = {}): CatalogGame[] {
   const where = ['retired = 0'], args: string[] = [];
   if (filter.console) { where.push('console = ?'); args.push(filter.console); }
-  if (filter.search) { where.push('(title LIKE ? OR repo LIKE ?)'); args.push(`%${filter.search}%`, `%${filter.search}%`); }
-  return (db.prepare(`SELECT * FROM catalog_game WHERE ${where.join(' AND ')} ORDER BY stars DESC, title`).all(...args) as Row[]).map(toGame);
+  if (filter.search) { where.push(`(title LIKE ? OR (repo LIKE ? AND console NOT IN (${[...SELF_INSTALL].map(() => '?').join(',')})))`); args.push(`%${filter.search}%`, `%${filter.search}%`, ...SELF_INSTALL); }
+  const { rep, best } = selfGroups(db);
+  return (db.prepare(`SELECT * FROM catalog_game WHERE ${where.join(' AND ')} ORDER BY stars DESC, title`).all(...args) as Row[])
+    .filter(r => !rep.has(r.id) || rep.get(r.id) === r.id)
+    .map(r => ({ ...toGame(r), ...(best.has(r.id) ? { status: best.get(r.id) as CatalogGame['status'], firstSeenAt: r.first_seen_at } : {}) }));
 }
 
 export function listRadar(db: DB, limit = 50): RadarEvent[] {
   return (db.prepare(`SELECT r.id, r.game_id, r.kind, r.detail, r.at, c.title, c.console FROM radar_event r JOIN catalog_game c ON c.id = r.game_id ORDER BY r.at DESC, r.id DESC LIMIT ?`).all(limit) as
     { id: number; game_id: string; kind: RadarEvent['kind']; detail: string; at: number; title: string; console: RadarEvent['console'] }[])
-    .map(r => ({ id: r.id, gameId: r.game_id, title: r.title, console: r.console, kind: r.kind, detail: r.detail, at: r.at }));
+    .map(r => ({ id: r.id, gameId: r.game_id, title: r.title, console: r.console, kind: r.kind, detail: r.kind === 'new' && isSelfInstall(r.console) ? '' : r.detail, at: r.at }))
+    .filter(seenOnce(selfGroups(db).rep));
+}
+/** Um aviso por jogo (não por projeto) nos consoles agrupados: o mais recente de cada tipo fica. */
+function seenOnce(rep: Map<string, string>) {
+  const seen = new Set<string>();
+  return (e: RadarEvent) => {
+    if (!rep.has(e.gameId)) return true;
+    e.gameId = rep.get(e.gameId)!;
+    const k = e.gameId + ':' + e.kind;
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  };
 }
 
 /** Novidades do radar desde a última vez que o usuário abriu o radar. */
@@ -129,6 +167,14 @@ export function perConsole(db: DB) {
     out[r.console] = { recomps: r.n, installed: 0, fresh: r.fresh ?? 0 };
   for (const r of db.prepare('SELECT console, COUNT(*) n FROM installed_game GROUP BY console').all() as { console: string; n: number }[])
     (out[r.console] ??= { recomps: 0, installed: 0, fresh: 0 }).installed = r.n;
+  // consoles agrupados: conta jogos, não projetos
+  const { rep } = selfGroups(db);
+  const freshIds = new Set((db.prepare("SELECT game_id FROM radar_event WHERE kind = 'new' AND at > ?").all(since) as { game_id: string }[]).map(r => rep.get(r.game_id) ?? r.game_id));
+  for (const c of SELF_INSTALL) {
+    if (!out[c]) continue;
+    const reps = new Set([...(db.prepare('SELECT id FROM catalog_game WHERE retired = 0 AND console = ?').all(c) as { id: string }[])].map(r => rep.get(r.id) ?? r.id));
+    out[c]!.recomps = reps.size; out[c]!.fresh = [...reps].filter(id => freshIds.has(id)).length;
+  }
   return out;
 }
 export const platformCount = (db: DB) => (db.prepare("SELECT COUNT(DISTINCT platform_name) n FROM catalog_game WHERE retired = 0 AND console = 'other'").get() as { n: number }).n;
