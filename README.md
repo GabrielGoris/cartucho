@@ -17,11 +17,13 @@ O Cartucho é um projeto pessoal e gratuito, sem nenhuma ligação com Nintendo,
 - **Início**: o jogo mais recente em destaque e os outros numa fileira, navegável por setas ou controle.
 - **Palco 3D** (React Three Fiber) com 20 lugares: NES, Game Boy (GB/GBC/GBA), SNES, N64, GameCube, DS, Wii, Switch, Switch 2, PS1 a PS5, PSP, Xbox, Xbox 360, Mega Drive (com Mega CD e 32X), PC e Outros. Nome, ano e contagem real de recomps e instalados por console.
 - **Você escolhe o palco**: na primeira vez nos Consoles o Cartucho pergunta quais aparecem (depois em Configurações → Consoles no palco). Os escondidos não somem: os jogos deles vão para **Outros**, que separa tudo por console de origem.
-- **Hubs no estilo de cada console**: Nintendo Switch e Switch 2 já têm o seu (fileira de blocos, atalhos redondos, telas com barra lateral, Jogar/Instalar/Atualizar, tempo de jogo e conquistas). Os outros consoles ainda usam o hub provisório.
+- **Hubs no estilo de cada console**: Nintendo Switch e Switch 2 (fileira de blocos, atalhos, telas com barra lateral) e PlayStation 5 (fileira de ícones com o jogo em destaque, cartões de conquistas, tempo de jogo, novidades e versão) já têm o seu, todos com busca. Os outros consoles ainda usam o hub provisório.
 - **Instalar e atualizar** pelo GitHub, direto da ficha do jogo no catálogo (exceto Switch e Switch 2, veja o aviso acima): escolhe o download certo para Windows, confere o hash publicado, passa no Windows Defender, desempacota numa pasta própria e acha o .exe. Atualizações só entram se vierem da mesma conta, guardam cópia dos arquivos trocados em `_cartucho-backup` e nunca sobrescrevem configurações (.ini, .toml, .cfg…) nem saves. Projetos cujo download não é o jogo pronto (ferramentas que montam o jogo a partir da sua cópia) são avisados antes de baixar.
 - **Jogar e tempo de jogo**: o Jogar abre o .exe e acompanha até ele fechar, como na Steam (tempo total, sessões, últimos 14 dias). Com um jogo aberto, o palco 3D para de desenhar.
 - **Desinstalar** apaga só o que veio no download; saves e configurações que você mudou ficam.
 - **Imagens em boa resolução**: capas, artes de fundo e logos do [LaunchBox Games Database](https://gamesdb.launchbox-app.com/) (sem conta). Na primeira vez o Cartucho baixa o banco deles (~100 MB, atualizado uma vez por mês) e depois só as imagens dos jogos que aparecem na tela, guardadas em `media/` dentro dos dados do app. Sem o jogo lá, usa a capa do Recompendium.
+- **Página do jogo** (PS5): arte grande, botões de jogar/instalar/escolher pasta, descrição, requisitos e até 4 capturas de tela do LaunchBox, que dá para ampliar.
+- **Textos em português**: as descrições e os requisitos do catálogo vêm em inglês; o Cartucho traduz pelo [MyMemory](https://mymemory.translated.net/) (grátis, sem conta) e guarda cada tradução no banco, então cada texto é traduzido uma vez só. Se o limite diário do serviço acabar, mostra o original. Dá para desligar em Configurações.
 - **Configurações** (tecla S ou ⚙): paletas, filtro CRT, moldura, brilho, palco pixelado, sons, abertura, botões do controle e menos movimento.
 - **Controle**: teclado, Xbox, PlayStation e Nintendo; os botões na tela mudam conforme o controle conectado.
 
@@ -60,6 +62,7 @@ Outros comandos:
 - `CARTUCHO_CATALOG_URL`: lê o catálogo de outro endereço (por exemplo, um JSON local para testes).
 - `CARTUCHO_GITHUB_API`: usa outro servidor no lugar de api.github.com (testes).
 - `CARTUCHO_LAUNCHBOX_METADATA` / `CARTUCHO_LAUNCHBOX_IMAGES`: outro endereço para o banco e as imagens do LaunchBox (testes).
+- `CARTUCHO_TRANSLATE_URL`: outro servidor no lugar do MyMemory (testes).
 - `GITHUB_TOKEN` / `GH_TOKEN`, ou o GitHub CLI logado (`gh auth login`): sobe o limite de consultas do GitHub de 60 para 5.000 por hora.
 
 Os jogos instalados pelo Cartucho vão para `%USERPROFILE%\Games\Cartucho` (dá para mudar em Configurações → Pasta dos jogos).

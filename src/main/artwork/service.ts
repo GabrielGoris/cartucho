@@ -1,7 +1,3 @@
-/**
- * Capas, fundos e logos em boa resolução, guardados em userData/media e servidos para a tela por media://.
- * Fonte: LaunchBox Games Database (sem conta nem chave). Quando ele não tem o jogo, a tela usa a capa do Recompendium.
- */
 import { EventEmitter } from 'node:events';
 import { createWriteStream, existsSync, readdirSync, statSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -15,22 +11,19 @@ export type ArtSet = Partial<Record<ArtKind, string>>;
 
 const FORMAT_TAG = /(\.(xiso|iso|cso|chd|rvz|wbfs|nsp|xci|z64|n64|v64|nds|3ds|gba|gbc|gb|sfc|smc|nes))+$/i;
 const cleanTitle = (n: string) => n.replace(FORMAT_TAG, '').replace(/\s*[([][^)\]]*[)\]]/g, '').replace(/_/g, ' ').replace(/^\d{3,5}\s*-?\s+(?=\S)/, '').replace(/\s+/g, ' ').trim() || n;
-/** Chave solta para comparar nomes: sem acento, sem artigo, sem pontuação ("The Legend of Zelda: X (2026)" → "legendofzeldax"). */
 export const looseKey = (s: string) => cleanTitle(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/&|\band\b|\bthe\b/g, '').replace(/[^a-z0-9]/g, '');
 
-/** Plataforma de origem dos jogos em "Outros", pelo nome que o Recompendium dá. */
 const OTHER: [RegExp, string][] = [
   [/mega ?drive|genesis/i, 'megadrive'], [/dreamcast/i, 'dreamcast'], [/wii ?u/i, 'wiiu'], [/3ds/i, '3ds'], [/nintendo ds\b/i, 'nds'],
   [/game ?boy advance/i, 'gba'], [/game ?boy color/i, 'gbc'], [/game ?boy/i, 'gb'], [/\bnes\b|famicom/i, 'nes'], [/^xbox$/i, 'xbox'],
   [/saturn/i, 'saturn'], [/master system/i, 'mastersystem'], [/vita/i, 'vita'], [/arcade/i, 'arcade'],
 ];
-/** Em "Outros" e nas famílias (Game Boy, Mega Drive), a plataforma de cada jogo vem do nome de origem. */
 const BY_NAME = new Set(['other', 'gb', 'megadrive']);
 export const artPlatform = (console: string, platformName?: string | null) =>
   !BY_NAME.has(console) ? console : OTHER.find(([re]) => re.test(platformName ?? ''))?.[1] ?? (console === 'other' ? null : console);
 
 const MAX_IMAGE = 20 * 1048576;
-const NOT_FOUND_RETRY = 14 * 86400_000;   // jogo que o LaunchBox não tinha: tenta de novo depois de 2 semanas
+const NOT_FOUND_RETRY = 14 * 86400_000;
 const isImage = (b: Buffer) => (b[0] === 0x89 && b[1] === 0x50) || (b[0] === 0xff && b[1] === 0xd8) || b.subarray(8, 12).toString('latin1') === 'WEBP';
 const extOf = (b: Buffer) => (b[0] === 0x89 ? 'png' : b[0] === 0xff ? 'jpg' : 'webp');
 
@@ -65,7 +58,6 @@ export class Artwork {
 
   private folder(platform: string, kind: ArtKind) { return join(this.dir, platform, kind); }
 
-  /** Arquivo já baixado (nome sem extensão = chave do título). */
   private existing(platform: string, kind: ArtKind, key: string) {
     const f = this.folder(platform, kind);
     if (!existsSync(f)) return null;
@@ -76,7 +68,6 @@ export class Artwork {
     try { return Date.now() - statSync(join(this.folder(platform, kind), `${key}.none`)).mtimeMs < NOT_FOUND_RETRY; } catch { return false; }
   }
 
-  /** As imagens que já estão em disco; as que faltam são buscadas em segundo plano (avisa com "changed"). */
   get(console: string, platformName: string | null | undefined, names: string[], kinds: ArtKind[] = ['cover', 'fanart', 'logo']): ArtSet {
     const platform = artPlatform(console, platformName);
     const key = looseKey(names[0] ?? '');
@@ -88,6 +79,40 @@ export class Artwork {
       else if (!this.missingRecently(platform, kind, key)) this.enqueue(platform, kind, key, names);
     }
     return out;
+  }
+
+  shots(console: string, platformName: string | null | undefined, names: string[]): string[] {
+    const platform = artPlatform(console, platformName);
+    const key = looseKey(names[0] ?? '');
+    if (!platform || !PLATFORMS[platform] || !key) return [];
+    const folder = this.folder(platform, 'screenshot');
+    const files = existsSync(folder) ? readdirSync(folder).filter(f => f.startsWith(`${key}-`) && /^\d+\.(png|jpg|webp)$/.test(f.slice(key.length + 1))).sort() : [];
+    if (files.length) return files.map(f => `media://art/${platform}/screenshot/${f}`);
+    let recent = false;
+    try { recent = Date.now() - statSync(join(folder, `${key}.shots`)).mtimeMs < NOT_FOUND_RETRY; } catch { recent = false; }
+    if (!recent) this.enqueueShots(platform, key, names);
+    return [];
+  }
+
+  private enqueueShots(platform: string, key: string, names: string[]) {
+    const id = `${platform}/shots/${key}`;
+    if (this.pending.has(id)) return;
+    this.pending.add(id);
+    this.queue.push(async () => {
+      try {
+        const urls = (await this.lb.find(platform, names, 'screenshot')).slice(0, 4);
+        const folder = this.folder(platform, 'screenshot');
+        await fsp.mkdir(folder, { recursive: true });
+        let n = 0;
+        for (const url of urls) {
+          const b = await this.image(url).catch(() => null);
+          if (b) await fsp.writeFile(join(folder, `${key}-${n++}.${extOf(b)}`), b);
+        }
+        await fsp.writeFile(join(folder, `${key}.shots`), String(n));
+        if (n) this.changed();
+      } catch { } finally { this.pending.delete(id); }
+    });
+    this.pump();
   }
 
   private enqueue(platform: string, kind: ArtKind, key: string, names: string[]) {
@@ -103,8 +128,8 @@ export class Artwork {
           const b = await this.image(url);
           if (b) { await fsp.writeFile(join(folder, `${key}.${extOf(b)}`), b); this.changed(); return; }
         }
-        await fsp.writeFile(join(folder, `${key}.none`), '');   // o LaunchBox não tem: não pergunta de novo tão cedo
-      } catch { /* sem rede ou banco ainda não baixado: tenta na próxima vez que a tela pedir */ }
+        await fsp.writeFile(join(folder, `${key}.none`), '');
+      } catch { }
       finally { this.pending.delete(id); }
     });
     this.pump();
@@ -125,17 +150,15 @@ export class Artwork {
   private timer: NodeJS.Timeout | undefined;
   private changed() { clearTimeout(this.timer); this.timer = setTimeout(() => this.events.emit('changed'), 300); }
 
-  /** Baixa o banco do LaunchBox de novo agora e esquece os "não encontrados". */
   async refresh() {
     for (const p of existsSync(this.dir) ? readdirSync(this.dir) : []) for (const k of Object.keys(KINDS)) {
       const f = this.folder(p, k as ArtKind);
-      if (existsSync(f)) for (const n of readdirSync(f)) if (n.endsWith('.none')) await fsp.unlink(join(f, n)).catch(() => {});
+      if (existsSync(f)) for (const n of readdirSync(f)) if (n.endsWith('.none') || n.endsWith('.shots')) await fsp.unlink(join(f, n)).catch(() => {});
     }
     await this.lb.load({ force: true });
     this.changed();
   }
 
-  /** Caminho em disco de um media://art/... (para o protocolo), ou null se sair da pasta. */
   resolve(rel: string) {
     const parts = rel.split('/').filter(Boolean);
     if (parts.length !== 3 || parts.some(p => p === '..' || /[\\:]/.test(p))) return null;

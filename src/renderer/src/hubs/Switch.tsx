@@ -9,6 +9,7 @@ import { setSfxProfile, sfx } from '../lib/sfx';
 import { ago, fmtDate, fmtPlay, plural } from '../lib/format';
 import { GameArt } from '../components/GameArt';
 import { SearchBox } from '../components/SearchBox';
+import { Translated } from '../components/Translated';
 import { matchesQuery } from '../lib/search';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
@@ -404,11 +405,11 @@ function Main({ page, k, st, cols, self, query, setQuery, searchRef, onSearchDon
         <GameProgress g={g} />
         {self && !inst && <div className="desc"><Ic n="info" /><div>{SELF_INSTALL_NOTE}</div></div>}
         <dl className="kv2">
-          {g.catalog?.needs && <><dt>Precisa</dt><dd>{g.catalog.needs}</dd></>}
+          {g.catalog?.needs && <><dt>Precisa</dt><dd><Translated text={g.catalog.needs} /></dd></>}
           {g.repo && <><dt>Projeto</dt><dd>github.com/{g.repo}</dd></>}
           {inst && <><dt>Jogado</dt><dd>{inst.playMs ? `${fmtPlay(inst.playMs)} · ${inst.lastPlayed ? ago(inst.lastPlayed) : ''}` : 'Ainda não'}</dd></>}
           {inst && <><dt>Pasta</dt><dd className="small">{inst.installDir}</dd></>}
-          {g.catalog?.description && <><dt>Sobre</dt><dd className="small">{g.catalog.description}</dd></>}
+          {g.catalog?.description && <><dt>Sobre</dt><dd className="small"><Translated text={g.catalog.description} /></dd></>}
         </dl>
       </>
     );

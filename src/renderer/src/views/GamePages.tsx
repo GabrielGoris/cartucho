@@ -11,6 +11,7 @@ import { sfx } from '../lib/sfx';
 import { GameArt } from '../components/GameArt';
 import { Bars } from '../components/Bars';
 import { ProgressBar } from '../components/ProgressBar';
+import { Translated } from '../components/Translated';
 
 const gh = (repo: string) => window.open(`https://github.com/${repo}`, '_blank');
 
@@ -147,8 +148,8 @@ export function CatalogPage({ game: c, installedId, active, onBack, onOpenInstal
             Já tem o jogo instalado em outro lugar? Escolher pasta coloca ele na biblioteca ligado a este jogo, sem copiar nada.
           </p>}
           <div className="gp-cards">
-            {c.needs && <section className="gp-card"><h3>O QUE VOCÊ PRECISA</h3><p className="txt">{c.needs}</p></section>}
-            {c.description && <section className="gp-card wide"><h3>SOBRE</h3><p className="txt">{c.description}</p></section>}
+            {c.needs && <section className="gp-card"><h3>O QUE VOCÊ PRECISA</h3><p className="txt"><Translated text={c.needs} /></p></section>}
+            {c.description && <section className="gp-card wide"><h3>SOBRE</h3><p className="txt"><Translated text={c.description} /></p></section>}
           </div>
           <p className="credit" style={{ padding: 0 }}>Dados: Recompendium{c.repo ? ` · ${c.repo}` : ''}</p>
         </div>

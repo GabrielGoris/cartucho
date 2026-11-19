@@ -80,7 +80,7 @@ export function App() {
   useSubscription(trpc.ports.onProgress.subscriptionOptions(undefined, {
     onData: p => { pushProgress(p); if (p.done) { void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }); void qc.invalidateQueries({ queryKey: trpc.library.summary.queryKey() }); } },
   }));
-  useSubscription(trpc.art.onChanged.subscriptionOptions(undefined, { onData: () => void qc.invalidateQueries({ queryKey: trpc.art.get.pathKey() }) }));
+  useSubscription(trpc.art.onChanged.subscriptionOptions(undefined, { onData: () => void qc.invalidateQueries({ queryKey: trpc.art.pathKey() }) }));
   useSubscription(trpc.play.onEvent.subscriptionOptions(undefined, {
     onData: (e: PlayEvent) => {
       setPlaying(p => { const { [e.gameId]: _, ...rest } = p; return e.running ? { ...rest, [e.gameId]: e.title } : rest; });

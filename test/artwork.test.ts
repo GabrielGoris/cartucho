@@ -1,4 +1,3 @@
-/** Imagens do LaunchBox: índice a partir do Metadata.zip, busca por nome e cache em disco. */
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -19,11 +18,12 @@ const XML = `<?xml version="1.0"?><LaunchBox>
 <GameImage><DatabaseID>1</DatabaseID><FileName>pk-eu.png</FileName><Type>Box - Front</Type><Region>Europe</Region></GameImage>
 <GameImage><DatabaseID>1</DatabaseID><FileName>pk-us.png</FileName><Type>Box - Front</Type><Region>North America</Region></GameImage>
 <GameImage><DatabaseID>1</DatabaseID><FileName>pk-bg.jpg</FileName><Type>Fanart - Background</Type></GameImage>
+<GameImage><DatabaseID>1</DatabaseID><FileName>pk-s1.png</FileName><Type>Screenshot - Gameplay</Type></GameImage>
+<GameImage><DatabaseID>1</DatabaseID><FileName>pk-s2.jpg</FileName><Type>Screenshot - Gameplay</Type></GameImage>
 <GameImage><DatabaseID>3</DatabaseID><FileName>sonic.png</FileName><Type>Box - Front</Type><Region>North America</Region></GameImage>
 <GameImage><DatabaseID>4</DatabaseID><FileName>x.png</FileName><Type>Box - Front</Type></GameImage>
 </LaunchBox>`;
 
-/** Zip com Metadata.xml comprimido (deflate), como o do LaunchBox. */
 function metadataZip() {
   const data = Buffer.from(XML), packed = deflateRawSync(data), name = Buffer.from('Metadata.xml');
   const local = new Writer(true).u32(0x04034b50).u16(20).u16(0).u16(8).u16(0).u16(0).u32(0).u32(packed.length).u32(data.length).u16(name.length).u16(0).raw(name).raw(packed).bytes();
@@ -39,7 +39,8 @@ beforeAll(async () => {
   server = createServer((req, res) => {
     if (req.url === '/Metadata.zip') { zipHits++; res.writeHead(200, { 'content-length': zip.length }); return res.end(zip); }
     if (req.url === '/img/pk-us.png') { res.writeHead(200); return res.end(PNG); }
-    if (req.url === '/img/pk-bg.jpg') { res.writeHead(200); return res.end(JPG); }
+    if (req.url === '/img/pk-bg.jpg' || req.url === '/img/pk-s2.jpg') { res.writeHead(200); return res.end(JPG); }
+    if (req.url === '/img/pk-s1.png') { res.writeHead(200); return res.end(PNG); }
     if (req.url === '/img/sonic.png') { res.writeHead(200); return res.end(Buffer.from('<html>não é imagem</html>')); }
     res.writeHead(404); res.end();
   });
@@ -73,8 +74,8 @@ describe('banco do LaunchBox', () => {
     const dir = tmp();
     const art = new Artwork(dir, fetch as never, { metadataUrl: `${base}/Metadata.zip`, imageUrl: `${base}/img` });
     let changed = 0; art.events.on('changed', () => changed++);
-    expect(art.get('switch2', null, ['Pokémon Pokopia'])).toEqual({});        // nada em disco ainda: busca em segundo plano
-    expect(art.get('switch2', null, ['Pokémon Pokopia'])).toEqual({});        // pedir de novo não duplica
+    expect(art.get('switch2', null, ['Pokémon Pokopia'])).toEqual({});
+    expect(art.get('switch2', null, ['Pokémon Pokopia'])).toEqual({});
     await new Promise<void>(ok => { const t = setInterval(() => { if (changed) { clearInterval(t); ok(); } }, 50); });
     await new Promise(r => setTimeout(r, 300));
     const got = art.get('switch2', null, ['Pokémon Pokopia']);
@@ -85,9 +86,20 @@ describe('banco do LaunchBox', () => {
     expect(art.resolve('/switch2/cover/pokemonpokopia.png')).toBe(join(dir, 'switch2', 'cover', 'pokemonpokopia.png'));
     expect(art.resolve('/../../etc/passwd')).toBeNull();
 
-    // o servidor devolveu HTML no lugar da imagem: não é guardado
     art.get('other', 'Mega Drive / Genesis', ['Sonic the Hedgehog'], ['cover']);
     await new Promise(r => setTimeout(r, 500));
     expect(art.get('other', 'Mega Drive / Genesis', ['Sonic the Hedgehog'], ['cover'])).toEqual({});
+  });
+});
+
+describe('imagens do jogo', () => {
+  it('baixa até 4 capturas de tela e lembra quando não há nenhuma', async () => {
+    const dir = tmp();
+    const art = new Artwork(dir, fetch as never, { metadataUrl: `${base}/Metadata.zip`, imageUrl: `${base}/img` });
+    expect(art.shots('switch2', null, ['Pokémon Pokopia'])).toEqual([]);
+    expect(art.shots('switch2', null, ['The Legend of Zelda: Ocarina of Time'])).toEqual([]);
+    await new Promise(r => setTimeout(r, 1500));
+    expect(art.shots('switch2', null, ['Pokémon Pokopia'])).toEqual(['media://art/switch2/screenshot/pokemonpokopia-0.png', 'media://art/switch2/screenshot/pokemonpokopia-1.jpg']);
+    expect(art.shots('switch2', null, ['The Legend of Zelda: Ocarina of Time'])).toEqual([]);
   });
 });

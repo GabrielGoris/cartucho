@@ -11,19 +11,14 @@ import { Ports } from './ports/installer';
 import { Player } from './play';
 import { portsDirOf } from './router';
 import { Artwork } from './artwork/service';
+import { Translator } from './translate';
 
-// Para desenvolvimento/testes: perfil separado (CARTUCHO_USER_DATA) sem mexer no seu.
 if (process.env.CARTUCHO_USER_DATA) app.setPath('userData', process.env.CARTUCHO_USER_DATA);
 if (!app.requestSingleInstanceLock()) app.quit();
 
-/**
- * Em produção a tela é servida por app://cartucho/ em vez de file://.
- * Com file:// o fetch do navegador não funciona, e o carregador dos modelos 3D usa fetch.
- */
 const APP_ORIGIN = 'app://cartucho';
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
-  // capas e fundos baixados (media://art/<plataforma>/<tipo>/<arquivo>)
   { scheme: 'media', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
 const DEV_URL = process.env.ELECTRON_RENDERER_URL;
@@ -38,10 +33,8 @@ function createWindow() {
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true },
   });
   win.once('ready-to-show', () => win?.show());
-  // Links externos (GitHub, Recompendium) abrem no navegador, nunca dentro do app.
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) void shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e, url) => { if (!isOurPage(url)) e.preventDefault(); });
-  // F11 = tela cheia (o Cartucho foi pensado para ficar na TV também)
   win.webContents.on('before-input-event', (_e, input) => { if (input.type === 'keyDown' && input.key === 'F11') win?.setFullScreen(!win.isFullScreen()); });
 
   void win.loadURL(DEV_URL ?? `${APP_ORIGIN}/index.html`);
@@ -61,10 +54,8 @@ void app.whenReady().then(async () => {
 
   const db = openDb(join(app.getPath('userData'), 'cartucho.db'));
   const ach = new AchievementService(db, app.getPath('appData'));
-  // Quando o jogo fecha, o Cartucho volta para a frente.
   const player = new Player(db, ach, p => shell.openPath(p), () => { if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.focus(); } });
   ach.isRunning = player.isRunning;
-  // net.fetch usa a rede do Chromium (proxy e certificados do sistema), melhor que o fetch do Node para downloads grandes.
   const gh = createGitHub({ fetch: ((url, init) => net.fetch(url, init as RequestInit)) as Fetch, ...(process.env.CARTUCHO_GITHUB_API ? { api: process.env.CARTUCHO_GITHUB_API } : {}) });
   const defaultPortsDir = join(app.getPath('home'), 'Games', 'Cartucho');
   const art = new Artwork(join(app.getPath('userData'), 'media'), ((url, init) => net.fetch(url, init as RequestInit)) as Fetch, {
@@ -78,14 +69,12 @@ void app.whenReady().then(async () => {
   });
   const ports = new Ports(db, ach, gh, () => portsDirOf({ db, defaultPortsDir }), player.isRunning);
   createIPCHandler({
-    router: createRouter({ db, ach, ports, player, art, defaultPortsDir }),
+    router: createRouter({ db, ach, ports, player, art, tr: new Translator(db, ((url, init) => net.fetch(url, init as RequestInit)) as ConstructorParameters<typeof Translator>[1]), defaultPortsDir }),
     preload: false,
-    // Só a nossa própria página fala com o processo principal.
     allow: e => isOurPage(e.senderFrame?.url ?? ''),
   });
   createWindow();
   void ach.start();
-  // Catálogo em segundo plano; se estiver offline, a tela usa a última cópia.
   refreshCatalog(db).catch(e => console.warn('[catálogo]', e instanceof Error ? e.message : e));
 
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

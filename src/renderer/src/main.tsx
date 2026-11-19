@@ -7,9 +7,14 @@ import '@fontsource/nunito/500.css';
 import '@fontsource/nunito/600.css';
 import '@fontsource/nunito/700.css';
 import '@fontsource/nunito/800.css';
+import '@fontsource/rubik/300.css';
+import '@fontsource/rubik/400.css';
+import '@fontsource/rubik/500.css';
+import '@fontsource/rubik/600.css';
 import './styles.css';
 import './hubs/hubs.css';
 import './hubs/switch.css';
+import './hubs/ps5.css';
 import { queryClient, trpcClient, TRPCProvider } from './trpc';
 import { App } from './App';
 

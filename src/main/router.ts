@@ -13,8 +13,9 @@ import type { Ports } from './ports/installer';
 import { parseRepo } from './ports/github';
 import type { Player } from './play';
 import type { Artwork } from './artwork/service';
+import type { Translator } from './translate';
 
-export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; defaultPortsDir: string }
+export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; tr: Translator; defaultPortsDir: string }
 export const portsDirOf = (d: Pick<RouterDeps, 'db' | 'defaultPortsDir'>) => kvGet(d.db, 'portsDir') || d.defaultPortsDir;
 
 async function pick(title: string, props: ('openDirectory' | 'openFile' | 'createDirectory')[], extra: Partial<Electron.OpenDialogOptions> = {}) {
@@ -27,16 +28,21 @@ async function pick(title: string, props: ('openDirectory' | 'openFile' | 'creat
 const t = initTRPC.create({ transformer: superjson, isServer: true });
 
 export function createRouter(deps: RouterDeps) {
-  const { db, ach, ports, player, art } = deps;
+  const { db, ach, ports, player, art, tr } = deps;
   return t.router({
     art: t.router({
-      /** Capa, fundo e logo em boa resolução (os que faltam chegam depois, avisados por onChanged). */
       get: t.procedure.input(z.object({ console: z.string(), platformName: z.string().nullish(), title: z.string() }))
         .query(({ input }) => art.get(input.console, input.platformName, [input.title])),
+      shots: t.procedure.input(z.object({ console: z.string(), platformName: z.string().nullish(), title: z.string() }))
+        .query(({ input }) => art.shots(input.console, input.platformName, [input.title])),
       status: t.procedure.query(() => art.status),
       refresh: t.procedure.mutation(() => art.refresh()),
       onChanged: t.procedure.subscription(async function* ({ signal }) { for await (const _ of on(art.events, 'changed', { signal })) yield Date.now(); }),
       onStatus: t.procedure.subscription(async function* ({ signal }) { for await (const [s] of on(art.events, 'status', { signal })) yield s as string | null; }),
+    }),
+
+    i18n: t.router({
+      translate: t.procedure.input(z.object({ text: z.string().max(8000) })).query(({ input }) => tr.translate(input.text)),
     }),
 
     settings: t.router({
@@ -104,16 +110,13 @@ export function createRouter(deps: RouterDeps) {
     games: t.router({
       list: t.procedure.query(() => ach.listGames()),
       get: t.procedure.input(z.object({ id: z.string() })).query(({ input }) => ach.getGame(input.id)),
-      /** Escolher manualmente o programa que o Jogar abre. */
       chooseExe: t.procedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
         const g = ach.getGame(input.id);
         const file = await pick(`Qual programa abre ${g.title}?`, ['openFile'], { defaultPath: g.installDir, filters: process.platform === 'win32' ? [{ name: 'Programas', extensions: ['exe', 'bat', 'lnk'] }] : [] });
         if (file) ach.patchGame(input.id, { exe: file });
         return ach.getGame(input.id);
       }),
-      /** Abre o seletor de pasta e adiciona o jogo. Devolve null se o usuário cancelar. */
       addFromDialog: t.procedure.input(z.object({ catalogId: z.string().optional() }).optional()).mutation(async ({ input }) => {
-        // vindo de um jogo do catálogo, a pasta fica ligada a ele (capa, status, projeto)
         const dir = await pick(input?.catalogId ? 'Escolha a pasta onde você instalou o jogo' : 'Escolha a pasta do jogo', ['openDirectory']);
         return dir ? ach.addGame(dir, { catalogId: input?.catalogId ?? null }) : null;
       }),

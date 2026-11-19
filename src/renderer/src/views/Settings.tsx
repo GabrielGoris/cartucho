@@ -34,6 +34,7 @@ const SECTIONS: [string, Row[]][] = [
     { k: 'start', t: 'Começar em', d: '', kind: 'pick', opts: [['act', 'Início'], ['stage', 'Consoles']] },
     { k: 'pad', t: 'Botões na tela', d: 'Automático segue o controle conectado.', kind: 'pick', opts: Object.entries(PAD_NAMES) as [string, string][] },
     { k: 'reduce', t: 'Menos movimento', d: 'Sem animações nem tremulação.', kind: 'sw' },
+    { k: 'translate', t: 'Traduzir textos dos jogos', d: 'Descrições e requisitos do catálogo vêm em inglês; o Cartucho traduz pelo MyMemory e guarda.', kind: 'sw' },
   ]],
 ];
 
