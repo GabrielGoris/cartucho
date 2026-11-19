@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConsoleId } from '@shared/types';
 import { isSelfInstall, SELF_INSTALL_NOTE, STATUS_LABEL } from '@shared/consoles';
 import { useTRPC } from '../trpc';
-import { Glyph, useKeys, usePadKind, type Key } from '../lib/input';
+import { Glyph, PAD_NAMES, useKeys, usePadKind, type Key } from '../lib/input';
 import { getSettings, setSettings, useSettings } from '../lib/settings';
 import { setSfxProfile, sfx } from '../lib/sfx';
 import { ago, fmtDate, fmtPlay, plural } from '../lib/format';
@@ -11,7 +11,7 @@ import { GameArt } from '../components/GameArt';
 import { SearchBox } from '../components/SearchBox';
 import { matchesQuery } from '../lib/search';
 import { CONSOLES } from '../stage/consoles';
-import { BootOverlay, Fit, useClock, useDeviceStatus, useHubToast } from './HubFrame';
+import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
 import { useGameProgress, useHubActions, useHubData, type HubGame } from './data';
 
@@ -21,8 +21,8 @@ interface St { page: Page; zone: Zone; idx: number; di: number; si: number; mi: 
 type Side = { k: string; l: string; ic?: IconName; n?: number; gap?: boolean; v?: string };
 
 const DOCK: [Page | 'off', string, IconName, string][] = [
-  ['news', 'Novidades', 'bell', '#2f7de1'], ['cat', 'Descobrir', 'compass', '#ef7d22'], ['time', 'Tempo de jogo', 'clock', '#2fa45a'],
-  ['upd', 'Atualizações', 'dl', '#8b5cf6'], ['cfg', 'Configurações', 'gear', '#6b6b75'], ['off', 'Voltar ao Cartucho', 'power', '#6b6b75'],
+  ['news', 'Novidades', 'bell', '#2f7de1'], ['cat', 'Descobrir', 'compass', '#ef7d22'], ['time', 'Tempo', 'clock', '#2fa45a'],
+  ['upd', 'Atualizações', 'dl', '#8b5cf6'], ['cfg', 'Ajustes', 'gear', '#6b6b75'], ['off', 'Sair', 'power', '#6b6b75'],
 ];
 const PAGES: Record<Exclude<Page, 'home' | 'game'>, [string, IconName]> = { cat: ['Descobrir', 'compass'], news: ['Novidades', 'bell'], time: ['Tempo de jogo', 'clock'], upd: ['Atualizações', 'dl'], cfg: ['Configurações', 'gear'] };
 const TAGS = { new: 'NOVO', upd: 'VERSÃO', up: 'SUBIU' } as const;
@@ -240,18 +240,17 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
 function Home({ v1, row, st, feedCount, updCount, newCount, onTile, onDock, hints }: {
   v1: boolean; row: HubGame[]; st: St; feedCount: number; updCount: number; newCount: number; onTile: (i: number) => void; onDock: (j: number) => void; hints: ReactNode;
 }) {
-  const clock = useClock(), dev = useDeviceStatus();
+  const clock = useClock();
   const P = v1 ? 392 : 394, X0 = v1 ? 104 : 150, n = row.length, inDock = st.zone === 'dock', i = st.idx;
   const shift = Math.max(0, i - 2) * P, x = X0 + i * P - shift, g = row[i];
   return (
     <>
       <div className="top">
-        <div className="av">G</div>{v1 && <div className="av add">+</div>}
+        <div className="av">G</div>
+        <span className="brand">Cartucho<small>{v1 ? 'Nintendo Switch' : 'Nintendo Switch 2'}</small></span>
         <div className="sp" />
         {feedCount > 0 && <span className="radar"><i />{plural(feedCount, 'novidade', 'novidades')}</span>}
         <span className="clock">{clock}</span>
-        <span style={{ opacity: dev.online ? 1 : 0.3 }}><Ic n="wifi" /></span>
-        {dev.batt && <>{v1 && <span className="pct">{Math.round(dev.batt.level * 100)}%</span>}<span className="battw"><Ic n="batt" /><i style={{ width: `${dev.batt.level * 10}px` }} /></span></>}
       </div>
       {!inDock && n > 0 && <div className="tname" style={{ left: x }}>{g ? g.title : 'Descobrir mais'}</div>}
       <div className="row" style={{ transform: `translateX(-${shift}px)` }}>
@@ -483,7 +482,7 @@ function GameAch({ id }: { id: string }) {
   );
 }
 
-function PadIndicator({ v1, label = false }: { v1: boolean; label?: boolean }) {
+function PadIndicator({ label = false }: { v1?: boolean; label?: boolean }) {
   const kind = usePadKind();
   if (kind === 'kb') return (
     <span className="pad"><svg className="kbd" viewBox="0 0 64 40" aria-hidden="true">
@@ -493,19 +492,5 @@ function PadIndicator({ v1, label = false }: { v1: boolean; label?: boolean }) {
       <rect x="16" y="26" width="32" height="4.5" rx="1.5" fill="#ececef" />
     </svg>{label && <small>Teclado</small>}</span>
   );
-  const L = v1 ? '#00b4d8' : '#3a3a42', R = v1 ? '#ff4b5c' : '#3a3a42', ring = v1 ? 'none' : 'url(#s2ring)';
-  return (
-    <span className="pad"><svg className="joy" viewBox="0 0 64 40" aria-hidden="true">
-      <defs><linearGradient id="s2ring" x1="0" x2="1"><stop offset="0" stopColor="#2fb7ff" /><stop offset="1" stopColor="#ff4b5c" /></linearGradient></defs>
-      <path d="M28 4h-12a12 12 0 0 0-12 12v8a12 12 0 0 0 12 12h12z" fill={L} />
-      <circle cx="16" cy="14" r="4.2" fill="#1d1d22" /><circle cx="16" cy="14" r="2.6" fill="#55555e" />
-      <circle cx="16" cy="23.2" r="1.5" fill="#e9e9ee" /><circle cx="16" cy="29.2" r="1.5" fill="#e9e9ee" /><circle cx="13" cy="26.2" r="1.5" fill="#e9e9ee" /><circle cx="19" cy="26.2" r="1.5" fill="#e9e9ee" />
-      <rect x="22.5" y="8" width="3.4" height="1.2" rx=".6" fill="#e9e9ee" />
-      <path d="M36 4h12a12 12 0 0 1 12 12v8a12 12 0 0 1-12 12h-12z" fill={R} />
-      <circle cx="48" cy="11" r="1.5" fill="#e9e9ee" /><circle cx="48" cy="17" r="1.5" fill="#e9e9ee" /><circle cx="45" cy="14" r="1.5" fill="#e9e9ee" /><circle cx="51" cy="14" r="1.5" fill="#e9e9ee" />
-      <circle cx="48" cy="26" r="4.2" fill="#1d1d22" /><circle cx="48" cy="26" r="2.6" fill="#55555e" />
-      <path d="M38.2 8.6h3.4M39.9 6.9v3.4" stroke="#e9e9ee" strokeWidth="1.2" strokeLinecap="round" />
-      {!v1 && <><rect x="27.4" y="6" width="1.2" height="28" rx=".6" fill={ring} /><rect x="35.4" y="6" width="1.2" height="28" rx=".6" fill={ring} /></>}
-    </svg>{label && <small>{kind === 'nin' ? 'Joy-Con' : kind === 'ps' ? 'Controle PlayStation' : 'Controle Xbox'}</small>}</span>
-  );
+  return <span className="pad"><Ic n="pad" />{label && <small>Controle {PAD_NAMES[kind]}</small>}</span>;
 }
