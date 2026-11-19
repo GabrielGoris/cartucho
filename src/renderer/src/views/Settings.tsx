@@ -1,4 +1,6 @@
 import { useRef, type ReactNode } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTRPC } from '../trpc';
 import { Glyph, PAD_NAMES, type Key } from '../lib/input';
 import { PALETTES, paletteById } from '../lib/palettes';
 import { setSettings, useSettings, type Settings as S } from '../lib/settings';
@@ -36,6 +38,9 @@ const SECTIONS: [string, Row[]][] = [
 export function Settings({ onClose }: { onClose: () => void }) {
   const s = useSettings();
   const root = useRef<HTMLDivElement>(null);
+  const trpc = useTRPC(), qc = useQueryClient();
+  const portsDir = useQuery(trpc.settings.portsDir.queryOptions());
+  const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => qc.setQueryData(trpc.settings.portsDir.queryKey(), d) }));
 
   const change = (r: Row, dir: 1 | -1) => {
     initAudio();
@@ -79,12 +84,17 @@ export function Settings({ onClose }: { onClose: () => void }) {
               ))}
             </div>
           ))}
+          <div className="st-sec">JOGOS</div>
+          <button className="st-r" data-hf onClick={() => pickDir.mutate()}>
+            <span><span className="t">Pasta dos jogos</span><span className="d">Onde o Cartucho instala o que você baixa. Jogos já instalados ficam onde estão.</span></span>
+            <span className="c"><span className="st-pick"><b style={{ minWidth: 0, maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{portsDir.data ?? '…'}</b>›</span></span>
+          </button>
           <div className="st-sec">SOBRE</div>
           <p className="st-credits">
             Catálogo: Recompendium (recompendium.com). Modelos 3D do Sketchfab, de: Laser Design (SNES, CC BY-NC), Joseph Rohm (N64, CC BY),
             Jeffrey fan 2000 (GameCube, CC BY), elouisetrewartha (Wii, CC BY-NC), Smoggybeard (Switch, CC BY-NC-SA), NAIT Studio (Switch 2, CC BY),
             ecjhr0awipso (PS1, CC BY), DemoDove99 (PS2), Ilya Ostrovsky (PSP, CC BY), Vasily (PS3, CC BY), Laxity (PS4, CC BY), DatSketch (PS5, CC BY-ND),
-            Rob Bryant, Jr (Xbox 360, CC BY), MadeByYeshe (PC, CC BY), Daniel Brück (fliperama, CC BY). Atalhos: S configurações, C botões, M som.
+            Rob Bryant, Jr (Xbox 360, CC BY), MadeByYeshe (PC, CC BY), Daniel Brück (fliperama, CC BY). Instalação e atualização adaptadas do Harbour (MIT-0). Atalhos: S configurações, C botões, M som, P paleta, F11 tela cheia.
           </p>
         </div>
       </div>

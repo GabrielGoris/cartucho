@@ -8,6 +8,9 @@ Hub de recomps, ports e emuladores: catálogo do Recompendium, radar de novidade
 - **Início**: o jogo mais recente em destaque e os outros numa fileira, navegável por setas ou controle.
 - **Palco 3D** (React Three Fiber) com os 15 consoles, a mesa e a linha neon; nome, ano e contagem real de recomps e instalados por console.
 - **Hub de cada console** (versão provisória): seus jogos daquele console, o catálogo dele e as conquistas.
+- **Instalar e atualizar** pelo GitHub, direto da ficha do jogo no catálogo: escolhe o download certo para Windows, confere o hash publicado, passa no Windows Defender, desempacota numa pasta própria e acha o .exe. Atualizações só entram se vierem da mesma conta, guardam cópia dos arquivos trocados em `_cartucho-backup` e nunca sobrescrevem configurações (.ini, .toml, .cfg…) nem saves. Projetos cujo download não é o jogo pronto (ferramentas que montam o jogo a partir da sua cópia) são avisados antes de baixar.
+- **Jogar e tempo de jogo**: o Jogar abre o .exe e acompanha até ele fechar, como na Steam (tempo total, sessões, últimos 14 dias). Com um jogo aberto, o palco 3D para de desenhar.
+- **Desinstalar** apaga só o que veio no download; saves e configurações que você mudou ficam.
 - **Configurações** (tecla S ou ⚙): paletas, filtro CRT, moldura, brilho, palco pixelado, sons, abertura, botões do controle e menos movimento.
 - **Controle**: teclado, Xbox, PlayStation e Nintendo; os botões na tela mudam conforme o controle conectado.
 
@@ -44,6 +47,10 @@ Outros comandos:
 
 - `CARTUCHO_USER_DATA`: usa outra pasta de perfil (banco separado), sem mexer no seu.
 - `CARTUCHO_CATALOG_URL`: lê o catálogo de outro endereço (por exemplo, um JSON local para testes).
+- `CARTUCHO_GITHUB_API`: usa outro servidor no lugar de api.github.com (testes).
+- `GITHUB_TOKEN` / `GH_TOKEN`, ou o GitHub CLI logado (`gh auth login`): sobe o limite de consultas do GitHub de 60 para 5.000 por hora.
+
+Os jogos instalados pelo Cartucho vão para `%USERPROFILE%\Games\Cartucho` (dá para mudar em Configurações → Pasta dos jogos).
 
 ## Estrutura
 
@@ -59,6 +66,8 @@ src/
       service.ts        sincroniza, guarda no banco, observa o arquivo e avisa
       xdbf.ts xex.ts    lista original dos jogos de Xbox 360
       saves.ts          leitores dos arquivos de desbloqueio
+    ports/              instalar/atualizar pelo GitHub (github.ts, files.ts, installer.ts)
+    play.ts             abrir o jogo e contar o tempo
       data/             listas que vêm do próprio código do recomp (Sonic 3 A.I.R., RSDKv4)
   preload/              ponte mínima (só o tRPC)
   renderer/             tela (React)

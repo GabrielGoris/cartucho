@@ -6,6 +6,10 @@ import { openDb } from './db';
 import { createRouter } from './router';
 import { AchievementService } from './achievements/service';
 import { refreshCatalog } from './catalog';
+import { createGitHub, type Fetch } from './ports/github';
+import { Ports } from './ports/installer';
+import { Player } from './play';
+import { portsDirOf } from './router';
 
 // Para desenvolvimento/testes: perfil separado (CARTUCHO_USER_DATA) sem mexer no seu.
 if (process.env.CARTUCHO_USER_DATA) app.setPath('userData', process.env.CARTUCHO_USER_DATA);
@@ -52,8 +56,15 @@ void app.whenReady().then(async () => {
 
   const db = openDb(join(app.getPath('userData'), 'cartucho.db'));
   const ach = new AchievementService(db, app.getPath('appData'));
+  // Quando o jogo fecha, o Cartucho volta para a frente.
+  const player = new Player(db, ach, p => shell.openPath(p), () => { if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.focus(); } });
+  ach.isRunning = player.isRunning;
+  // net.fetch usa a rede do Chromium (proxy e certificados do sistema), melhor que o fetch do Node para downloads grandes.
+  const gh = createGitHub({ fetch: ((url, init) => net.fetch(url, init as RequestInit)) as Fetch, ...(process.env.CARTUCHO_GITHUB_API ? { api: process.env.CARTUCHO_GITHUB_API } : {}) });
+  const defaultPortsDir = join(app.getPath('home'), 'Games', 'Cartucho');
+  const ports = new Ports(db, ach, gh, () => portsDirOf({ db, defaultPortsDir }), player.isRunning);
   createIPCHandler({
-    router: createRouter(db, ach),
+    router: createRouter({ db, ach, ports, player, defaultPortsDir }),
     preload: false,
     // Só a nossa própria página fala com o processo principal.
     allow: e => isOurPage(e.senderFrame?.url ?? ''),
@@ -64,7 +75,7 @@ void app.whenReady().then(async () => {
   refreshCatalog(db).catch(e => console.warn('[catálogo]', e instanceof Error ? e.message : e));
 
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
-  app.on('before-quit', () => { ach.stop(); db.close(); });
+  app.on('before-quit', () => { player.stop(); ach.stop(); db.close(); });
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

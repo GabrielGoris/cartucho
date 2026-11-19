@@ -113,3 +113,22 @@ export function buildUData(unlocked: number[]) {
   for (let i = 0; i < 128; i++) w.u32(0);
   return w.bytes();
 }
+
+// ---------- zip (sem compressão), para testar instalação ----------
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = (b: Uint8Array) => { let c = 0xffffffff; for (const x of b) c = CRC[(c ^ x) & 0xff]! ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+
+/** Zip "stored" com os arquivos dados (caminho → conteúdo). */
+export function buildZip(files: Record<string, string | Uint8Array>) {
+  const local = new Writer(true), central = new Writer(true);
+  let count = 0;
+  for (const [name, content] of Object.entries(files)) {
+    const data = typeof content === 'string' ? new TextEncoder().encode(content) : content;
+    const nb = new TextEncoder().encode(name), crc = crc32(data), off = local.length;
+    local.u32(0x04034b50).u16(20).u16(0).u16(0).u16(0).u16(0).u32(crc).u32(data.length).u32(data.length).u16(nb.length).u16(0).raw(nb).raw(data);
+    central.u32(0x02014b50).u16(20).u16(20).u16(0).u16(0).u16(0).u16(0).u32(crc).u32(data.length).u32(data.length).u16(nb.length).u16(0).u16(0).u16(0).u16(0).u32(0).u32(off).raw(nb);
+    count++;
+  }
+  const cd = central.bytes(), lb = local.bytes();
+  return new Writer(true).raw(lb).raw(cd).u32(0x06054b50).u16(0).u16(0).u16(count).u16(count).u32(cd.length).u32(lb.length).u16(0).bytes();
+}

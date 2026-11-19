@@ -3,7 +3,7 @@ import type { LibrarySummary } from '@shared/types';
 import { Glyph, PAD_NAMES, useKeys, usePadKind } from '../lib/input';
 import { reduceMotion } from '../lib/settings';
 import { initAudio, sfx } from '../lib/sfx';
-import { plural } from '../lib/format';
+import { fmtPlay, plural } from '../lib/format';
 import { CONSOLES } from '../stage/consoles';
 
 /** Abertura: o cartucho cai no console, o nome é "digitado" e aparece o resumo da biblioteca. */
@@ -18,7 +18,7 @@ export function Boot({ summary, onDone }: { summary: LibrarySummary | undefined;
     <>› catálogo: <b>{summary.catalogTotal} recomps</b> em {CONSOLES.length} consoles</>,
     <>› biblioteca: <b>{plural(summary.installed, 'jogo instalado', 'jogos instalados')}</b></>,
     <>› radar: <b>{plural(summary.radar.fresh, 'novo', 'novos')}</b> e {plural(summary.radar.updates, 'atualização', 'atualizações')} desde a última visita</>,
-    <>› conquistas: <b>{summary.achievements.unlocked}</b> de {summary.achievements.total}</>,
+    <>› conquistas: <b>{summary.achievements.unlocked}</b> de {summary.achievements.total}{summary.playMs ? <> · tempo de jogo: <b>{fmtPlay(summary.playMs)}</b></> : null}</>,
     <>› controle: <b>{PAD_NAMES[pad]}</b></>,
   ] : [<>› lendo a biblioteca…</>];
 

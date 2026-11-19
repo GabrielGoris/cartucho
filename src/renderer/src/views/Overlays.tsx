@@ -5,7 +5,8 @@ import type { ConsoleId } from '@shared/types';
 import { useTRPC } from '../trpc';
 import { Glyph } from '../lib/input';
 import { useSpatialNav } from '../lib/spatial';
-import { ago, plural } from '../lib/format';
+import { ago, fmtPlay, plural } from '../lib/format';
+import { Bars } from '../components/Bars';
 import { sfx } from '../lib/sfx';
 
 const TAGS = { new: 'NOVO', upd: 'VERSÃO', up: 'SUBIU' } as const;
@@ -55,18 +56,20 @@ export function MeOverlay({ onClose }: { onClose: () => void }) {
   const trpc = useTRPC();
   const summary = useQuery(trpc.library.summary.queryOptions());
   const recent = useQuery(trpc.achievements.recent.queryOptions({ limit: 8 }));
-  const a = summary.data?.achievements;
+  const stats = useQuery(trpc.play.stats.queryOptions());
+  const a = summary.data?.achievements, st = stats.data;
+  const week = st ? st.days.slice(7).reduce((x, y) => x + y, 0) : 0;
   return (
     <Shell title="GORIS" onClose={onClose}>
-      <div className="hm-big glow">{a?.unlocked ?? 0}<small>{a ? `de ${plural(a.total, 'conquista', 'conquistas')} nos seus jogos · ${plural(summary.data!.installed, 'jogo', 'jogos')} na biblioteca` : ''}</small></div>
-      <div className="hm-sub">CONQUISTAS RECENTES</div>
+      <div className="hm-big glow">{fmtPlay(st?.totalMs ?? 0)}<small>{fmtPlay(week * 3600_000)} nos últimos 7 dias · {plural(summary.data?.installed ?? 0, 'jogo', 'jogos')} na biblioteca</small></div>
+      {st && <Bars days={st.days.slice(7)} />}
+      <div className="hm-sub">CONQUISTAS · {a?.unlocked ?? 0} de {a?.total ?? 0}</div>
       <div className="hm-ach">
         {recent.data?.length === 0 && <span className="dim">Nenhuma ainda. Elas aparecem aqui assim que você desbloquear algo num jogo suportado.</span>}
         {recent.data?.map(u => (
           <div key={`${u.gameId}:${u.achId}`}><i /><span>{u.name}<br /><small>{u.gameTitle}</small></span><small>{ago(u.at)}</small></div>
         ))}
       </div>
-      <p className="dim" style={{ marginTop: 16, fontSize: 18 }}>Tempo de jogo entra quando o Cartucho passar a abrir os jogos.</p>
     </Shell>
   );
 }

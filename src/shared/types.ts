@@ -47,7 +47,32 @@ export interface InstalledGame {
   coverUrl: string | null;
   addedAt: number;
   achievements: { unlocked: number; total: number } | null;
+  /** Programa que o Jogar abre (null = ainda não sabemos qual é). */
+  exe: string | null;
+  /** Projeto no GitHub de onde vêm as atualizações. */
+  sourceRepo: string | null;
+  /** Versão instalada, quando conhecida. */
+  version: string | null;
+  /** Instalado pelo Cartucho (pode desinstalar). */
+  managed: boolean;
+  playMs: number;
+  lastPlayed: number | null;
+  running: boolean;
 }
+
+export interface InstalledRelease { tag: string; assetId: number; date: string | null; uploader: string | null }
+export interface UpdateInfo {
+  repo: string | null;
+  installed: string | null;              // versão instalada (tag)
+  latest: { tag: string; name: string; date: string | null; notes: string; page: string; size: number; assetName: string } | null;
+  /** true/false; null = não dá para saber (versão instalada desconhecida). */
+  updateAvailable: boolean | null;
+  checkedAt: number | null;
+  error?: string;
+}
+export interface InstallProgress { key: string; stage: string; pct: number; done?: boolean; error?: string }
+export interface PlayEvent { gameId: string; title: string; running: boolean; sessionMs?: number }
+export interface PlayStats { totalMs: number; sessions: number; lastPlayed: number | null; /** horas por dia, últimos 14 dias (o último é hoje) */ days: number[] }
 
 export interface GameAchievements {
   game: InstalledGame;
@@ -70,6 +95,7 @@ export interface LibrarySummary {
   platforms: number;                                   // plataformas distintas em "Outros"
   perConsole: Record<string, { recomps: number; installed: number; fresh: number }>;
   installed: number;
+  playMs: number;
   radar: { unseen: number; fresh: number; updates: number };
   achievements: { unlocked: number; total: number };
 }

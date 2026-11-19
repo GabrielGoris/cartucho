@@ -91,6 +91,14 @@ const MIGRATIONS: string[] = [
   ALTER TABLE catalog_game ADD COLUMN no_link INTEGER NOT NULL DEFAULT 0;
   UPDATE catalog_game SET retired = 0;
   `,
+  // 3: instalar/atualizar pelo GitHub e tempo de jogo
+  `
+  ALTER TABLE installed_game ADD COLUMN source_repo TEXT;          -- dono/projeto no GitHub, para atualizações
+  ALTER TABLE installed_game ADD COLUMN release_json TEXT;         -- versão instalada: {tag, assetId, date, uploader}
+  ALTER TABLE installed_game ADD COLUMN managed INTEGER NOT NULL DEFAULT 0;   -- 1 = instalado pelo Cartucho
+  ALTER TABLE installed_game ADD COLUMN manifest_json TEXT;        -- arquivos que vieram no download (para desinstalar)
+  CREATE INDEX play_session_game ON play_session(game_id, started_at);
+  `,
 ];
 
 export function openDb(file: string): DB {

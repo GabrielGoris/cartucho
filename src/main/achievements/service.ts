@@ -7,7 +7,8 @@ import { existsSync, unwatchFile, watchFile } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { ConsoleId, GameAchievements, InstalledGame, RecentUnlock, UnlockEvent } from '@shared/types';
+import type { ConsoleId, GameAchievements, InstalledGame, InstalledRelease, RecentUnlock, UnlockEvent } from '@shared/types';
+import { findGameExe, guessProgram } from '../ports/files';
 import { type DB, kvGet, kvSet, tx } from '../db';
 import { absUrl } from '../catalog';
 import { type Adapter, type AdapterContext, adapterById, adapterForDir } from './adapters';
@@ -16,7 +17,16 @@ import type { Unlock } from './saves';
 /** Console de origem quando o jogo não está no catálogo. */
 const ADAPTER_CONSOLE: Record<string, ConsoleId> = { 'unleashed-recomp': 'x360', 'marathon-recomp': 'x360', sonic3air: 'other', rsdkv4: 'other' };
 
-type GameRow = { id: string; catalog_id: string | null; title: string; console: string; install_dir: string; adapter: string | null; added_at: number; cover_url: string | null };
+type GameRow = {
+  id: string; catalog_id: string | null; title: string; console: string; install_dir: string; adapter: string | null; added_at: number; cover_url: string | null;
+  exe: string | null; version: string | null; source_repo: string | null; managed: number; play_ms: number; last_played: number | null;
+};
+/** Dados extras de um jogo instalado pelo Cartucho (ou com projeto do GitHub já conhecido). */
+export interface AddExtra { catalogId?: string | null; title?: string; console?: string; exe?: string | null; sourceRepo?: string | null; release?: InstalledRelease | null; managed?: boolean; manifest?: Record<string, number> | null }
+const GAME_SQL = `SELECT g.*, c.cover_url,
+  (SELECT COALESCE(SUM(p.ended_at - p.started_at), 0) FROM play_session p WHERE p.game_id = g.id AND p.ended_at IS NOT NULL) play_ms,
+  (SELECT MAX(p.started_at) FROM play_session p WHERE p.game_id = g.id) last_played
+  FROM installed_game g LEFT JOIN catalog_game c ON c.id = g.catalog_id`;
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -29,8 +39,11 @@ export class AchievementService {
 
   // ---------- jogos instalados ----------
 
+  /** Quem está jogando agora (o Player avisa). */
+  isRunning: (id: string) => boolean = () => false;
+
   private row(id: string) {
-    const r = this.db.prepare('SELECT g.*, c.cover_url FROM installed_game g LEFT JOIN catalog_game c ON c.id = g.catalog_id WHERE g.id = ?').get(id) as GameRow | undefined;
+    const r = this.db.prepare(`${GAME_SQL} WHERE g.id = ?`).get(id) as GameRow | undefined;
     if (!r) throw new Error('jogo não encontrado');
     return r;
   }
@@ -41,33 +54,60 @@ export class AchievementService {
     return {
       id: r.id, title: r.title, console: r.console as ConsoleId, installDir: r.install_dir, adapter: r.adapter, adapterLabel: adapter?.label ?? null,
       catalogId: r.catalog_id, coverUrl: absUrl(r.cover_url), addedAt: r.added_at, achievements: counts,
+      exe: r.exe, sourceRepo: r.source_repo, version: r.version, managed: !!r.managed,
+      playMs: r.play_ms ?? 0, lastPlayed: r.last_played ?? null, running: this.isRunning(r.id),
     };
   }
   private ctx(r: GameRow): AdapterContext { return { installDir: r.install_dir, appData: this.appData, title: r.title }; }
 
   listGames(): InstalledGame[] {
-    return (this.db.prepare('SELECT g.*, c.cover_url FROM installed_game g LEFT JOIN catalog_game c ON c.id = g.catalog_id ORDER BY g.title').all() as GameRow[]).map(r => this.toGame(r));
+    return (this.db.prepare(`${GAME_SQL} ORDER BY g.title`).all() as GameRow[]).map(r => this.toGame(r));
+  }
+  getGame(id: string) { return this.toGame(this.row(id)); }
+  /** Dados internos (versão instalada e lista de arquivos), para o instalador. */
+  internals(id: string) {
+    const r = this.db.prepare('SELECT release_json, manifest_json FROM installed_game WHERE id = ?').get(id) as { release_json: string | null; manifest_json: string | null } | undefined;
+    return { release: r?.release_json ? JSON.parse(r.release_json) as InstalledRelease : null, manifest: r?.manifest_json ? JSON.parse(r.manifest_json) as Record<string, number> : null };
+  }
+  /** Atualiza campos de um jogo (depois de uma atualização, ou quando o usuário escolhe o .exe). */
+  patchGame(id: string, p: { exe?: string | null; sourceRepo?: string | null; release?: InstalledRelease | null; manifest?: Record<string, number> | null; title?: string }) {
+    const sets: string[] = [], args: (string | null)[] = [];
+    if (p.exe !== undefined) { sets.push('exe = ?'); args.push(p.exe); }
+    if (p.sourceRepo !== undefined) { sets.push('source_repo = ?'); args.push(p.sourceRepo); }
+    if (p.release !== undefined) { sets.push('release_json = ?', 'version = ?'); args.push(p.release ? JSON.stringify(p.release) : null, p.release?.tag ?? null); }
+    if (p.manifest !== undefined) { sets.push('manifest_json = ?'); args.push(p.manifest ? JSON.stringify(p.manifest) : null); }
+    if (p.title !== undefined) { sets.push('title = ?'); args.push(p.title); }
+    if (sets.length) this.db.prepare(`UPDATE installed_game SET ${sets.join(', ')} WHERE id = ?`).run(...args, id);
+    this.events.emit('changed', id);
   }
 
   /** Acha o jogo do catálogo pelo nome do repositório. Se houver mais de um (Sonic 1 e 2 dividem o RSDKv4), usa o nome da pasta para desempatar. */
   private matchCatalog(adapter: Adapter, dir: string) {
-    const rows = adapter.repos.flatMap(name => this.db.prepare(`SELECT id, title, console FROM catalog_game WHERE retired = 0 AND (lower(repo) = ? OR lower(repo) LIKE ?)`)
-      .all(name, `%/${name}`) as { id: string; title: string; console: string }[]);
+    const rows = adapter.repos.flatMap(name => this.db.prepare(`SELECT id, title, console, repo FROM catalog_game WHERE retired = 0 AND (lower(repo) = ? OR lower(repo) LIKE ?)`)
+      .all(name, `%/${name}`) as { id: string; title: string; console: string; repo: string | null }[]);
     if (rows.length <= 1) return rows[0] ?? null;
     const folder = basename(dir).toLowerCase();
     const wants2 = /2/.test(folder);
     return rows.find(r => /\b2\b/.test(r.title) === wants2) ?? rows[0]!;
   }
 
-  async addGame(dir: string): Promise<InstalledGame> {
+  async addGame(dir: string, extra: AddExtra = {}): Promise<InstalledGame> {
     dir = resolve(dir);
     const dup = this.db.prepare('SELECT id FROM installed_game WHERE install_dir = ?').get(dir) as { id: string } | undefined;
     if (dup) return this.toGame(this.row(dup.id));
     const adapter = adapterForDir(dir);
-    const cat = adapter ? this.matchCatalog(adapter, dir) : null;
+    const cat = extra.catalogId
+      ? this.db.prepare('SELECT id, title, console, repo FROM catalog_game WHERE id = ?').get(extra.catalogId) as { id: string; title: string; console: string; repo: string | null } | undefined
+      : adapter ? this.matchCatalog(adapter, dir) : null;
+    let exe = extra.exe ?? null;
+    if (!exe) try { exe = findGameExe(dir) ?? guessProgram(dir, extra.sourceRepo ?? cat?.repo ?? null); } catch { exe = null; }
     const id = randomUUID();
-    this.db.prepare('INSERT INTO installed_game (id, catalog_id, title, console, install_dir, adapter, added_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-      id, cat?.id ?? null, cat?.title ?? adapter?.label ?? basename(dir), cat?.console ?? (adapter ? ADAPTER_CONSOLE[adapter.id] : 'other') ?? 'other', dir, adapter?.id ?? null, Date.now());
+    this.db.prepare(`INSERT INTO installed_game (id, catalog_id, title, console, install_dir, adapter, added_at, exe, source_repo, release_json, version, managed, manifest_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      id, cat?.id ?? null, extra.title ?? cat?.title ?? adapter?.label ?? basename(dir),
+      extra.console ?? cat?.console ?? (adapter ? ADAPTER_CONSOLE[adapter.id] : 'other') ?? 'other', dir, adapter?.id ?? null, Date.now(),
+      exe, extra.sourceRepo ?? cat?.repo ?? null, extra.release ? JSON.stringify(extra.release) : null, extra.release?.tag ?? null,
+      extra.managed ? 1 : 0, extra.manifest ? JSON.stringify(extra.manifest) : null);
     if (adapter) {
       await this.syncDefinitions(id);
       await this.syncUnlocks(id, { silent: true });   // o que já estava desbloqueado antes não vira notificação
@@ -174,6 +214,13 @@ export class AchievementService {
   }
   /** Ao abrir o Cartucho: confere o que mudou enquanto ele estava fechado e começa a observar. */
   async start() {
+    // Jogos adicionados antes de existir o Jogar/atualizar: acha o .exe e o projeto do catálogo
+    for (const r of this.db.prepare(`SELECT g.id, g.install_dir, g.exe, g.source_repo, c.repo FROM installed_game g LEFT JOIN catalog_game c ON c.id = g.catalog_id
+        WHERE g.exe IS NULL OR (g.source_repo IS NULL AND c.repo IS NOT NULL)`).all() as { id: string; install_dir: string; exe: string | null; source_repo: string | null; repo: string | null }[]) {
+      let exe = r.exe;
+      if (!exe) try { exe = findGameExe(r.install_dir) ?? guessProgram(r.install_dir, r.repo); } catch { /* pasta sumiu */ }
+      this.db.prepare('UPDATE installed_game SET exe = ?, source_repo = COALESCE(source_repo, ?) WHERE id = ?').run(exe, r.repo, r.id);
+    }
     for (const g of this.listGames()) {
       if (!g.adapter) continue;
       if (!this.db.prepare('SELECT 1 FROM achievement_def WHERE game_id = ? LIMIT 1').get(g.id)) await this.syncDefinitions(g.id);

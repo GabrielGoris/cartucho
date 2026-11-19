@@ -3,17 +3,65 @@ import { BrowserWindow, dialog, shell } from 'electron';
 import { initTRPC } from '@trpc/server';
 import superjson from 'superjson';
 import { z } from 'zod';
-import type { LibrarySummary, UnlockEvent } from '@shared/types';
+import type { InstallProgress, LibrarySummary, PlayEvent, UnlockEvent } from '@shared/types';
 import type { DB } from './db';
-import { kvGet } from './db';
+import { kvGet, kvSet } from './db';
 import { listCatalog, listRadar, markRadarSeen, perConsole, platformCount, radarCounts, refreshCatalog } from './catalog';
 import type { AchievementService } from './achievements/service';
 import { ADAPTERS } from './achievements/adapters';
+import type { Ports } from './ports/installer';
+import { parseRepo } from './ports/github';
+import type { Player } from './play';
+
+export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; defaultPortsDir: string }
+export const portsDirOf = (d: Pick<RouterDeps, 'db' | 'defaultPortsDir'>) => kvGet(d.db, 'portsDir') || d.defaultPortsDir;
+
+async function pick(title: string, props: ('openDirectory' | 'openFile' | 'createDirectory')[], extra: Partial<Electron.OpenDialogOptions> = {}) {
+  const win = BrowserWindow.getFocusedWindow();
+  const opts: Electron.OpenDialogOptions = { title, properties: props, ...extra };
+  const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+  return res.canceled ? null : res.filePaths[0] ?? null;
+}
 
 const t = initTRPC.create({ transformer: superjson, isServer: true });
 
-export function createRouter(db: DB, ach: AchievementService) {
+export function createRouter(deps: RouterDeps) {
+  const { db, ach, ports, player } = deps;
   return t.router({
+    settings: t.router({
+      portsDir: t.procedure.query(() => portsDirOf(deps)),
+      pickPortsDir: t.procedure.mutation(async () => {
+        const dir = await pick('Onde o Cartucho deve instalar os jogos?', ['openDirectory', 'createDirectory'], { defaultPath: portsDirOf(deps) });
+        if (dir) kvSet(db, 'portsDir', dir);
+        return portsDirOf(deps);
+      }),
+    }),
+
+    ports: t.router({
+      install: t.procedure.input(z.object({ catalogId: z.string() })).mutation(({ input }) => ports.installFromCatalog(input.catalogId)),
+      installRepo: t.procedure.input(z.object({ repo: z.string() })).mutation(({ input }) => ports.install(parseRepo(input.repo))),
+      checkUpdate: t.procedure.input(z.object({ id: z.string(), force: z.boolean().optional() })).query(({ input }) => ports.checkUpdate(input.id, input.force)),
+      update: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => ports.update(input.id)),
+      uninstall: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => ports.uninstall(input.id)),
+      setSource: t.procedure.input(z.object({ id: z.string(), repo: z.string().nullable() })).mutation(({ input }) => {
+        ach.patchGame(input.id, { sourceRepo: input.repo ? parseRepo(input.repo) : null, release: null });
+        db.prepare('DELETE FROM kv WHERE key = ?').run(`upd.${input.id}`);
+        return ach.getGame(input.id);
+      }),
+      onProgress: t.procedure.subscription(async function* ({ signal }) {
+        for await (const [p] of on(ports.events, 'progress', { signal })) yield p as InstallProgress;
+      }),
+    }),
+
+    play: t.router({
+      start: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => player.play(input.id)),
+      quit: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => player.quit(input.id)),
+      stats: t.procedure.input(z.object({ id: z.string().optional() }).optional()).query(({ input }) => player.stats(input?.id)),
+      onEvent: t.procedure.subscription(async function* ({ signal }) {
+        for await (const [e] of on(player.events, 'play', { signal })) yield e as PlayEvent;
+      }),
+    }),
+
     library: t.router({
       summary: t.procedure.query((): LibrarySummary => {
         const pc = perConsole(db), rc = radarCounts(db);
@@ -22,6 +70,7 @@ export function createRouter(db: DB, ach: AchievementService) {
           platforms: platformCount(db),
           perConsole: pc,
           installed: ach.listGames().length,
+          playMs: player.stats().totalMs,
           radar: { unseen: rc.unseen ?? 0, fresh: rc.fresh ?? 0, updates: rc.updates ?? 0 },
           achievements: ach.totals(),
         };
@@ -43,13 +92,18 @@ export function createRouter(db: DB, ach: AchievementService) {
 
     games: t.router({
       list: t.procedure.query(() => ach.listGames()),
+      get: t.procedure.input(z.object({ id: z.string() })).query(({ input }) => ach.getGame(input.id)),
+      /** Escolher manualmente o programa que o Jogar abre. */
+      chooseExe: t.procedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+        const g = ach.getGame(input.id);
+        const file = await pick(`Qual programa abre ${g.title}?`, ['openFile'], { defaultPath: g.installDir, filters: process.platform === 'win32' ? [{ name: 'Programas', extensions: ['exe', 'bat', 'lnk'] }] : [] });
+        if (file) ach.patchGame(input.id, { exe: file });
+        return ach.getGame(input.id);
+      }),
       /** Abre o seletor de pasta e adiciona o jogo. Devolve null se o usuário cancelar. */
       addFromDialog: t.procedure.mutation(async () => {
-        const win = BrowserWindow.getFocusedWindow();
-        const opts = { title: 'Escolha a pasta do jogo', properties: ['openDirectory' as const] };
-        const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
-        if (res.canceled || !res.filePaths[0]) return null;
-        return ach.addGame(res.filePaths[0]);
+        const dir = await pick('Escolha a pasta do jogo', ['openDirectory']);
+        return dir ? ach.addGame(dir) : null;
       }),
       remove: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => ach.removeGame(input.id)),
       openFolder: t.procedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {

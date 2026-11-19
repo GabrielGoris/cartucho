@@ -5,7 +5,7 @@ import { useTRPC } from '../trpc';
 import { Hints, useKeys, usePadKind, PAD_NAMES } from '../lib/input';
 import { useSpatialNav } from '../lib/spatial';
 import { setSettings, useSettings } from '../lib/settings';
-import { clockStr, plural } from '../lib/format';
+import { clockStr, fmtPlay, plural } from '../lib/format';
 import { initAudio, sfx } from '../lib/sfx';
 import { CONSOLES, MAKERS, MAKER_LABEL } from '../stage/consoles';
 import { Home, setCaption } from './Home';
@@ -34,6 +34,7 @@ export function Select({ active, page, setPage, sel, setSel, onEnterConsole, onS
   const add = useMutation(trpc.games.addFromDialog.mutationOptions({
     onSuccess: g => { void qc.invalidateQueries(); if (g) onEnterConsole(g.console, { game: g.id }); },
   }));
+  const play = useMutation(trpc.play.start.mutationOptions({ onSuccess: () => void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }) }));
   const [ov, setOv] = useState<null | 'radar' | 'me'>(null);
   const root = useRef<HTMLElement>(null);
   const pad = usePadKind();
@@ -77,7 +78,7 @@ export function Select({ active, page, setPage, sel, setSel, onEnterConsole, onS
         </div>
       </header>
 
-      {page === 'act' && <Home games={games.data} summary={summary.data} onOpenGame={openGame} onStage={() => go('stage')} onAddGame={() => add.mutate()} adding={add.isPending} />}
+      {page === 'act' && <Home games={games.data} summary={summary.data} onOpenGame={openGame} onPlay={g => { initAudio(); sfx.play('ok'); play.mutate({ id: g.id }); }} playError={play.error?.message ?? null} onStage={() => go('stage')} onAddGame={() => add.mutate()} adding={add.isPending} />}
 
       {page === 'stage' && (
         <div className="stage-ui">
@@ -86,6 +87,7 @@ export function Select({ active, page, setPage, sel, setSel, onEnterConsole, onS
             {c.id === 'other' ? plural(summary.data?.platforms ?? 0, 'plataforma', 'plataformas') : `${c.maker} · ${c.year}`}
             {' · '}{pc?.recomps ? plural(pc.recomps, 'recomp', 'recomps') : 'nenhum recomp ainda'}
             {pc?.installed ? ` · ${plural(pc.installed, 'instalado', 'instalados')}` : ''}
+            {(() => { const ms = (games.data ?? []).filter(g => g.console === c.id).reduce((s, g) => s + g.playMs, 0); return ms ? ` · ${fmtPlay(ms)}` : ''; })()}
             {pc?.fresh ? <> · <b>{plural(pc.fresh, 'novo', 'novos')}</b></> : null}
           </div>
           <div className="nav">

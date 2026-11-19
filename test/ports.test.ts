@@ -1,0 +1,173 @@
+/** Instalar, atualizar e desinstalar com um "GitHub" de mentira num servidor local. */
+import { createHash } from 'node:crypto';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { createServer, type Server } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { openDb } from '../src/main/db';
+import { AchievementService } from '../src/main/achievements/service';
+import { createGitHub, guessAsset, parseRepo, type Asset } from '../src/main/ports/github';
+import { Ports } from '../src/main/ports/installer';
+import { Player } from '../src/main/play';
+import { buildZip } from './fixtures';
+
+const tmp = () => mkdtempSync(join(tmpdir(), 'cartucho-'));
+const sha = (b: Uint8Array) => 'sha256:' + createHash('sha256').update(b).digest('hex');
+
+// estado do servidor: as versões publicadas e os arquivos para baixar
+const files = new Map<string, Uint8Array>();
+let releases: { tag: string; uploader: string; assets: { name: string; zip: Uint8Array; digest?: string }[] }[] = [];
+let server: Server, base = '';
+
+beforeAll(async () => {
+  server = createServer((req, res) => {
+    const url = req.url ?? '';
+    const json = (o: unknown, code = 200) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); };
+    const toApi = (r: typeof releases[number]) => ({
+      tag_name: r.tag, name: r.tag, draft: false, prerelease: false, published_at: '2026-11-01T00:00:00Z', body: `notas ${r.tag}`, html_url: `${base}/rel/${r.tag}`,
+      assets: r.assets.map((a, i) => ({ id: Number(r.tag.replace(/\D/g, '')) * 10 + i, name: a.name, size: a.zip.length, browser_download_url: `${base}/dl/${r.tag}/${a.name}`, digest: a.digest ?? sha(a.zip), uploader: { login: r.uploader } })),
+    });
+    if (url === '/repos/dono/MeuRecomp/releases/latest') return releases.length ? json(toApi(releases.at(-1)!)) : json({ message: 'Not Found' }, 404);
+    if (url.startsWith('/repos/dono/MeuRecomp/releases')) return json(releases.map(toApi).reverse());
+    const f = files.get(url);
+    if (!f) return json({ message: 'Not Found' }, 404);
+    const range = /bytes=(\d+)-(\d+)/.exec(req.headers.range ?? '');
+    if (range) {
+      const a = Number(range[1]), b = Math.min(Number(range[2]), f.length - 1);
+      res.writeHead(206, { 'content-range': `bytes ${a}-${b}/${f.length}`, 'content-length': b - a + 1 });
+      return res.end(Buffer.from(f.subarray(a, b + 1)));
+    }
+    res.writeHead(200, { 'content-length': f.length }); res.end(Buffer.from(f));
+  });
+  await new Promise<void>(ok => server.listen(0, '127.0.0.1', ok));
+  base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+});
+afterAll(() => server.close());
+
+function publish(tag: string, uploader: string, zipFiles: Record<string, string>, opts: { badDigest?: boolean } = {}) {
+  const zip = buildZip(zipFiles), linux = buildZip({ 'meurecomp': 'linux' });
+  files.set(`/dl/${tag}/MeuRecomp-windows-x64.zip`, zip);
+  files.set(`/dl/${tag}/MeuRecomp-linux-x64.zip`, linux);
+  releases.push({ tag, uploader, assets: [
+    { name: 'MeuRecomp-linux-x64.zip', zip: linux },
+    { name: 'MeuRecomp-windows-x64.zip', zip, digest: opts.badDigest ? 'sha256:' + '0'.repeat(64) : undefined },
+  ] });
+}
+
+function setup() {
+  const db = openDb(':memory:'), dir = tmp();
+  db.prepare("INSERT INTO catalog_game (id, title, repo, console, platform_name, status, first_seen_at, updated_at) VALUES ('recomps/meu', 'Meu Jogo', 'dono/MeuRecomp', 'n64', 'Nintendo 64', 'full', 0, 0)").run();
+  const ach = new AchievementService(db, tmp());
+  const gh = createGitHub({ api: base, platform: 'win32' });
+  const progress: string[] = [];
+  const ports = new Ports(db, ach, gh, () => dir, () => false);
+  ports.events.on('progress', p => progress.push(p.stage));
+  return { db, ach, ports, dir, progress };
+}
+
+describe('escolha do download', () => {
+  const a = (name: string): Asset => ({ id: 1, name, size: 1, browser_download_url: '' });
+  it('prefere o zip de Windows x64', () => {
+    const list = ['Source code.zip', 'Jogo-linux-x64.tar.gz', 'Jogo-Setup-x64.exe', 'Jogo-windows-x64.zip', 'Jogo-windows-arm64.zip', 'Jogo.pdb'].map(a);
+    expect(guessAsset(list, 'win32')?.name).toBe('Jogo-windows-x64.zip');
+    expect(guessAsset(list, 'linux')?.name).toBe('Jogo-linux-x64.tar.gz');
+  });
+  it('entende link do GitHub ou dono/projeto', () => {
+    expect(parseRepo('https://github.com/hedge-dev/UnleashedRecomp/releases')).toBe('hedge-dev/UnleashedRecomp');
+    expect(parseRepo('hedge-dev/UnleashedRecomp.git')).toBe('hedge-dev/UnleashedRecomp');
+    expect(() => parseRepo('não é repo')).toThrow();
+  });
+});
+
+describe('instalar, atualizar e desinstalar', () => {
+  it('fluxo completo', async () => {
+    releases = [];
+    publish('v1', 'autor', { 'MeuRecomp/MeuRecomp.exe': 'exe v1', 'MeuRecomp/data/a.txt': 'a1', 'MeuRecomp/config.ini': 'padrao' });
+    const { ach, ports, dir, progress } = setup();
+
+    // espiar dentro do zip remoto
+    const names = await createGitHub({ api: base }).remoteZipNames(`${base}/dl/v1/MeuRecomp-windows-x64.zip`);
+    expect(names).toContain('MeuRecomp/MeuRecomp.exe');
+
+    const g = await ports.installFromCatalog('recomps/meu');
+    expect(g).toMatchObject({ title: 'Meu Jogo', console: 'n64', managed: true, sourceRepo: 'dono/MeuRecomp', version: 'v1' });
+    expect(g.installDir).toBe(join(dir, 'MeuRecomp'));
+    expect(g.exe).toBe(join(dir, 'MeuRecomp', 'MeuRecomp.exe'));
+    expect(readFileSync(g.exe!, 'utf8')).toBe('exe v1');
+    expect(progress).toContain('Pronto');
+    await expect(ports.installFromCatalog('recomps/meu')).rejects.toThrow(/já está/);
+
+    expect(await ports.checkUpdate(g.id)).toMatchObject({ installed: 'v1', updateAvailable: false });
+
+    // o usuário mexe na configuração e cria um save
+    writeFileSync(join(g.installDir, 'config.ini'), 'minha config');
+    writeFileSync(join(g.installDir, 'save.dat'), 'meu save');
+
+    // versão nova publicada por outra conta: barrada
+    publish('v2', 'estranho', { 'MeuRecomp/MeuRecomp.exe': 'exe v2', 'MeuRecomp/data/a.txt': 'a2', 'MeuRecomp/config.ini': 'padrao2' });
+    expect(await ports.checkUpdate(g.id, true)).toMatchObject({ installed: 'v1', updateAvailable: true, latest: { tag: 'v2' } });
+    await expect(ports.update(g.id)).rejects.toThrow(/outra conta/);
+
+    // da mesma conta: entra, mantém a config, guarda cópia de segurança
+    releases.pop();
+    publish('v3', 'autor', { 'MeuRecomp/MeuRecomp.exe': 'exe v3', 'MeuRecomp/data/a.txt': 'a3', 'MeuRecomp/config.ini': 'padrao3', 'MeuRecomp/data/b.txt': 'novo' });
+    const up = await ports.update(g.id);
+    expect(up).toMatchObject({ installed: 'v3', updateAvailable: false });
+    expect(readFileSync(g.exe!, 'utf8')).toBe('exe v3');
+    expect(readFileSync(join(g.installDir, 'config.ini'), 'utf8')).toBe('minha config');
+    expect(readFileSync(join(g.installDir, '_cartucho-backup', 'v1', 'MeuRecomp.exe'), 'utf8')).toBe('exe v1');
+    expect(ach.getGame(g.id).version).toBe('v3');
+
+    // desinstalar: some o que veio no download; save e config mudada ficam
+    const r = await ports.uninstall(g.id);
+    expect(r.removed).toBeGreaterThan(0);
+    expect(existsSync(g.exe!)).toBe(false);
+    expect(readFileSync(join(g.installDir, 'save.dat'), 'utf8')).toBe('meu save');
+    expect(readFileSync(join(g.installDir, 'config.ini'), 'utf8')).toBe('minha config');
+    expect(ach.listGames()).toEqual([]);
+  });
+
+  it('hash diferente do publicado: nada é instalado', async () => {
+    releases = []; publish('v1', 'autor', { 'MeuRecomp.exe': 'x' }, { badDigest: true });
+    const { ports, ach, dir } = setup();
+    await expect(ports.installFromCatalog('recomps/meu')).rejects.toThrow(/hash/);
+    expect(ach.listGames()).toEqual([]);
+    expect(existsSync(join(dir, 'MeuRecomp'))).toBe(false);
+  });
+
+  it('pacote sem .exe (o jogo é montado por uma ferramenta): avisa antes de baixar', async () => {
+    releases = []; publish('v1', 'autor', { 'tools/build.py': 'x', 'README.md': 'y' });
+    const { ports } = setup();
+    await expect(ports.installFromCatalog('recomps/meu')).rejects.toThrow(/não publica uma versão pronta/);
+  });
+});
+
+describe.skipIf(process.platform === 'win32')('jogar e contar o tempo', () => {
+  it('abre, acompanha até fechar e soma a sessão', async () => {
+    const db = openDb(':memory:'), dir = tmp();
+    const exe = join(dir, 'jogo.sh');
+    writeFileSync(exe, '#!/bin/sh\nsleep 0.4\n'); chmodSync(exe, 0o755);
+    const ach = new AchievementService(db, tmp());
+    const g = await ach.addGame(dir, { exe });
+    const player = new Player(db, ach, async () => '');
+    ach.isRunning = player.isRunning;
+    const ended = new Promise<number>(ok => player.events.on('play', e => { if (!e.running) ok(e.sessionMs ?? 0); }));
+    await player.play(g.id);
+    expect(ach.getGame(g.id).running).toBe(true);
+    await expect(player.play(g.id)).rejects.toThrow(/já está aberto/);
+    expect(await ended).toBeGreaterThanOrEqual(300);
+    const st = player.stats(g.id);
+    expect(st.sessions).toBe(1);
+    expect(st.totalMs).toBeGreaterThanOrEqual(300);
+    expect(st.days).toHaveLength(14);
+    expect(st.days[13]).toBeGreaterThan(0);
+    expect(ach.getGame(g.id)).toMatchObject({ running: false, lastPlayed: expect.any(Number) });
+    expect(ach.getGame(g.id).playMs).toBeGreaterThanOrEqual(300);
+  });
+  it('sem .exe conhecido: explica', async () => {
+    const db = openDb(':memory:'), ach = new AchievementService(db, tmp());
+    const g = await ach.addGame(tmp());
+    await expect(new Player(db, ach, async () => '').play(g.id)).rejects.toThrow(/Escolher o .exe/);
+  });
+});

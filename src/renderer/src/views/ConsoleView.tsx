@@ -9,10 +9,11 @@ import { STATUS_LABEL } from '@shared/consoles';
 import { useTRPC } from '../trpc';
 import { Hints } from '../lib/input';
 import { useSpatialNav } from '../lib/spatial';
-import { fmtDate, plural } from '../lib/format';
+import { ago, fmtDate, fmtPlay, plural } from '../lib/format';
 import { sfx } from '../lib/sfx';
 import { Cover } from '../components/Cover';
 import { CONSOLES } from '../stage/consoles';
+import { CatalogPage, GamePage } from './GamePages';
 
 type Tab = 'lib' | 'cat';
 interface Props { id: ConsoleId; game?: string; tab?: Tab; active: boolean; onBack: () => void }
@@ -23,11 +24,13 @@ export function ConsoleView({ id, game, tab: tab0, active, onBack }: Props) {
   const games = useQuery(trpc.games.list.queryOptions());
   const mine = (games.data ?? []).filter(g => g.console === id);
   const [tab, setTab] = useState<Tab>(tab0 ?? 'lib');
-  const [open, setOpen] = useState<string | null>(game ?? null);
+  type Open = { kind: 'game'; id: string } | { kind: 'ach'; id: string } | { kind: 'cat'; game: CatalogGame };
+  const [open, setOpen] = useState<Open | null>(game ? { kind: 'game', id: game } : null);
+  const installedBy = new Map((games.data ?? []).filter(g => g.catalogId).map(g => [g.catalogId!, g.id]));
   const [search, setSearch] = useState(''), [q, setQ] = useState('');
   useEffect(() => { const t = setTimeout(() => setQ(search.trim()), 200); return () => clearTimeout(t); }, [search]);
   const cat = useQuery(trpc.catalog.list.queryOptions({ console: id, search: q || undefined }, { placeholderData: p => p }));
-  const add = useMutation(trpc.games.addFromDialog.mutationOptions({ onSuccess: g => { void qc.invalidateQueries(); if (g) setOpen(g.id); } }));
+  const add = useMutation(trpc.games.addFromDialog.mutationOptions({ onSuccess: g => { void qc.invalidateQueries(); if (g) setOpen({ kind: 'game', id: g.id }); } }));
 
   // sem jogos deste console, abre direto no catálogo
   useEffect(() => { if (!tab0 && games.data && !mine.length) setTab('cat'); }, [games.data]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -43,7 +46,10 @@ export function ConsoleView({ id, game, tab: tab0, active, onBack }: Props) {
 
   return (
     <section className="view chub" style={{ ['--cc' as string]: c.color }} aria-label={c.name}>
-      {open ? <Achievements id={open} active={active} onBack={() => { sfx.play('back'); setOpen(null); }} /> : (
+      {open?.kind === 'ach' ? <Achievements id={open.id} active={active} onBack={() => { sfx.play('back'); setOpen({ kind: 'game', id: open.id }); }} />
+        : open?.kind === 'game' ? <GamePage key={open.id} id={open.id} active={active} onBack={() => setOpen(null)} onAchievements={() => setOpen({ kind: 'ach', id: open.id })} />
+        : open?.kind === 'cat' ? <CatalogPage game={open.game} installedId={installedBy.get(open.game.id) ?? null} active={active} onBack={() => setOpen(null)} onOpenInstalled={gid => setOpen({ kind: 'game', id: gid })} />
+        : (
         <div ref={root} style={{ display: 'contents' }}>
           <header className="chub-top">
             <button className="back" data-hf onClick={() => { sfx.play('back'); onBack(); }}>◀ CARTUCHO</button>
@@ -61,13 +67,13 @@ export function ConsoleView({ id, game, tab: tab0, active, onBack }: Props) {
 
           <div className="chub-body">
             {tab === 'lib' ? (
-              mine.length ? <div className="rows">{mine.map(g => <GameRow key={g.id} g={g} onOpen={() => { sfx.play('ok'); setOpen(g.id); }} />)}</div>
+              mine.length ? <div className="rows">{mine.map(g => <GameRow key={g.id} g={g} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'game', id: g.id }); }} />)}</div>
                 : <EmptyLib />
             ) : (
               <>
                 <div className="toolbar"><input className="search" placeholder={`Buscar entre ${plural(cat.data?.length ?? 0, 'recomp', 'recomps')}…`} value={search} onChange={e => setSearch(e.target.value)} /></div>
                 {cat.data?.length === 0 && <p className="pad dim">{q ? 'Nada encontrado.' : 'Ainda não há recomps deste console no catálogo.'}</p>}
-                <div className="grid">{cat.data?.map(g => <GameCard key={g.id} g={g} />)}</div>
+                <div className="grid">{cat.data?.map(g => <GameCard key={g.id} g={g} installed={installedBy.has(g.id)} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'cat', game: g }); }} />)}</div>
                 <p className="credit">Catálogo: <a href="https://recompendium.com/" target="_blank" rel="noreferrer">Recompendium</a></p>
               </>
             )}
@@ -91,13 +97,13 @@ function EmptyLib() {
   );
 }
 
-function GameCard({ g }: { g: CatalogGame }) {
-  const open = () => { if (g.repo) window.open(`https://github.com/${g.repo}`, '_blank'); };
+function GameCard({ g, installed, onOpen }: { g: CatalogGame; installed: boolean; onOpen: () => void }) {
   return (
-    <button className="card" data-hf onClick={open} title={g.repo ? 'Abrir no GitHub' : undefined}>
+    <button className="card" data-hf onClick={onOpen}>
       <div style={{ position: 'relative' }}>
         <Cover title={g.title} url={g.coverUrl} />
         <span className={`st st-${g.status}`}>{STATUS_LABEL[g.status]}</span>
+        {installed && <span className="inlib">NA BIBLIOTECA</span>}
         {g.noLink && <span className="nolink" title="O Recompendium lista este projeto, mas prefere não pôr link para ele">SEM LINK</span>}
       </div>
       <div className="meta">
@@ -117,7 +123,7 @@ function GameRow({ g, onOpen }: { g: InstalledGame; onOpen: () => void }) {
       <Cover title={g.title} url={g.coverUrl} className="thumb" />
       <div className="row-main">
         <div className="title">{g.title}</div>
-        <div className="dim">{g.adapterLabel ?? 'sem conquistas'} · {g.installDir}</div>
+        <div className="dim">{g.running ? 'jogando agora · ' : ''}{g.playMs ? `${fmtPlay(g.playMs)} jogadas` : 'ainda não jogado'}{g.lastPlayed ? ` · ${ago(g.lastPlayed)}` : ''}{g.version ? ` · ${g.version}` : ''} · {g.installDir}</div>
       </div>
       {a && a.total > 0 && (
         <div className="prog">
