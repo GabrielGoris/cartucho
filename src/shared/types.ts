@@ -1,5 +1,5 @@
 /** Consoles do palco. Tudo que não tem console próprio cai em "other". */
-export const CONSOLE_IDS = ['snes', 'n64', 'gc', 'wii', 'switch', 'switch2', 'ps1', 'ps2', 'psp', 'ps3', 'ps4', 'ps5', 'x360', 'pc', 'other'] as const;
+export const CONSOLE_IDS = ['nes', 'gb', 'snes', 'n64', 'gc', 'nds', 'wii', 'switch', 'switch2', 'ps1', 'ps2', 'psp', 'ps3', 'ps4', 'ps5', 'xbox', 'x360', 'megadrive', 'pc', 'other'] as const;
 export type ConsoleId = (typeof CONSOLE_IDS)[number];
 
 export type PlayStatus = 'full' | 'play' | 'wip';
@@ -40,6 +40,8 @@ export interface InstalledGame {
   id: string;
   title: string;
   console: ConsoleId;
+  /** Plataforma de origem segundo o catálogo (ex.: "Game Boy Advance"); null fora do catálogo. */
+  platformName: string | null;
   installDir: string;
   adapter: string | null;
   adapterLabel: string | null;
@@ -93,7 +95,7 @@ export interface RecentUnlock { gameId: string; gameTitle: string; achId: number
 export interface LibrarySummary {
   catalogTotal: number;
   platforms: number;                                   // plataformas distintas em "Outros"
-  perConsole: Record<string, { recomps: number; installed: number; fresh: number }>;
+  perConsole: Record<string, { recomps: number; installed: number; fresh: number; platforms: number }>;
   installed: number;
   playMs: number;
   radar: { unseen: number; fresh: number; updates: number };

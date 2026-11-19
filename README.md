@@ -15,7 +15,8 @@ O Cartucho é um projeto pessoal e gratuito, sem nenhuma ligação com Nintendo,
 
 - **Abertura** com o cartucho entrando no console e o resumo da biblioteca (dá para desligar nas configurações).
 - **Início**: o jogo mais recente em destaque e os outros numa fileira, navegável por setas ou controle.
-- **Palco 3D** (React Three Fiber) com os 15 consoles, a mesa e a linha neon; nome, ano e contagem real de recomps e instalados por console.
+- **Palco 3D** (React Three Fiber) com 20 lugares: NES, Game Boy (GB/GBC/GBA), SNES, N64, GameCube, DS, Wii, Switch, Switch 2, PS1 a PS5, PSP, Xbox, Xbox 360, Mega Drive (com Mega CD e 32X), PC e Outros. Nome, ano e contagem real de recomps e instalados por console.
+- **Você escolhe o palco**: na primeira vez nos Consoles o Cartucho pergunta quais aparecem (depois em Configurações → Consoles no palco). Os escondidos não somem: os jogos deles vão para **Outros**, que separa tudo por console de origem.
 - **Hubs no estilo de cada console**: Nintendo Switch e Switch 2 já têm o seu (fileira de blocos, atalhos redondos, telas com barra lateral, Jogar/Instalar/Atualizar, tempo de jogo e conquistas). Os outros consoles ainda usam o hub provisório.
 - **Instalar e atualizar** pelo GitHub, direto da ficha do jogo no catálogo (exceto Switch e Switch 2, veja o aviso acima): escolhe o download certo para Windows, confere o hash publicado, passa no Windows Defender, desempacota numa pasta própria e acha o .exe. Atualizações só entram se vierem da mesma conta, guardam cópia dos arquivos trocados em `_cartucho-backup` e nunca sobrescrevem configurações (.ini, .toml, .cfg…) nem saves. Projetos cujo download não é o jogo pronto (ferramentas que montam o jogo a partir da sua cópia) são avisados antes de baixar.
 - **Jogar e tempo de jogo**: o Jogar abre o .exe e acompanha até ele fechar, como na Steam (tempo total, sessões, últimos 14 dias). Com um jogo aberto, o palco 3D para de desenhar.

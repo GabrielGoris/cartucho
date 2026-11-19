@@ -24,8 +24,10 @@ const OTHER: [RegExp, string][] = [
   [/game ?boy advance/i, 'gba'], [/game ?boy color/i, 'gbc'], [/game ?boy/i, 'gb'], [/\bnes\b|famicom/i, 'nes'], [/^xbox$/i, 'xbox'],
   [/saturn/i, 'saturn'], [/master system/i, 'mastersystem'], [/vita/i, 'vita'], [/arcade/i, 'arcade'],
 ];
+/** Em "Outros" e nas famílias (Game Boy, Mega Drive), a plataforma de cada jogo vem do nome de origem. */
+const BY_NAME = new Set(['other', 'gb', 'megadrive']);
 export const artPlatform = (console: string, platformName?: string | null) =>
-  console !== 'other' ? console : OTHER.find(([re]) => re.test(platformName ?? ''))?.[1] ?? null;
+  !BY_NAME.has(console) ? console : OTHER.find(([re]) => re.test(platformName ?? ''))?.[1] ?? (console === 'other' ? null : console);
 
 const MAX_IMAGE = 20 * 1048576;
 const NOT_FOUND_RETRY = 14 * 86400_000;   // jogo que o LaunchBox não tinha: tenta de novo depois de 2 semanas

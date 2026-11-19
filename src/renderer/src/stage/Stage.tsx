@@ -7,19 +7,26 @@ import * as THREE from 'three';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { Palette } from '../lib/palettes';
-import { CONSOLES, type StageConsole } from './consoles';
+import type { StageConsole } from './consoles';
 import { loadStageModel, setModelFocus, type StageModel } from './models';
 
-const R = 7.2;
-const STEP = (Math.PI * 2) / CONSOLES.length;
-const CAM_HOME = new THREE.Vector3(0, 3.0, R + 8.8);
-const CAM_ZOOM = new THREE.Vector3(0, 1.6, R + 3.2);
-const LOOK = new THREE.Vector3(0, 0.6, R - 1.2);
 const PAD_Y = 0.026, PAD_TOP = PAD_Y + 0.04;   // plataforma um pouco acima da linha da mesa
-const RING_R = R + 1.32;
+/**
+ * A mesa cresce com o número de consoles à mostra (cada um precisa de ~3 unidades de borda para as
+ * plataformas não se encostarem); a câmera fica sempre à mesma distância do console da frente.
+ */
+function geometry(n: number) {
+  const R = Math.max(7.2, (Math.max(1, n) * 3.05) / (Math.PI * 2));
+  return {
+    R, STEP: (Math.PI * 2) / Math.max(1, n), RING_R: R + 1.32,
+    CAM_HOME: new THREE.Vector3(0, 3.0, R + 8.8), CAM_ZOOM: new THREE.Vector3(0, 1.6, R + 3.2), LOOK: new THREE.Vector3(0, 0.6, R - 1.2),
+  };
+}
+type Geo = ReturnType<typeof geometry>;
 
 export type StageMode = 'stage' | 'behind' | 'hidden';
 interface Props {
+  list: StageConsole[];   // consoles à mostra, na ordem do carrossel
   sel: number;
   mode: StageMode;        // stage = palco em uso; behind = atrás da Home (desfocado); hidden = dentro de um console
   zoom: boolean;          // câmera chega perto (ao ligar um console)
@@ -35,7 +42,7 @@ export function Stage(p: Props) {
       <Canvas
         flat
         gl={{ antialias: false, powerPreference: 'high-performance' }}
-        camera={{ fov: 36, near: 0.1, far: 80, position: CAM_HOME.toArray() }}
+        camera={{ fov: 36, near: 0.1, far: 80, position: geometry(p.list.length).CAM_HOME.toArray() }}
         frameloop={p.mode === 'hidden' ? 'never' : 'always'}
         aria-label="Consoles em 3D girando num palco"
       >
@@ -45,8 +52,9 @@ export function Stage(p: Props) {
   );
 }
 
-function Scene({ sel, mode, zoom, palette: P, pixel, onSelect, onEnter }: Props) {
+function Scene({ list, sel, mode, zoom, palette: P, pixel, onSelect, onEnter }: Props) {
   const { gl, scene, camera, size, setDpr } = useThree();
+  const G = useMemo(() => geometry(list.length), [list.length]), { R, RING_R } = G;
 
   // ambiente de luz (reflexos suaves nos plásticos) + fundo e neblina na cor da paleta
   useEffect(() => {
@@ -68,12 +76,12 @@ function Scene({ sel, mode, zoom, palette: P, pixel, onSelect, onEnter }: Props)
   }, [camera, size.width, size.height]);
 
   const spot = useRef<THREE.SpotLight>(null!), rim = useRef<THREE.PointLight>(null!);
-  const spotTarget = useMemo(() => { const o = new THREE.Object3D(); o.position.set(0, 0, R); return o; }, []);
+  const spotTarget = useMemo(() => { const o = new THREE.Object3D(); o.position.set(0, 0, R); return o; }, [R]);
   useEffect(() => {
-    const col = new THREE.Color(CONSOLES[sel]!.color);
+    const col = new THREE.Color(list[sel]?.color ?? '#ffffff');
     spot.current.color.copy(col).lerp(new THREE.Color(0xffffff), 0.55);
     rim.current.color.copy(col);
-  }, [sel]);
+  }, [sel, list]);
 
   return (
     <>
@@ -94,12 +102,13 @@ function Scene({ sel, mode, zoom, palette: P, pixel, onSelect, onEnter }: Props)
         <meshBasicMaterial color={P.acc} />
       </mesh>
 
-      <Carousel sel={sel} mode={mode} zoom={zoom} padColor={P.line} onSelect={onSelect} onEnter={onEnter} />
+      <Carousel list={list} G={G} sel={sel} mode={mode} zoom={zoom} padColor={P.line} onSelect={onSelect} onEnter={onEnter} />
     </>
   );
 }
 
-function Carousel({ sel, mode, zoom, padColor, onSelect, onEnter }: { sel: number; mode: StageMode; zoom: boolean; padColor: string; onSelect: (i: number) => void; onEnter: (i: number) => void }) {
+function Carousel({ list, G, sel, mode, zoom, padColor, onSelect, onEnter }: { list: StageConsole[]; G: Geo; sel: number; mode: StageMode; zoom: boolean; padColor: string; onSelect: (i: number) => void; onEnter: (i: number) => void }) {
+  const { R, STEP, CAM_HOME, CAM_ZOOM, LOOK } = G;
   const carousel = useRef<THREE.Group>(null!);
   const wraps = useRef<(THREE.Group | null)[]>([]);
   const mixers = useRef(new Set<THREE.AnimationMixer>());
@@ -111,8 +120,8 @@ function Carousel({ sel, mode, zoom, padColor, onSelect, onEnter }: { sel: numbe
   useEffect(() => {
     const a = anim.current, base = -sel * STEP, TAU = Math.PI * 2;
     a.rotTarget = base + Math.round((a.rotTarget - base) / TAU) * TAU;
-    setModelFocus(sel);
-  }, [sel]);
+    if (list[sel]) setModelFocus(list[sel]!.id);
+  }, [sel, STEP, list]);
 
   useFrame((state, delta) => {
     const dt = Math.min(delta, 0.05), a = anim.current;
@@ -142,7 +151,7 @@ function Carousel({ sel, mode, zoom, padColor, onSelect, onEnter }: { sel: numbe
 
   return (
     <group ref={carousel}>
-      {CONSOLES.map((c, i) => {
+      {list.map((c, i) => {
         const ang = i * STEP;
         return (
           <group key={c.id} position={[Math.sin(ang) * R, 0, Math.cos(ang) * R]} rotation-y={ang} onClick={click(i)} onPointerOver={hover(true)} onPointerOut={hover(false)}>

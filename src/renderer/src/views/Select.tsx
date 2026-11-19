@@ -7,13 +7,14 @@ import { useSpatialNav } from '../lib/spatial';
 import { setSettings, useSettings } from '../lib/settings';
 import { clockStr, fmtPlay, plural } from '../lib/format';
 import { initAudio, sfx } from '../lib/sfx';
-import { CONSOLES, MAKERS, MAKER_LABEL } from '../stage/consoles';
+import { MAKERS, MAKER_LABEL, otherConsoles, type StageConsole } from '../stage/consoles';
 import { Home, setCaption } from './Home';
 import { MeOverlay, RadarOverlay } from './Overlays';
 
 export type Page = 'act' | 'stage';
 interface Props {
   active: boolean;
+  list: StageConsole[];   // consoles à mostra no palco
   page: Page; setPage: (p: Page) => void;
   sel: number; setSel: (i: number | ((prev: number) => number)) => void;
   onEnterConsole: (id: ConsoleId, opts?: { game?: string; tab?: 'lib' | 'cat' }) => void;
@@ -27,7 +28,7 @@ function Clock() {
 }
 
 /** Fora dos consoles: topo, Início e o palco. */
-export function Select({ active, page, setPage, sel, setSel, onEnterConsole, onSettings }: Props) {
+export function Select({ active, list, page, setPage, sel, setSel, onEnterConsole, onSettings }: Props) {
   const trpc = useTRPC(), qc = useQueryClient();
   const summary = useQuery(trpc.library.summary.queryOptions());
   const games = useQuery(trpc.games.list.queryOptions());
@@ -41,14 +42,14 @@ export function Select({ active, page, setPage, sel, setSel, onEnterConsole, onS
   const s = useSettings();
 
   const go = (p: Page) => { sfx.play('ok'); setPage(p); };
-  const move = (d: number) => { initAudio(); sfx.play('move'); setSel(prev => (prev + d + CONSOLES.length) % CONSOLES.length); };
+  const move = (d: number) => { initAudio(); sfx.play('move'); setSel(prev => prev + d); };
   const openGame = (g: InstalledGame) => onEnterConsole(g.console, { game: g.id });
 
   // palco: setas trocam de console, Enter liga
   useKeys(k => {
     if (k === 'ArrowLeft' || k === 'LB') move(-1);
     else if (k === 'ArrowRight' || k === 'RB') move(1);
-    else if (k === 'Enter') { initAudio(); onEnterConsole(CONSOLES[sel]!.id); }
+    else if (k === 'Enter') { initAudio(); onEnterConsole(list[sel]!.id); }
     else if (k === 'Escape' || k === 'Tab') go('act');
   }, active && page === 'stage' && !ov);
 
@@ -59,7 +60,10 @@ export function Select({ active, page, setPage, sel, setSel, onEnterConsole, onS
     onKey: k => { if (k === 'Tab' || k === 'LB' || k === 'RB') { go('stage'); return true; } if (k === 'Escape') return true; },
   });
 
-  const c = CONSOLES[sel]!, pc = summary.data?.perConsole[c.id];
+  // Outros soma os consoles escondidos
+  const c = list[sel]!, group = c.id === 'other' ? otherConsoles(s.hidden) : [c.id];
+  const pc = group.reduce((t, id) => { const x = summary.data?.perConsole[id]; return x ? { recomps: t.recomps + x.recomps, installed: t.installed + x.installed, fresh: t.fresh + x.fresh, platforms: t.platforms + x.platforms } : t; },
+    { recomps: 0, installed: 0, fresh: 0, platforms: 0 });
   const unseen = summary.data?.radar.unseen ?? 0;
 
   return (
@@ -84,10 +88,10 @@ export function Select({ active, page, setPage, sel, setSel, onEnterConsole, onS
         <div className="stage-ui">
           <div className="cname glow" style={{ color: c.color }}>{c.name.toUpperCase()}</div>
           <div className="cmeta">
-            {c.id === 'other' ? plural(summary.data?.platforms ?? 0, 'plataforma', 'plataformas') : `${c.maker} · ${c.year}`}
+            {c.id === 'other' ? plural(pc.platforms, 'plataforma', 'plataformas') : `${c.maker} · ${c.year}`}
             {' · '}{pc?.recomps ? plural(pc.recomps, 'recomp', 'recomps') : 'nenhum recomp ainda'}
             {pc?.installed ? ` · ${plural(pc.installed, 'instalado', 'instalados')}` : ''}
-            {(() => { const ms = (games.data ?? []).filter(g => g.console === c.id).reduce((s, g) => s + g.playMs, 0); return ms ? ` · ${fmtPlay(ms)}` : ''; })()}
+            {(() => { const ms = (games.data ?? []).filter(g => group.includes(g.console)).reduce((s, g) => s + g.playMs, 0); return ms ? ` · ${fmtPlay(ms)}` : ''; })()}
             {pc?.fresh ? <> · <b>{plural(pc.fresh, 'novo', 'novos')}</b></> : null}
           </div>
           <div className="nav">
@@ -96,10 +100,10 @@ export function Select({ active, page, setPage, sel, setSel, onEnterConsole, onS
             <button className="arrow" aria-label="Próximo console" onClick={() => move(1)}>▶</button>
           </div>
           <div className="groups">
-            {MAKERS.map(m => (
+            {MAKERS.filter(m => list.some(x => x.maker === m)).map(m => (
               <div key={m} className={`grp ${c.maker === m ? 'on' : ''}`}>
-                <button onClick={() => setSel(CONSOLES.findIndex(x => x.maker === m))}>{MAKER_LABEL[m]}</button>
-                <div className="d">{CONSOLES.map((x, i) => x.maker === m && <button key={x.id} className={i === sel ? 'on' : ''} aria-label={x.name} title={x.name} onClick={() => setSel(i)} />)}</div>
+                <button onClick={() => setSel(list.findIndex(x => x.maker === m))}>{MAKER_LABEL[m]}</button>
+                <div className="d">{list.map((x, i) => x.maker === m && <button key={x.id} className={i === sel ? 'on' : ''} aria-label={x.name} title={x.name} onClick={() => setSel(i)} />)}</div>
               </div>
             ))}
           </div>

@@ -127,7 +127,7 @@ export function CatalogPage({ game: c, installedId, active, onBack, onOpenInstal
       <div className="gp-body">
         <GameArt title={c.title} console={c.console} platformName={c.platformName} fallback={c.coverUrl} className="gp-cover" />
         <div className="gp-main">
-          <span className="k">{(c.console === 'other' ? c.platformName : CONSOLE_NAME[c.console]).toUpperCase()}{c.year ? ` · ${c.year}` : ''}{c.developer ? ` · ${c.developer}` : ''}</span>
+          <span className="k">{(c.platformName || CONSOLE_NAME[c.console]).toUpperCase()}{c.year ? ` · ${c.year}` : ''}{c.developer ? ` · ${c.developer}` : ''}</span>
           <h1>{c.title}</h1>
           <p><span className={`st-${c.status}`}>■ {STATUS_LABEL[c.status]}</span>{c.version ? ` · ${c.version}` : ''}{c.stars ? ` · ★ ${c.stars}` : ''}{c.noLink && !self ? ' · sem link no Recompendium' : ''}</p>
           <div className="hm-btns">

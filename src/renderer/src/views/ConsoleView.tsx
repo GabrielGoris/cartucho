@@ -2,17 +2,18 @@
  * Hub provisório de cada console: seus jogos daquele console, o que existe no catálogo e as conquistas.
  * A interface no estilo de cada console (a do protótipo) substitui esta tela nas próximas etapas.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CatalogGame, ConsoleId, InstalledGame } from '@shared/types';
-import { STATUS_LABEL } from '@shared/consoles';
+import { CONSOLE_NAME, isSelfInstall, STATUS_LABEL } from '@shared/consoles';
 import { useTRPC } from '../trpc';
 import { Hints } from '../lib/input';
 import { useSpatialNav } from '../lib/spatial';
 import { ago, fmtDate, fmtPlay, plural } from '../lib/format';
 import { sfx } from '../lib/sfx';
 import { GameArt } from '../components/GameArt';
-import { CONSOLES } from '../stage/consoles';
+import { CONSOLES, otherConsoles } from '../stage/consoles';
+import { useSettings } from '../lib/settings';
 import { CatalogPage, GamePage } from './GamePages';
 
 type Tab = 'lib' | 'cat';
@@ -22,14 +23,18 @@ export function ConsoleView({ id, game, tab: tab0, active, onBack }: Props) {
   const c = CONSOLES.find(x => x.id === id)!;
   const trpc = useTRPC(), qc = useQueryClient();
   const games = useQuery(trpc.games.list.queryOptions());
-  const mine = (games.data ?? []).filter(g => g.console === id);
+  // Outros junta os jogos sem lugar próprio no palco e os dos consoles que o usuário escondeu
+  const s = useSettings();
+  const group = id === 'other' ? otherConsoles(s.hidden) : [id];
+  const mine = (games.data ?? []).filter(g => group.includes(g.console));
+  const [only, setOnly] = useState<string | null>(null);   // Outros: só um console de origem
   const [tab, setTab] = useState<Tab>(tab0 ?? 'lib');
   type Open = { kind: 'game'; id: string } | { kind: 'ach'; id: string } | { kind: 'cat'; game: CatalogGame };
   const [open, setOpen] = useState<Open | null>(game ? { kind: 'game', id: game } : null);
   const installedBy = new Map((games.data ?? []).filter(g => g.catalogId).map(g => [g.catalogId!, g.id]));
   const [search, setSearch] = useState(''), [q, setQ] = useState('');
   useEffect(() => { const t = setTimeout(() => setQ(search.trim()), 200); return () => clearTimeout(t); }, [search]);
-  const cat = useQuery(trpc.catalog.list.queryOptions({ console: id, search: q || undefined }, { placeholderData: p => p }));
+  const cat = useQuery(trpc.catalog.list.queryOptions(id === 'other' ? { consoles: group, search: q || undefined } : { console: id, search: q || undefined }, { placeholderData: p => p }));
   const add = useMutation(trpc.games.addFromDialog.mutationOptions({ onSuccess: g => { void qc.invalidateQueries(); if (g) setOpen({ kind: 'game', id: g.id }); } }));
 
   // sem jogos deste console, abre direto no catálogo
@@ -67,13 +72,15 @@ export function ConsoleView({ id, game, tab: tab0, active, onBack }: Props) {
 
           <div className="chub-body">
             {tab === 'lib' ? (
-              mine.length ? <div className="rows">{mine.map(g => <GameRow key={g.id} g={g} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'game', id: g.id }); }} />)}</div>
+              mine.length ? <BySource on={id === 'other'} items={mine} only={only} setOnly={setOnly} cls="rows"
+                  render={g => <GameRow key={g.id} g={g} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'game', id: g.id }); }} />} />
                 : <EmptyLib />
             ) : (
               <>
                 <div className="toolbar"><input className="search" placeholder={`Buscar entre ${plural(cat.data?.length ?? 0, 'recomp', 'recomps')}…`} value={search} onChange={e => setSearch(e.target.value)} /></div>
                 {cat.data?.length === 0 && <p className="pad24 dim">{q ? 'Nada encontrado.' : 'Ainda não há recomps deste console no catálogo.'}</p>}
-                <div className="grid">{cat.data?.map(g => <GameCard key={g.id} g={g} installed={installedBy.has(g.id)} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'cat', game: g }); }} />)}</div>
+                <BySource on={id === 'other'} items={cat.data ?? []} only={only} setOnly={setOnly} cls="grid"
+                  render={g => <GameCard key={g.id} g={g} installed={installedBy.has(g.id)} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'cat', game: g }); }} />} />
                 <p className="credit">Catálogo: <a href="https://recompendium.com/" target="_blank" rel="noreferrer">Recompendium</a></p>
               </>
             )}
@@ -82,6 +89,37 @@ export function ConsoleView({ id, game, tab: tab0, active, onBack }: Props) {
         </div>
       )}
     </section>
+  );
+}
+
+/** Console de origem de um jogo em Outros: o nome que o catálogo dá ("Game Boy Advance", "Xbox"…). */
+const sourceOf = (g: { console: ConsoleId; platformName: string | null }) => g.platformName ?? (g.console === 'other' ? 'Outros' : CONSOLE_NAME[g.console]);
+
+/** Em Outros, os jogos vêm em blocos por console de origem (o maior primeiro), com atalhos para ver um só. */
+function BySource<T extends { console: ConsoleId; platformName: string | null }>({ on, items, only, setOnly, cls, render }: {
+  on: boolean; items: T[]; only: string | null; setOnly: (s: string | null) => void; cls: string; render: (g: T) => ReactNode;
+}) {
+  if (!on) return <div className={cls}>{items.map(render)}</div>;
+  const groups = new Map<string, T[]>();
+  for (const g of items) { const k = sourceOf(g); groups.set(k, [...(groups.get(k) ?? []), g]); }
+  const list = [...groups].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  const shown = only && groups.has(only) ? list.filter(([k]) => k === only) : list;
+  const color = (g: T) => CONSOLES.find(c => c.id === g.console && c.id !== 'other')?.color;
+  return (
+    <>
+      {list.length > 1 && (
+        <div className="oth-chips">
+          <button data-hf className={!only ? 'on' : ''} onClick={() => setOnly(null)}>Todos</button>
+          {list.map(([k, gs]) => <button key={k} data-hf className={only === k ? 'on' : ''} onClick={() => setOnly(only === k ? null : k)}>{k} · {gs.length}</button>)}
+        </div>
+      )}
+      {shown.map(([k, gs]) => (
+        <section key={k} style={{ ['--cc' as string]: color(gs[0]!) }}>
+          <h2 className="oth-sec">{k.toUpperCase()}<small>{plural(gs.length, 'jogo', 'jogos')}</small></h2>
+          <div className={cls}>{gs.map(render)}</div>
+        </section>
+      ))}
+    </>
   );
 }
 
@@ -104,11 +142,11 @@ function GameCard({ g, installed, onOpen }: { g: CatalogGame; installed: boolean
         <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} />
         <span className={`st st-${g.status}`}>{STATUS_LABEL[g.status]}</span>
         {installed && <span className="inlib">NA BIBLIOTECA</span>}
-        {g.noLink && <span className="nolink" title="O Recompendium lista este projeto, mas prefere não pôr link para ele">SEM LINK</span>}
+        {g.noLink && !isSelfInstall(g.console) && <span className="nolink" title="O Recompendium lista este projeto, mas prefere não pôr link para ele">SEM LINK</span>}
       </div>
       <div className="lmeta">
         <div className="title">{g.title}</div>
-        <div className="dim">{g.console === 'other' ? g.platformName : g.developer ?? ''}{g.year ? ` · ${g.year}` : ''}</div>
+        <div className="dim">{['other', 'gb', 'megadrive'].includes(g.console) ? g.platformName : g.developer ?? ''}{g.year ? ` · ${g.year}` : ''}</div>
         {g.repo && <span className="repo">{g.repo}</span>}
       </div>
     </button>
@@ -120,7 +158,7 @@ function GameRow({ g, onOpen }: { g: InstalledGame; onOpen: () => void }) {
   const pct = a && a.total ? Math.round((a.unlocked / a.total) * 100) : 0;
   return (
     <button className="lrow" data-hf onClick={onOpen}>
-      <GameArt title={g.title} console={g.console} fallback={g.coverUrl} className="thumb" />
+      <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} className="thumb" />
       <div className="row-main">
         <div className="title">{g.title}</div>
         <div className="dim">{g.running ? 'jogando agora · ' : ''}{g.playMs ? `${fmtPlay(g.playMs)} jogadas` : 'ainda não jogado'}{g.lastPlayed ? ` · ${ago(g.lastPlayed)}` : ''}{g.version ? ` · ${g.version}` : ''} · {g.installDir}</div>

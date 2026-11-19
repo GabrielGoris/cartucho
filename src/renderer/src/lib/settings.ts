@@ -19,8 +19,10 @@ export interface Settings {
   boot: boolean;        // mostrar a abertura
   start: 'act' | 'stage';
   reduce: boolean;      // menos movimento
+  hidden: string[];     // consoles fora do palco (os jogos deles aparecem em Outros)
+  picked: boolean;      // já escolheu quais consoles mostrar (a pergunta aparece só na primeira vez)
 }
-export const DEFAULTS: Settings = { pal: 'neon', crtLvl: 30, flicker: true, frame: true, glow: true, pixel: true, blur: true, snd: true, vol: 70, bootSnd: true, pad: 'auto', boot: true, start: 'act', reduce: false };
+export const DEFAULTS: Settings = { pal: 'neon', crtLvl: 30, flicker: true, frame: true, glow: true, pixel: true, blur: true, snd: true, vol: 70, bootSnd: true, pad: 'auto', boot: true, start: 'act', reduce: false, hidden: [], picked: false };
 
 const KEY = 'cartucho.set';
 let state: Settings = (() => { try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return { ...DEFAULTS }; } })();

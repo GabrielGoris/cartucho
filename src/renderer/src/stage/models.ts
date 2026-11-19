@@ -16,7 +16,7 @@ let active = 0;
 let focusIdx = 0;
 
 /** Avisa qual console está selecionado (muda a prioridade da fila). */
-export const setModelFocus = (i: number) => { focusIdx = i; };
+export const setModelFocus = (id: string) => { focusIdx = Math.max(0, CONSOLES.findIndex(c => c.id === id)); };
 
 const dist = (id: string) => {
   const n = CONSOLES.length, i = CONSOLES.findIndex(c => c.id === id);

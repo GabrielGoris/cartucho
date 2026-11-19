@@ -82,6 +82,8 @@ export async function refreshCatalog(db: DB, opts: { force?: boolean } = {}): Pr
       else if (p.status !== row.status) { event.run(e.entry, 'up', `${p.status}→${row.status}`, now); statusChanged++; }
       else if (row.version && p.version !== row.version && installed.has(e.entry)) { event.run(e.entry, 'upd', `${p.version ?? '?'}→${row.version}`, now); updated++; }
     }
+    // jogo da biblioteca ligado ao catálogo segue o console de lá (ex.: quando um console ganha lugar próprio no palco)
+    db.exec('UPDATE installed_game SET console = (SELECT c.console FROM catalog_game c WHERE c.id = installed_game.catalog_id) WHERE catalog_id IN (SELECT id FROM catalog_game)');
   });
 
   if (res.headers.get('etag')) kvSet(db, 'catalog.etag', res.headers.get('etag')!);
@@ -119,9 +121,10 @@ function selfGroups(db: DB) {
   return { rep, best };
 }
 
-export function listCatalog(db: DB, filter: { console?: string; search?: string } = {}): CatalogGame[] {
+export function listCatalog(db: DB, filter: { console?: string; consoles?: string[]; search?: string } = {}): CatalogGame[] {
   const where = ['retired = 0'], args: string[] = [];
   if (filter.console) { where.push('console = ?'); args.push(filter.console); }
+  if (filter.consoles?.length) { where.push(`console IN (${filter.consoles.map(() => '?').join(',')})`); args.push(...filter.consoles); }
   if (filter.search) { where.push(`(title LIKE ? OR (repo LIKE ? AND console NOT IN (${[...SELF_INSTALL].map(() => '?').join(',')})))`); args.push(`%${filter.search}%`, `%${filter.search}%`, ...SELF_INSTALL); }
   const { rep, best } = selfGroups(db);
   return (db.prepare(`SELECT * FROM catalog_game WHERE ${where.join(' AND ')} ORDER BY stars DESC, title`).all(...args) as Row[])
@@ -161,12 +164,12 @@ export const markRadarSeen = (db: DB) => kvSet(db, 'radar.seenAt', String(Date.n
 /** Por console: quantos recomps, quantos instalados e quantos chegaram nos últimos 14 dias. */
 export function perConsole(db: DB) {
   const since = Date.now() - 14 * 86400_000;
-  const out: Record<string, { recomps: number; installed: number; fresh: number }> = {};
-  for (const r of db.prepare(`SELECT console, COUNT(*) n, SUM(CASE WHEN id IN (SELECT game_id FROM radar_event WHERE kind = 'new' AND at > ?) THEN 1 ELSE 0 END) fresh
-      FROM catalog_game WHERE retired = 0 GROUP BY console`).all(since) as { console: string; n: number; fresh: number }[])
-    out[r.console] = { recomps: r.n, installed: 0, fresh: r.fresh ?? 0 };
+  const out: Record<string, { recomps: number; installed: number; fresh: number; platforms: number }> = {};
+  for (const r of db.prepare(`SELECT console, COUNT(*) n, COUNT(DISTINCT platform_name) p, SUM(CASE WHEN id IN (SELECT game_id FROM radar_event WHERE kind = 'new' AND at > ?) THEN 1 ELSE 0 END) fresh
+      FROM catalog_game WHERE retired = 0 GROUP BY console`).all(since) as { console: string; n: number; p: number; fresh: number }[])
+    out[r.console] = { recomps: r.n, installed: 0, fresh: r.fresh ?? 0, platforms: r.p };
   for (const r of db.prepare('SELECT console, COUNT(*) n FROM installed_game GROUP BY console').all() as { console: string; n: number }[])
-    (out[r.console] ??= { recomps: 0, installed: 0, fresh: 0 }).installed = r.n;
+    (out[r.console] ??= { recomps: 0, installed: 0, fresh: 0, platforms: 0 }).installed = r.n;
   // consoles agrupados: conta jogos, não projetos
   const { rep } = selfGroups(db);
   const freshIds = new Set((db.prepare("SELECT game_id FROM radar_event WHERE kind = 'new' AND at > ?").all(since) as { game_id: string }[]).map(r => rep.get(r.game_id) ?? r.game_id));

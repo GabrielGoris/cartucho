@@ -52,6 +52,27 @@ describe('banco, catálogo e conquistas', async () => {
     expect((await refreshCatalog(db)).changed).toBe(false);
   });
 
+  it('catálogo: Xbox, NES, Game Boy, Mega Drive e DS têm lugar próprio; a biblioteca acompanha', async () => {
+    const db = openDb(':memory:');
+    // como estava antes desta versão: tudo em "Outros"
+    db.prepare("INSERT INTO catalog_game (id, title, console, platform_name, status, first_seen_at, updated_at) VALUES ('recomps/halo', 'Halo', 'other', 'Xbox', 'play', 0, 0)").run();
+    db.prepare("INSERT INTO installed_game (id, catalog_id, title, console, install_dir, added_at) VALUES ('g', 'recomps/halo', 'Halo', 'other', '/x', 0)").run();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(catalog([
+      entry({ entry: 'recomps/halo', nombre: 'Halo', consola: 'xbox', consola_nombre: 'Xbox' }),
+      entry({ entry: 'recomps/mz', nombre: 'Zero Mission', consola: 'gba', consola_nombre: 'Game Boy Advance' }),
+      entry({ entry: 'recomps/la', nombre: 'Links Awakening DX', consola: 'gbc', consola_nombre: 'Game Boy Color' }),
+      entry({ entry: 'recomps/s3', nombre: 'Sonic CD', consola: 'megacd', consola_nombre: 'Mega CD' }),
+      entry({ entry: 'recomps/ph', nombre: 'Phantom Hourglass', consola: 'nds' }),
+      entry({ entry: 'recomps/smb', nombre: 'Super Mario Bros.', consola: 'nes' }),
+      entry({ entry: 'recomps/oot3d', nombre: 'Ocarina 3D', consola: '3ds', consola_nombre: 'Nintendo 3DS' }),
+    ])));
+    await refreshCatalog(db);
+    const by = Object.fromEntries(listCatalog(db).map(g => [g.id, g.console]));
+    expect(by).toEqual({ 'recomps/halo': 'xbox', 'recomps/mz': 'gb', 'recomps/la': 'gb', 'recomps/s3': 'megadrive', 'recomps/ph': 'nds', 'recomps/smb': 'nes', 'recomps/oot3d': 'other' });
+    expect(new AchievementService(db, '/tmp').getGame('g')).toMatchObject({ console: 'xbox', platformName: 'Xbox' });
+    expect(listCatalog(db, { consoles: ['other', 'gb'] }).map(g => g.id).sort()).toEqual(['recomps/la', 'recomps/mz', 'recomps/oot3d']);
+  });
+
   it('UnleashedRecomp: adiciona pela pasta, casa com o catálogo, lê lista e desbloqueios, avisa os novos', async () => {
     const db = openDb(':memory:'), appData = tmp(), dir = join(tmp(), 'UnleashedRecomp');
     db.prepare("INSERT INTO catalog_game (id, title, repo, console, platform_name, status, first_seen_at, updated_at) VALUES ('recomps/unleashed', 'Sonic Unleashed', 'hedge-dev/UnleashedRecomp', 'x360', 'Xbox 360', 'full', 0, 0)").run();

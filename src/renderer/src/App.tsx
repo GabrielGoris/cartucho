@@ -10,11 +10,12 @@ import { applyPalette, paletteById, PALETTES } from './lib/palettes';
 import { setShortcutHandler } from './lib/input';
 import { sfx } from './lib/sfx';
 import { Stage } from './stage/Stage';
-import { consoleIndex, CONSOLES } from './stage/consoles';
+import { routeConsole, visibleConsoles } from './stage/consoles';
 import { Boot } from './views/Boot';
 import { Select, type Page } from './views/Select';
 import { ConsoleView } from './views/ConsoleView';
 import { Settings } from './views/Settings';
+import { ConsolePicker } from './views/ConsolePicker';
 import { HUBS } from './hubs';
 
 type Inside = { id: ConsoleId; game?: string; tab?: 'lib' | 'cat'; key: number };
@@ -27,8 +28,16 @@ export function App() {
 
   const [booting, setBooting] = useState(s.boot);
   const [page, setPage] = useState<Page>(s.start);
-  const [sel, setSel] = useState(() => consoleIndex(localStorage.getItem(LAST) ?? 'snes'));
-  useEffect(() => { try { localStorage.setItem(LAST, CONSOLES[sel]!.id); } catch { /* ok */ } }, [sel]);
+  // palco: só os consoles à mostra; o escolhido é guardado pelo id (a posição muda quando a lista muda)
+  const list = useMemo(() => visibleConsoles(s.hidden), [s.hidden]);
+  const [selId, setSelId] = useState(() => localStorage.getItem(LAST) ?? 'snes');
+  const sel = Math.max(0, list.findIndex(c => c.id === selId));
+  const setSel = (v: number | ((prev: number) => number)) => setSelId(prev => {
+    const i = typeof v === 'function' ? v(Math.max(0, list.findIndex(c => c.id === prev))) : v;
+    return list[((i % list.length) + list.length) % list.length]!.id;
+  });
+  useEffect(() => { try { localStorage.setItem(LAST, list[sel]!.id); } catch { /* ok */ } }, [sel, list]);
+  const [picker, setPicker] = useState(false);
   const [inside, setInside] = useState<Inside | null>(null);
   const [zoom, setZoom] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -49,8 +58,9 @@ export function App() {
     timers.current = [window.setTimeout(() => { fn(); setTvAnim('on'); timers.current.push(window.setTimeout(() => setTvAnim(''), 460)); }, 420)];
   };
 
-  const enterConsole = (id: ConsoleId, opts: { game?: string; tab?: 'lib' | 'cat' } = {}) => {
-    setSel(consoleIndex(id)); setZoom(true); sfx.play('ok');
+  const enterConsole = (id0: ConsoleId, opts: { game?: string; tab?: 'lib' | 'cat' } = {}) => {
+    const id = routeConsole(id0, getSettings().hidden);   // console escondido abre em Outros
+    setSelId(id); setZoom(true); sfx.play('ok');
     transition(() => setInside({ id, ...opts, key: Date.now() }));
   };
   const leaveConsole = () => transition(() => { setInside(null); setZoom(false); setPage('stage'); });
@@ -58,12 +68,12 @@ export function App() {
   // atalhos de uma letra
   useEffect(() => setShortcutHandler(key => {
     const k = key.toLowerCase();
-    if (k === 's' && !booting) { setSettingsOpen(o => !o); return true; }
+    if (k === 's' && !booting && !picker) { setSettingsOpen(o => !o); return true; }
     if (k === 'm') { setSettings({ snd: !getSettings().snd }); return true; }
     if (k === 'c') { const o = ['auto', 'kb', 'xbox', 'ps', 'nin'] as const; setSettings({ pad: o[(o.indexOf(getSettings().pad) + 1) % o.length]! }); return true; }
     if (k === 'p') { const i = PALETTES.findIndex(p => p.id === getSettings().pal); setSettings({ pal: PALETTES[(i + 1) % PALETTES.length]!.id }); return true; }
     return false;
-  }), [booting]);
+  }), [booting, picker]);
 
   useSubscription(trpc.achievements.onUnlock.subscriptionOptions(undefined, {
     onData: (e: UnlockEvent) => toast({ k: 'CONQUISTA DESBLOQUEADA', n: e.name, g: e.gameTitle }),
@@ -92,12 +102,14 @@ export function App() {
   // com um jogo aberto o palco 3D para de desenhar (a placa de vídeo fica para o jogo)
   const gameOpen = Object.keys(playing).length > 0;
   const stageMode = inside || gameOpen ? 'hidden' : booting || page === 'act' ? 'behind' : 'stage';
+  // na primeira vez nos Consoles, pergunta quais ficam no palco
+  const askPicker = picker || (!s.picked && !booting && !inside && !settingsOpen && page === 'stage');
 
   return (
     <div id="tv" className={tvClass} style={{ ['--crt' as string]: s.crtLvl / 100 }}>
-      <Stage sel={sel} mode={stageMode} zoom={zoom} palette={palette} pixel={s.pixel} onSelect={i => { sfx.play('move'); setSel((i + CONSOLES.length) % CONSOLES.length); }} onEnter={i => enterConsole(CONSOLES[i]!.id)} />
+      <Stage list={list} sel={sel} mode={stageMode} zoom={zoom} palette={palette} pixel={s.pixel} onSelect={i => { sfx.play('move'); setSel(i); }} onEnter={i => enterConsole(list[i]!.id)} />
       {!inside && (
-        <Select active={!booting && !settingsOpen} page={page} setPage={setPage} sel={sel} setSel={setSel}
+        <Select active={!booting && !settingsOpen && !askPicker} list={list} page={page} setPage={setPage} sel={sel} setSel={setSel}
           onEnterConsole={enterConsole} onSettings={() => { sfx.play('ok'); setSettingsOpen(true); }} />
       )}
       {inside && (() => {
@@ -105,7 +117,8 @@ export function App() {
         if (H) return <H.component key={inside.key} id={inside.id} game={inside.game} tab={inside.tab} onBack={leaveConsole} />;
         return <ConsoleView key={inside.key} id={inside.id} game={inside.game} tab={inside.tab} active={!settingsOpen} onBack={leaveConsole} />;
       })()}
-      {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} onPickConsoles={() => { setSettingsOpen(false); setPicker(true); }} />}
+      {askPicker && <ConsolePicker first={!s.picked} onClose={() => setPicker(false)} />}
       {booting && <Boot summary={summary.data} onDone={() => setBooting(false)} />}
 
       {gameOpen && <div className="playing">▶ JOGANDO {Object.values(playing).join(', ').toUpperCase()}</div>}

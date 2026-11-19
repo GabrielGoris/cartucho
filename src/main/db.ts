@@ -99,6 +99,10 @@ const MIGRATIONS: string[] = [
   ALTER TABLE installed_game ADD COLUMN manifest_json TEXT;        -- arquivos que vieram no download (para desinstalar)
   CREATE INDEX play_session_game ON play_session(game_id, started_at);
   `,
+  // 4: Xbox, NES, Game Boy, Mega Drive e DS ganharam lugar próprio: baixa o catálogo inteiro de novo para remapear
+  `
+  DELETE FROM kv WHERE key IN ('catalog.etag', 'catalog.lastModified');
+  `,
 ];
 
 export function openDb(file: string): DB {

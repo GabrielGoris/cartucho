@@ -37,7 +37,7 @@ const SECTIONS: [string, Row[]][] = [
   ]],
 ];
 
-export function Settings({ onClose }: { onClose: () => void }) {
+export function Settings({ onClose, onPickConsoles }: { onClose: () => void; onPickConsoles: () => void }) {
   const s = useSettings();
   const root = useRef<HTMLDivElement>(null);
   const trpc = useTRPC(), qc = useQueryClient();
@@ -90,6 +90,11 @@ export function Settings({ onClose }: { onClose: () => void }) {
               ))}
             </div>
           ))}
+          <div className="st-sec">PALCO</div>
+          <button className="st-r" data-hf onClick={() => { sfx.play('ok'); onPickConsoles(); }}>
+            <span><span className="t">Consoles no palco</span><span className="d">Quais aparecem no palco. Os que ficam de fora vão para Outros.</span></span>
+            <span className="c"><span className="st-pick"><b style={{ minWidth: 0 }}>{s.hidden.length ? `${s.hidden.length} escondido${s.hidden.length > 1 ? 's' : ''}` : 'Todos'}</b>›</span></span>
+          </button>
           <div className="st-sec">JOGOS</div>
           <button className="st-r" data-hf onClick={() => pickDir.mutate()}>
             <span><span className="t">Pasta dos jogos</span><span className="d">Onde o Cartucho instala o que você baixa. Jogos já instalados ficam onde estão.</span></span>
@@ -103,7 +108,8 @@ export function Settings({ onClose }: { onClose: () => void }) {
           <p className="st-credits">
             Catálogo: Recompendium (recompendium.com). Imagens: LaunchBox Games Database. Modelos 3D do Sketchfab, de: Laser Design (SNES, CC BY-NC), Joseph Rohm (N64, CC BY),
             Jeffrey fan 2000 (GameCube, CC BY), elouisetrewartha (Wii, CC BY-NC), Smoggybeard (Switch, CC BY-NC-SA), NAIT Studio (Switch 2, CC BY),
-            ecjhr0awipso (PS1, CC BY), DemoDove99 (PS2), Ilya Ostrovsky (PSP, CC BY), Vasily (PS3, CC BY), Laxity (PS4, CC BY), DatSketch (PS5, CC BY-ND),
+            ecjhr0awipso (PS1, CC BY), ATEZ (PS2, CGTrader), Ilya Ostrovsky (PSP, CC BY), Vasily (PS3, CC BY), Laxity (PS4, CC BY), DatSketch (PS5, CC BY-ND),
+            A.stark (NES, CC BY), danny_p3d (Game Boy, CC BY-NC), Cianon (DS Lite, CC BY), rubikreef (Xbox, CC BY), synthetic worlds (Mega Drive, CC BY),
             Rob Bryant, Jr (Xbox 360, CC BY), MadeByYeshe (PC, CC BY), Daniel Brück (fliperama, CC BY). Instalação e atualização adaptadas do Harbour (MIT-0). Atalhos: S configurações, C botões, M som, P paleta, F11 tela cheia.
           </p>
         </div>

@@ -19,12 +19,12 @@ import type { Unlock } from './saves';
 const ADAPTER_CONSOLE: Record<string, ConsoleId> = { 'unleashed-recomp': 'x360', 'marathon-recomp': 'x360', sonic3air: 'other', rsdkv4: 'other' };
 
 type GameRow = {
-  id: string; catalog_id: string | null; title: string; console: string; install_dir: string; adapter: string | null; added_at: number; cover_url: string | null;
+  id: string; catalog_id: string | null; title: string; console: string; install_dir: string; adapter: string | null; added_at: number; cover_url: string | null; platform_name: string | null;
   exe: string | null; version: string | null; source_repo: string | null; managed: number; play_ms: number; last_played: number | null;
 };
 /** Dados extras de um jogo instalado pelo Cartucho (ou com projeto do GitHub já conhecido). */
 export interface AddExtra { catalogId?: string | null; title?: string; console?: string; exe?: string | null; sourceRepo?: string | null; release?: InstalledRelease | null; managed?: boolean; manifest?: Record<string, number> | null }
-const GAME_SQL = `SELECT g.*, c.cover_url,
+const GAME_SQL = `SELECT g.*, c.cover_url, c.platform_name,
   (SELECT COALESCE(SUM(p.ended_at - p.started_at), 0) FROM play_session p WHERE p.game_id = g.id AND p.ended_at IS NOT NULL) play_ms,
   (SELECT MAX(p.started_at) FROM play_session p WHERE p.game_id = g.id) last_played
   FROM installed_game g LEFT JOIN catalog_game c ON c.id = g.catalog_id`;
@@ -53,7 +53,7 @@ export class AchievementService {
     const counts = adapter ? this.db.prepare(`SELECT (SELECT COUNT(*) FROM achievement_def WHERE game_id = ?) total,
       (SELECT COUNT(*) FROM achievement_unlock WHERE game_id = ?) unlocked`).get(r.id, r.id) as { total: number; unlocked: number } : null;
     return {
-      id: r.id, title: r.title, console: r.console as ConsoleId, installDir: r.install_dir, adapter: r.adapter, adapterLabel: adapter?.label ?? null,
+      id: r.id, title: r.title, console: r.console as ConsoleId, platformName: r.platform_name ?? null, installDir: r.install_dir, adapter: r.adapter, adapterLabel: adapter?.label ?? null,
       catalogId: r.catalog_id, coverUrl: absUrl(r.cover_url), addedAt: r.added_at, achievements: counts,
       exe: r.exe, sourceRepo: isSelfInstall(r.console) ? null : r.source_repo, version: r.version, managed: !!r.managed,
       playMs: r.play_ms ?? 0, lastPlayed: r.last_played ?? null, running: this.isRunning(r.id),

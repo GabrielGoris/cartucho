@@ -90,7 +90,7 @@ export function createRouter(deps: RouterDeps) {
 
     catalog: t.router({
       markRadarSeen: t.procedure.mutation(() => { markRadarSeen(db); }),
-      list: t.procedure.input(z.object({ console: z.string().optional(), search: z.string().optional() }).optional())
+      list: t.procedure.input(z.object({ console: z.string().optional(), consoles: z.array(z.string()).optional(), search: z.string().optional() }).optional())
         .query(({ input }) => listCatalog(db, input ?? {})),
       refresh: t.procedure.input(z.object({ force: z.boolean().optional() }).optional())
         .mutation(({ input }) => refreshCatalog(db, input ?? {})),
