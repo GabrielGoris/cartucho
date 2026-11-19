@@ -8,11 +8,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConsoleId } from '@shared/types';
 import { STATUS_LABEL } from '@shared/consoles';
 import { useTRPC } from '../trpc';
-import { Glyph, useKeys, type Key } from '../lib/input';
+import { Glyph, useKeys, usePadKind, type Key } from '../lib/input';
 import { getSettings, setSettings, useSettings } from '../lib/settings';
 import { setSfxProfile, sfx } from '../lib/sfx';
 import { ago, fmtDate, fmtPlay, plural } from '../lib/format';
-import { Cover } from '../components/Cover';
+import { GameArt } from '../components/GameArt';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useDeviceStatus, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
@@ -29,7 +29,8 @@ const DOCK: [Page | 'off', string, IconName, string][] = [
 ];
 const PAGES: Record<Exclude<Page, 'home' | 'game'>, [string, IconName]> = { cat: ['Descobrir', 'compass'], news: ['Novidades', 'bell'], time: ['Tempo de jogo', 'clock'], upd: ['Atualizações', 'dl'], cfg: ['Configurações', 'gear'] };
 const TAGS = { new: 'NOVO', upd: 'VERSÃO', up: 'SUBIU' } as const;
-const ROW_MAX = 14;   // não instalados na fileira; o resto fica em Descobrir
+const Art = ({ g, v }: { g: HubGame; v: 'cover' | 'wide' | 'square' }) =>
+  <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant={v} />;
 
 export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: string; tab?: 'lib' | 'cat'; onBack: () => void }) {
   const v1 = id === 'switch';
@@ -50,7 +51,8 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
   useEffect(() => { setSfxProfile('click'); const t = setTimeout(() => sfx.play('boot'), 150); return () => { clearTimeout(t); setSfxProfile('soft'); }; }, []);
   useEffect(() => { if (act.error) { show(act.error); act.reset(); } }, [act.error]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  const row = useMemo(() => [...data.lib, ...data.notInstalled.slice(0, ROW_MAX)], [data.lib, data.notInstalled]);
+  // a fileira é só dos seus jogos (como no console); o catálogo fica em Descobrir
+  const row = data.lib;
   const all = useMemo(() => new Map([...data.lib, ...data.catalog].map(g => [g.key, g])), [data.lib, data.catalog]);
   const game = st.game ? all.get(st.game) ?? null : null;
   const timeList = data.lib.filter(g => g.installed!.playMs > 0).sort((a, b) => b.installed!.playMs - a.installed!.playMs);
@@ -169,7 +171,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     if (st.page === 'home') {
       if (st.zone === 'dock') return [['ok', 'OK']];
       const g = row[st.idx];
-      if (!g) return [['ok', 'Abrir']];
+      if (!g) return [['ok', 'Descobrir']];
       return [['x', 'Detalhes'], ['ok', g.installed?.running ? 'Fechar' : g.installed ? (v1 ? 'Iniciar' : 'Jogar') : 'Instalar']];
     }
     if (st.zone === 'main') return [['back', 'Voltar'], ['ok', st.page === 'cat' ? 'Ver' : 'Atualizar']];
@@ -209,10 +211,10 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
                       onCard={i => { if (st.zone === 'main' && st.mi === i) enter(); else { sfx.play('move'); up({ zone: 'main', mi: i }); } }} />
                   </div>
                 </div>
-                <div className="ft"><span className="pad"><Ic n="pad" /></span><Hints /></div>
+                <div className="ft"><PadIndicator v1={v1} /><Hints /></div>
               </>
             )}
-          {launch && <div className="launch"><Cover title={launch.title} url={launch.coverUrl} /></div>}
+          {launch && <div className="launch"><Art g={launch} v="square" /></div>}
           {toast}
         </div>
       </Fit>
@@ -239,10 +241,14 @@ function Home({ v1, row, st, feedCount, updCount, newCount, onTile, onDock, hint
         <span style={{ opacity: dev.online ? 1 : 0.3 }}><Ic n="wifi" /></span>
         {dev.batt && <>{v1 && <span className="pct">{Math.round(dev.batt.level * 100)}%</span>}<span className="battw"><Ic n="batt" /><i style={{ width: `${dev.batt.level * 10}px` }} /></span></>}
       </div>
-      {!inDock && <div className="tname" style={{ left: x }}>{g ? g.title : 'Descobrir mais'}</div>}
+      {!inDock && n > 0 && <div className="tname" style={{ left: x }}>{g ? g.title : 'Descobrir mais'}</div>}
       <div className="row" style={{ transform: `translateX(-${shift}px)` }}>
         {row.map((t, k) => <Tile key={t.key} g={t} on={!inDock && k === i} first={k === 0} onClick={() => onTile(k)} />)}
-        <button className={`tile all ${!inDock && i === n ? 'on' : ''}`} onClick={() => onTile(n)}><Ic n="compass" />Descobrir mais</button>
+        {n === 0
+          ? <button className={`tile all empty ${!inDock ? 'on' : ''}`} onClick={() => onTile(0)}>
+              <Ic n="compass" /><b>Nenhum jogo por aqui ainda</b><span>Descubra recomps para instalar em Descobrir</span>
+            </button>
+          : <button className={`tile all ${!inDock && i === n ? 'on' : ''}`} onClick={() => onTile(n)}><Ic n="compass" />Descobrir mais</button>}
       </div>
       {!inDock && g && <Meta g={g} x={x} />}
       <nav className="dock">
@@ -255,7 +261,7 @@ function Home({ v1, row, st, feedCount, updCount, newCount, onTile, onDock, hint
           );
         })}
       </nav>
-      <div className="foot"><span className="pad"><Ic n="pad" /><small>Controle 1</small></span>{hints}</div>
+      <div className="foot"><PadIndicator v1={v1} label />{hints}</div>
     </>
   );
 }
@@ -264,7 +270,7 @@ function Tile({ g, on, first, onClick }: { g: HubGame; on: boolean; first: boole
   const p = useGameProgress(g);
   return (
     <button className={`tile ${g.installed ? '' : 'off'} ${on ? 'on' : ''}`} onClick={onClick} aria-label={g.title}>
-      <Cover title={g.title} url={g.coverUrl} />
+      <Art g={g} v="square" />
       {!g.installed && !p && <span className="dlb"><Ic n="dl" /></span>}
       {first && g.installed?.lastPlayed && !g.installed.running && <span className="cont"><b>G</b>Continuar</span>}
       {g.installed?.running && <span className="cont run"><b>▶</b>Jogando</span>}
@@ -308,7 +314,7 @@ function Main({ page, k, st, data, catList, timeList, game, c, onCard }: {
       <div className="main-in" style={{ transform: `translateY(-${st.zone === 'main' ? Math.max(0, r - 1) * 410 : 0}px)` }}>
         <div className="cards">{catList.map((g, i) => (
           <button key={g.key} className={`card ${st.zone === 'main' && i === st.mi ? 'on' : ''}`} onClick={() => onCard(i)}>
-            <Cover title={g.title} url={g.coverUrl} /><div className="ttl"><span>{g.title}</span><Pill g={g} /></div>
+            <Art g={g} v="wide" /><div className="ttl"><span>{g.title}</span><Pill g={g} /></div>
           </button>
         ))}</div>
       </div>
@@ -319,7 +325,7 @@ function Main({ page, k, st, data, catList, timeList, game, c, onCard }: {
     if (!L.length) return <Empty>Nada novo por aqui. O Cartucho confere o Recompendium toda vez que abre.</Empty>;
     const byId = new Map(data.catalog.map(g => [g.catalog!.id, g]));
     return <>{L.map(f => { const g = byId.get(f.gameId); return (
-      <div key={f.id} className="nr">{g ? <Cover title={g.title} url={g.coverUrl} /> : <div />}
+      <div key={f.id} className="nr">{g ? <Art g={g} v="cover" /> : <div />}
         <div>{f.title}<small>{f.kind === 'new' ? (g?.repo ?? '') : f.detail}</small></div>
         <div className="r"><span className={`pill ${f.kind}`}>{TAGS[f.kind]}</span>{ago(f.at)}</div></div>); })}</>;
   }
@@ -342,7 +348,7 @@ function Main({ page, k, st, data, catList, timeList, game, c, onCard }: {
     if (!data.withUpdate.length) return <Empty>Tudo em dia.{data.lib.some(g => g.installed?.sourceRepo) ? '' : ' (Nenhum jogo deste console tem projeto do GitHub ligado.)'}</Empty>;
     return <>{data.withUpdate.map((g, i) => (
       <button key={g.key} className={`nr nrb ${st.zone === 'main' && i === st.mi ? 'on' : ''}`} onClick={() => onCard(i)}>
-        <Cover title={g.title} url={g.coverUrl} />
+        <Art g={g} v="cover" />
         <div>{g.title}<small>{g.repo} · {g.update?.installed ?? '?'} → {g.update?.latest?.tag}</small></div>
         <div className="r"><span className="pill upd">{g.update?.latest?.tag}</span><span><Glyph a="ok" />atualizar</span></div>
       </button>
@@ -368,7 +374,7 @@ function Main({ page, k, st, data, catList, timeList, game, c, onCard }: {
     );
     return (
       <>
-        <div className="hero"><Cover title={g.title} url={g.coverUrl} /></div>
+        <div className="hero"><Art g={g} v="wide" /></div>
         <h1 className="gt">{g.title}</h1>
         <div className="gsub">{g.catalog?.developer ?? ''}{g.catalog?.year ? ` · ${g.catalog.year}` : ''} {g.status && <> · <Chip s={g.status} /></>}{g.isNew && <> · <span className="pill new">NOVO</span></>}</div>
         <GameProgress g={g} />
@@ -448,5 +454,35 @@ function GameAch({ id }: { id: string }) {
         </div>
       ))}
     </>
+  );
+}
+
+/** Joy-Cons (ou teclado, se não houver controle): como o console mostra o que está conectado. */
+function PadIndicator({ v1, label = false }: { v1: boolean; label?: boolean }) {
+  const kind = usePadKind();
+  if (kind === 'kb') return (
+    <span className="pad"><svg className="kbd" viewBox="0 0 64 40" aria-hidden="true">
+      <rect x="3" y="7" width="58" height="28" rx="6" fill="currentColor" />
+      {[0, 1, 2, 3, 4, 5, 6].map(i => <rect key={i} x={9 + i * 7} y="12" width="5" height="5" rx="1.2" fill="#ececef" />)}
+      {[0, 1, 2, 3, 4, 5].map(i => <rect key={i} x={12 + i * 7} y="19" width="5" height="5" rx="1.2" fill="#ececef" />)}
+      <rect x="16" y="26" width="32" height="4.5" rx="1.5" fill="#ececef" />
+    </svg>{label && <small>Teclado</small>}</span>
+  );
+  const L = v1 ? '#00b4d8' : '#3a3a42', R = v1 ? '#ff4b5c' : '#3a3a42', ring = v1 ? 'none' : 'url(#s2ring)';
+  return (
+    <span className="pad"><svg className="joy" viewBox="0 0 64 40" aria-hidden="true">
+      <defs><linearGradient id="s2ring" x1="0" x2="1"><stop offset="0" stopColor="#2fb7ff" /><stop offset="1" stopColor="#ff4b5c" /></linearGradient></defs>
+      {/* Joy-Con esquerdo */}
+      <path d="M28 4h-12a12 12 0 0 0-12 12v8a12 12 0 0 0 12 12h12z" fill={L} />
+      <circle cx="16" cy="14" r="4.2" fill="#1d1d22" /><circle cx="16" cy="14" r="2.6" fill="#55555e" />
+      <circle cx="16" cy="23.2" r="1.5" fill="#e9e9ee" /><circle cx="16" cy="29.2" r="1.5" fill="#e9e9ee" /><circle cx="13" cy="26.2" r="1.5" fill="#e9e9ee" /><circle cx="19" cy="26.2" r="1.5" fill="#e9e9ee" />
+      <rect x="22.5" y="8" width="3.4" height="1.2" rx=".6" fill="#e9e9ee" />
+      {/* Joy-Con direito */}
+      <path d="M36 4h12a12 12 0 0 1 12 12v8a12 12 0 0 1-12 12h-12z" fill={R} />
+      <circle cx="48" cy="11" r="1.5" fill="#e9e9ee" /><circle cx="48" cy="17" r="1.5" fill="#e9e9ee" /><circle cx="45" cy="14" r="1.5" fill="#e9e9ee" /><circle cx="51" cy="14" r="1.5" fill="#e9e9ee" />
+      <circle cx="48" cy="26" r="4.2" fill="#1d1d22" /><circle cx="48" cy="26" r="2.6" fill="#55555e" />
+      <path d="M38.2 8.6h3.4M39.9 6.9v3.4" stroke="#e9e9ee" strokeWidth="1.2" strokeLinecap="round" />
+      {!v1 && <><rect x="27.4" y="6" width="1.2" height="28" rx=".6" fill={ring} /><rect x="35.4" y="6" width="1.2" height="28" rx=".6" fill={ring} /></>}
+    </svg>{label && <small>{kind === 'nin' ? 'Joy-Con' : kind === 'ps' ? 'Controle PlayStation' : 'Controle Xbox'}</small>}</span>
   );
 }

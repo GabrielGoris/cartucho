@@ -11,7 +11,7 @@ import { Hints } from '../lib/input';
 import { useSpatialNav } from '../lib/spatial';
 import { ago, fmtDate, fmtPlay, plural } from '../lib/format';
 import { sfx } from '../lib/sfx';
-import { Cover } from '../components/Cover';
+import { GameArt } from '../components/GameArt';
 import { CONSOLES } from '../stage/consoles';
 import { CatalogPage, GamePage } from './GamePages';
 
@@ -101,7 +101,7 @@ function GameCard({ g, installed, onOpen }: { g: CatalogGame; installed: boolean
   return (
     <button className="lcard" data-hf onClick={onOpen}>
       <div style={{ position: 'relative' }}>
-        <Cover title={g.title} url={g.coverUrl} />
+        <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} />
         <span className={`st st-${g.status}`}>{STATUS_LABEL[g.status]}</span>
         {installed && <span className="inlib">NA BIBLIOTECA</span>}
         {g.noLink && <span className="nolink" title="O Recompendium lista este projeto, mas prefere não pôr link para ele">SEM LINK</span>}
@@ -120,7 +120,7 @@ function GameRow({ g, onOpen }: { g: InstalledGame; onOpen: () => void }) {
   const pct = a && a.total ? Math.round((a.unlocked / a.total) * 100) : 0;
   return (
     <button className="lrow" data-hf onClick={onOpen}>
-      <Cover title={g.title} url={g.coverUrl} className="thumb" />
+      <GameArt title={g.title} console={g.console} fallback={g.coverUrl} className="thumb" />
       <div className="row-main">
         <div className="title">{g.title}</div>
         <div className="dim">{g.running ? 'jogando agora · ' : ''}{g.playMs ? `${fmtPlay(g.playMs)} jogadas` : 'ainda não jogado'}{g.lastPlayed ? ` · ${ago(g.lastPlayed)}` : ''}{g.version ? ` · ${g.version}` : ''} · {g.installDir}</div>

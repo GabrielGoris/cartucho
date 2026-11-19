@@ -9,7 +9,7 @@ import { useSpatialNav } from '../lib/spatial';
 import { useProgress } from '../lib/progress';
 import { ago, fmtDate, fmtPlay, fmtSize, plural } from '../lib/format';
 import { sfx } from '../lib/sfx';
-import { Cover } from '../components/Cover';
+import { GameArt } from '../components/GameArt';
 import { Bars } from '../components/Bars';
 import { ProgressBar } from '../components/ProgressBar';
 
@@ -47,7 +47,7 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
         <span className="grow" />
       </header>
       <div className="gp-body">
-        <Cover title={g.title} url={g.coverUrl} className="gp-cover" />
+        <GameArt title={g.title} console={g.console} fallback={g.coverUrl} className="gp-cover" />
         <div className="gp-main">
           <span className="k">{CONSOLE_NAME[g.console].toUpperCase()}{g.version ? ` · ${g.version}` : ''}{g.running ? ' · JOGANDO AGORA' : ''}</span>
           <h1>{g.title}</h1>
@@ -123,7 +123,7 @@ export function CatalogPage({ game: c, installedId, active, onBack, onOpenInstal
         <span className="grow" />
       </header>
       <div className="gp-body">
-        <Cover title={c.title} url={c.coverUrl} className="gp-cover" />
+        <GameArt title={c.title} console={c.console} platformName={c.platformName} fallback={c.coverUrl} className="gp-cover" />
         <div className="gp-main">
           <span className="k">{(c.console === 'other' ? c.platformName : CONSOLE_NAME[c.console]).toUpperCase()}{c.year ? ` · ${c.year}` : ''}{c.developer ? ` · ${c.developer}` : ''}</span>
           <h1>{c.title}</h1>

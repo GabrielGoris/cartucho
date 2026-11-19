@@ -12,8 +12,9 @@ import { ADAPTERS } from './achievements/adapters';
 import type { Ports } from './ports/installer';
 import { parseRepo } from './ports/github';
 import type { Player } from './play';
+import type { Artwork } from './artwork/service';
 
-export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; defaultPortsDir: string }
+export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; defaultPortsDir: string }
 export const portsDirOf = (d: Pick<RouterDeps, 'db' | 'defaultPortsDir'>) => kvGet(d.db, 'portsDir') || d.defaultPortsDir;
 
 async function pick(title: string, props: ('openDirectory' | 'openFile' | 'createDirectory')[], extra: Partial<Electron.OpenDialogOptions> = {}) {
@@ -26,8 +27,18 @@ async function pick(title: string, props: ('openDirectory' | 'openFile' | 'creat
 const t = initTRPC.create({ transformer: superjson, isServer: true });
 
 export function createRouter(deps: RouterDeps) {
-  const { db, ach, ports, player } = deps;
+  const { db, ach, ports, player, art } = deps;
   return t.router({
+    art: t.router({
+      /** Capa, fundo e logo em boa resolução (os que faltam chegam depois, avisados por onChanged). */
+      get: t.procedure.input(z.object({ console: z.string(), platformName: z.string().nullish(), title: z.string() }))
+        .query(({ input }) => art.get(input.console, input.platformName, [input.title])),
+      status: t.procedure.query(() => art.status),
+      refresh: t.procedure.mutation(() => art.refresh()),
+      onChanged: t.procedure.subscription(async function* ({ signal }) { for await (const _ of on(art.events, 'changed', { signal })) yield Date.now(); }),
+      onStatus: t.procedure.subscription(async function* ({ signal }) { for await (const [s] of on(art.events, 'status', { signal })) yield s as string | null; }),
+    }),
+
     settings: t.router({
       portsDir: t.procedure.query(() => portsDirOf(deps)),
       pickPortsDir: t.procedure.mutation(async () => {

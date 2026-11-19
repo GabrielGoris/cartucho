@@ -10,6 +10,7 @@ import { createGitHub, type Fetch } from './ports/github';
 import { Ports } from './ports/installer';
 import { Player } from './play';
 import { portsDirOf } from './router';
+import { Artwork } from './artwork/service';
 
 // Para desenvolvimento/testes: perfil separado (CARTUCHO_USER_DATA) sem mexer no seu.
 if (process.env.CARTUCHO_USER_DATA) app.setPath('userData', process.env.CARTUCHO_USER_DATA);
@@ -20,7 +21,11 @@ if (!app.requestSingleInstanceLock()) app.quit();
  * Com file:// o fetch do navegador não funciona, e o carregador dos modelos 3D usa fetch.
  */
 const APP_ORIGIN = 'app://cartucho';
-protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+  // capas e fundos baixados (media://art/<plataforma>/<tipo>/<arquivo>)
+  { scheme: 'media', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+]);
 const DEV_URL = process.env.ELECTRON_RENDERER_URL;
 const isOurPage = (url: string) => (DEV_URL ? url.startsWith(DEV_URL) : url.startsWith(`${APP_ORIGIN}/`));
 
@@ -62,9 +67,18 @@ void app.whenReady().then(async () => {
   // net.fetch usa a rede do Chromium (proxy e certificados do sistema), melhor que o fetch do Node para downloads grandes.
   const gh = createGitHub({ fetch: ((url, init) => net.fetch(url, init as RequestInit)) as Fetch, ...(process.env.CARTUCHO_GITHUB_API ? { api: process.env.CARTUCHO_GITHUB_API } : {}) });
   const defaultPortsDir = join(app.getPath('home'), 'Games', 'Cartucho');
+  const art = new Artwork(join(app.getPath('userData'), 'media'), ((url, init) => net.fetch(url, init as RequestInit)) as Fetch, {
+    ...(process.env.CARTUCHO_LAUNCHBOX_METADATA ? { metadataUrl: process.env.CARTUCHO_LAUNCHBOX_METADATA } : {}),
+    ...(process.env.CARTUCHO_LAUNCHBOX_IMAGES ? { imageUrl: process.env.CARTUCHO_LAUNCHBOX_IMAGES } : {}),
+  });
+  protocol.handle('media', req => {
+    const u = new URL(req.url);
+    const file = u.hostname === 'art' ? art.resolve(decodeURIComponent(u.pathname)) : null;
+    return file ? net.fetch(pathToFileURL(file).toString()) : new Response('não encontrado', { status: 404 });
+  });
   const ports = new Ports(db, ach, gh, () => portsDirOf({ db, defaultPortsDir }), player.isRunning);
   createIPCHandler({
-    router: createRouter({ db, ach, ports, player, defaultPortsDir }),
+    router: createRouter({ db, ach, ports, player, art, defaultPortsDir }),
     preload: false,
     // Só a nossa própria página fala com o processo principal.
     allow: e => isOurPage(e.senderFrame?.url ?? ''),

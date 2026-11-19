@@ -176,3 +176,16 @@
 .s2 .desc .gp, .s2 .r .gp, .s2 .kv2 .gp { font-size: 30px; }
 .s2 .s2h .gp { font-size: 38px; }
 .s2 .cv { color: #fff; }
+.s2 .pad svg.joy, .s2 .pad svg.kbd { width: 1.6em; height: 1em; }
+.s2 .pad svg.kbd { color: #2b2b31; }
+.s2 .ft .pad small { font-size: 22px; color: #7b7b86; }
+.s2 .tile.all.empty { width: 760px; grid-auto-flow: row; text-align: center; padding: 0 60px; }
+.s2 .tile.all.empty b { font-size: 40px; color: #2b2b31; }
+.s2 .tile.all.empty span { font-size: 28px; font-weight: 600; color: #7b7b86; }
+.s2 .tile .cv.art > img.art-logo { max-width: 82%; }
+.s2 .card .cv.art > img.art-logo { max-height: 55%; }
+.s2 .hero .cv.art > img.art-logo { max-height: 50%; max-width: 50%; left: 6%; transform: none; bottom: 10%; }
+.s2 .tile .cv.art > img.art-logo { bottom: auto; top: 46%; transform: translate(-50%, -50%); max-height: 46%; }
+.s2 .foot .pad svg.joy, .s2 .foot .pad svg.kbd { width: 104px; height: 65px; }
+.s2 .foot .pad small { font-size: 24px; }
+.s2 .ft .pad svg.joy, .s2 .ft .pad svg.kbd { width: 84px; height: 52px; }
