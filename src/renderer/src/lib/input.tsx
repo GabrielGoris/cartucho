@@ -1,7 +1,3 @@
-/**
- * Entrada única para teclado e controle. As telas registram um tratador com useKeys(); o último
- * registrado (a tela de cima) recebe as teclas.
- */
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { getSettings, useSettings } from './settings';
 
@@ -20,7 +16,6 @@ export function useKeys(fn: Handler, active = true) {
 }
 const send = (k: Key) => stack.at(-1)?.current(k);
 
-// ---------- teclado ----------
 const KEYMAP: Record<string, Key> = {
   Enter: 'Enter', ' ': 'Enter', Escape: 'Escape', Backspace: 'Escape', Tab: 'Tab',
   ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight', ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown',
@@ -29,23 +24,20 @@ const KEYMAP: Record<string, Key> = {
 const isTyping = (t: EventTarget | null) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
 
 let shortcut: ((key: string) => boolean) | null = null;
-/** Atalhos globais (uma letra) que não são navegação; devolve true se tratou. */
 export const setShortcutHandler = (fn: (key: string) => boolean) => { shortcut = fn; };
 
 if (typeof window !== 'undefined') {
   addEventListener('keydown', e => {
     if (e.repeat && (e.key === 'Enter' || e.key === 'Escape')) return;
     if (isTyping(e.target)) { if (e.key === 'Escape') (e.target as HTMLElement).blur(); return; }
-    if (!e.ctrlKey && !e.altKey && !e.metaKey && shortcut?.(e.key)) return;
+    if (!e.ctrlKey && !e.altKey && !e.metaKey && shortcut?.(e.key)) { e.preventDefault(); return; }
     const k = KEYMAP[e.key]; if (!k) return;
     e.preventDefault();
     send(k);
   });
-  // Clique com o mouse não deixa foco preso em botão: o Enter seguinte vai para a navegação.
   addEventListener('click', e => { const b = (e.target as HTMLElement).closest?.('button'); if (b) b.blur(); }, true);
 }
 
-// ---------- controle ----------
 export type PadKind = 'kb' | 'xbox' | 'ps' | 'nin';
 let connected: Gamepad | null = null;
 const padSubs = new Set<() => void>();
@@ -57,7 +49,7 @@ function detectKind(): PadKind {
   const id = connected.id.toLowerCase();
   if (/054c|dualsense|dualshock|playstation|wireless controller/.test(id)) return 'ps';
   if (/057e|nintendo|pro controller|joy-con/.test(id)) return 'nin';
-  return 'xbox';   // XInput e genéricos seguem o layout do Xbox
+  return 'xbox';
 }
 export const padKind = (): PadKind => { const f = getSettings().pad; return f === 'auto' ? detectKind() : f; };
 export const PAD_NAMES: Record<string, string> = { auto: 'Automático', kb: 'Teclado', xbox: 'Xbox', ps: 'PlayStation', nin: 'Nintendo' };
@@ -71,7 +63,7 @@ function poll() {
   const p = navigator.getGamepads?.()[connected?.index ?? 0];
   if (p) {
     const b = p.buttons.map(x => x.pressed), hit = (i: number) => b[i] && !prev[i]; prev = b;
-    const nin = padKind() === 'nin';   // Nintendo: A (direita) confirma, B (embaixo) volta
+    const nin = padKind() === 'nin';
     const map: Record<number, Key> = { 12: 'ArrowUp', 13: 'ArrowDown', 14: 'ArrowLeft', 15: 'ArrowRight', [nin ? 1 : 0]: 'Enter', [nin ? 0 : 1]: 'Escape', 2: 'X', 3: 'Y', 4: 'LB', 5: 'RB', 9: 'Tab' };
     for (const i in map) if (hit(+i)) send(map[i]!);
     const now = performance.now(), [ax = 0, ay = 0] = p.axes;
@@ -84,7 +76,6 @@ function poll() {
 }
 if (typeof window !== 'undefined') requestAnimationFrame(poll);
 
-// ---------- glifos ----------
 type Act = 'ok' | 'back' | 'x' | 'y' | 'lb' | 'rb' | 'menu' | 'ud' | 'lr';
 const PS: Record<string, ReactNode> = {
   ok: <svg viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15" stroke="#8fb0ff" strokeWidth="2.6" strokeLinecap="round" /></svg>,
@@ -98,7 +89,6 @@ const GL: Record<PadKind, Record<Act, string | [string, string] | ReactNode>> = 
   ps: { ok: PS.ok, back: PS.back, x: PS.x, y: PS.y, lb: 'L1', rb: 'R1', menu: 'OPTIONS', ud: '✚', lr: '✚' },
   nin: { ok: ['A', '#fff'], back: ['B', '#fff'], x: ['Y', '#fff'], y: ['X', '#fff'], lb: 'L', rb: 'R', menu: '+', ud: '✚', lr: '✚' },
 };
-/** Botão certo para o controle conectado (ou a tecla, sem controle). */
 export function Glyph({ a }: { a: Act }) {
   const k = usePadKind(), v = GL[k][a];
   if (k === 'kb') return <span className="gp kb">{v as string}</span>;

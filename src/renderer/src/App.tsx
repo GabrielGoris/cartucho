@@ -9,6 +9,7 @@ import { getSettings, reduceMotion, setSettings, useSettings } from './lib/setti
 import { applyPalette, paletteById, PALETTES } from './lib/palettes';
 import { setShortcutHandler } from './lib/input';
 import { sfx } from './lib/sfx';
+import { focusSearch } from './lib/search';
 import { Stage } from './stage/Stage';
 import { routeConsole, visibleConsoles } from './stage/consoles';
 import { Boot } from './views/Boot';
@@ -28,7 +29,6 @@ export function App() {
 
   const [booting, setBooting] = useState(s.boot);
   const [page, setPage] = useState<Page>(s.start);
-  // palco: só os consoles à mostra; o escolhido é guardado pelo id (a posição muda quando a lista muda)
   const list = useMemo(() => visibleConsoles(s.hidden), [s.hidden]);
   const [selId, setSelId] = useState(() => localStorage.getItem(LAST) ?? 'snes');
   const sel = Math.max(0, list.findIndex(c => c.id === selId));
@@ -36,20 +36,19 @@ export function App() {
     const i = typeof v === 'function' ? v(Math.max(0, list.findIndex(c => c.id === prev))) : v;
     return list[((i % list.length) + list.length) % list.length]!.id;
   });
-  useEffect(() => { try { localStorage.setItem(LAST, list[sel]!.id); } catch { /* ok */ } }, [sel, list]);
+  useEffect(() => { try { localStorage.setItem(LAST, list[sel]!.id); } catch { } }, [sel, list]);
   const [picker, setPicker] = useState(false);
   const [inside, setInside] = useState<Inside | null>(null);
   const [zoom, setZoom] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tvAnim, setTvAnim] = useState<'' | 'off' | 'on'>('');
   const [toasts, setToasts] = useState<{ k: string; n: string; g: string }[]>([]);
-  const [playing, setPlaying] = useState<Record<string, string>>({});   // jogos abertos agora (id → título)
+  const [playing, setPlaying] = useState<Record<string, string>>({});
   const toast = (t: { k: string; n: string; g: string }) => { setToasts(x => [...x, t]); setTimeout(() => setToasts(x => x.filter(y => y !== t)), 6000); };
 
   const trpc = useTRPC(), qc = useQueryClient();
   const summary = useQuery(trpc.library.summary.queryOptions());
 
-  // desligar/ligar a TV entre telas
   const timers = useRef<number[]>([]);
   const transition = (fn: () => void) => {
     if (reduceMotion()) return fn();
@@ -59,18 +58,18 @@ export function App() {
   };
 
   const enterConsole = (id0: ConsoleId, opts: { game?: string; tab?: 'lib' | 'cat' } = {}) => {
-    const id = routeConsole(id0, getSettings().hidden);   // console escondido abre em Outros
+    const id = routeConsole(id0, getSettings().hidden);
     setSelId(id); setZoom(true); sfx.play('ok');
     transition(() => setInside({ id, ...opts, key: Date.now() }));
   };
   const leaveConsole = () => transition(() => { setInside(null); setZoom(false); setPage('stage'); });
 
-  // atalhos de uma letra
   useEffect(() => setShortcutHandler(key => {
     const k = key.toLowerCase();
     if (k === 's' && !booting && !picker) { setSettingsOpen(o => !o); return true; }
     if (k === 'm') { setSettings({ snd: !getSettings().snd }); return true; }
     if (k === 'c') { const o = ['auto', 'kb', 'xbox', 'ps', 'nin'] as const; setSettings({ pad: o[(o.indexOf(getSettings().pad) + 1) % o.length]! }); return true; }
+    if (k === '/') { if (!focusSearch()) dispatchEvent(new Event('cartucho:search')); return true; }
     if (k === 'p') { const i = PALETTES.findIndex(p => p.id === getSettings().pal); setSettings({ pal: PALETTES[(i + 1) % PALETTES.length]!.id }); return true; }
     return false;
   }), [booting, picker]);
@@ -81,7 +80,6 @@ export function App() {
   useSubscription(trpc.ports.onProgress.subscriptionOptions(undefined, {
     onData: p => { pushProgress(p); if (p.done) { void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }); void qc.invalidateQueries({ queryKey: trpc.library.summary.queryKey() }); } },
   }));
-  // imagem nova baixada: as telas pedem de novo as que estavam faltando
   useSubscription(trpc.art.onChanged.subscriptionOptions(undefined, { onData: () => void qc.invalidateQueries({ queryKey: trpc.art.get.pathKey() }) }));
   useSubscription(trpc.play.onEvent.subscriptionOptions(undefined, {
     onData: (e: PlayEvent) => {
@@ -99,10 +97,8 @@ export function App() {
     s.glow ? '' : 'no-glow', s.blur ? '' : 'no-blur', s.reduce ? 'reduce' : '',
   ].filter(Boolean).join(' '), [tvAnim, s, inside]);
 
-  // com um jogo aberto o palco 3D para de desenhar (a placa de vídeo fica para o jogo)
   const gameOpen = Object.keys(playing).length > 0;
   const stageMode = inside || gameOpen ? 'hidden' : booting || page === 'act' ? 'behind' : 'stage';
-  // na primeira vez nos Consoles, pergunta quais ficam no palco
   const askPicker = picker || (!s.picked && !booting && !inside && !settingsOpen && page === 'stage');
 
   return (

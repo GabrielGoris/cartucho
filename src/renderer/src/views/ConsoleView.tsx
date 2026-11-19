@@ -1,7 +1,3 @@
-/**
- * Hub provisório de cada console: seus jogos daquele console, o que existe no catálogo e as conquistas.
- * A interface no estilo de cada console (a do protótipo) substitui esta tela nas próximas etapas.
- */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CatalogGame, ConsoleId, InstalledGame } from '@shared/types';
@@ -14,6 +10,8 @@ import { sfx } from '../lib/sfx';
 import { GameArt } from '../components/GameArt';
 import { CONSOLES, otherConsoles } from '../stage/consoles';
 import { useSettings } from '../lib/settings';
+import { matchesQuery } from '../lib/search';
+import { SearchBox } from '../components/SearchBox';
 import { CatalogPage, GamePage } from './GamePages';
 
 type Tab = 'lib' | 'cat';
@@ -23,28 +21,41 @@ export function ConsoleView({ id, game, tab: tab0, active, onBack }: Props) {
   const c = CONSOLES.find(x => x.id === id)!;
   const trpc = useTRPC(), qc = useQueryClient();
   const games = useQuery(trpc.games.list.queryOptions());
-  // Outros junta os jogos sem lugar próprio no palco e os dos consoles que o usuário escondeu
   const s = useSettings();
   const group = id === 'other' ? otherConsoles(s.hidden) : [id];
   const mine = (games.data ?? []).filter(g => group.includes(g.console));
-  const [only, setOnly] = useState<string | null>(null);   // Outros: só um console de origem
+  const isOther = id === 'other';
+  const [only, setOnly] = useState<string | null>(null);
+  const [wide, setWide] = useState(false);
   const [tab, setTab] = useState<Tab>(tab0 ?? 'lib');
   type Open = { kind: 'game'; id: string } | { kind: 'ach'; id: string } | { kind: 'cat'; game: CatalogGame };
   const [open, setOpen] = useState<Open | null>(game ? { kind: 'game', id: game } : null);
   const installedBy = new Map((games.data ?? []).filter(g => g.catalogId).map(g => [g.catalogId!, g.id]));
-  const [search, setSearch] = useState(''), [q, setQ] = useState('');
-  useEffect(() => { const t = setTimeout(() => setQ(search.trim()), 200); return () => clearTimeout(t); }, [search]);
-  const cat = useQuery(trpc.catalog.list.queryOptions(id === 'other' ? { consoles: group, search: q || undefined } : { console: id, search: q || undefined }, { placeholderData: p => p }));
+  const [q, setQ] = useState('');
+  const cat = useQuery(trpc.catalog.list.queryOptions(id === 'other' ? { consoles: group } : { console: id }));
+  const catShown = (cat.data ?? []).filter(g => matchesQuery(q, g.title, g.platformName, g.developer, g.repo));
+  const mineShown = mine.filter(g => matchesQuery(q, g.title, g.platformName));
   const add = useMutation(trpc.games.addFromDialog.mutationOptions({ onSuccess: g => { void qc.invalidateQueries(); if (g) setOpen({ kind: 'game', id: g.id }); } }));
 
-  // sem jogos deste console, abre direto no catálogo
-  useEffect(() => { if (!tab0 && games.data && !mine.length) setTab('cat'); }, [games.data]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!tab0 && games.data && !mine.length) setTab('cat'); }, [games.data]);
 
   const root = useRef<HTMLDivElement>(null);
   const nav = useSpatialNav(root, {
     active: active && !open,
+    onFocus: el => {
+      if (!isOther || !el) return;
+      const side = el.closest('.oth-side');
+      setWide(!side && !!el.closest('.oth-main'));
+      if (side && el.dataset.src !== undefined) setOnly(el.dataset.src || null);
+    },
     onKey: k => {
       if (k === 'Escape') { sfx.play('back'); onBack(); return true; }
+      if (k === 'ArrowLeft' && isOther) {
+        const el = root.current?.querySelector<HTMLElement>('.oth-main [data-on]');
+        const cards = [...(root.current?.querySelectorAll<HTMLElement>('.oth-main [data-hf]') ?? [])];
+        const back = root.current?.querySelector<HTMLElement>('.oth-side button.on');
+        if (el && back && el.getBoundingClientRect().left <= Math.min(...cards.map(c => c.getBoundingClientRect().left)) + 4) { sfx.play('move'); nav.focusEl(back); return true; }
+      }
       if (k === 'LB' || k === 'RB' || k === 'Tab') { sfx.play('move'); setTab(t => (t === 'lib' ? 'cat' : 'lib')); nav.reset(); return true; }
     },
   });
@@ -63,28 +74,38 @@ export function ConsoleView({ id, game, tab: tab0, active, onBack }: Props) {
               <button className={tab === 'lib' ? 'on' : ''} data-hf onClick={() => setTab('lib')}>MEUS JOGOS {mine.length > 0 && <span className="n">{mine.length}</span>}</button>
               <button className={tab === 'cat' ? 'on' : ''} data-hf onClick={() => setTab('cat')}>DESCOBRIR</button>
             </nav>
+            <SearchBox value={q} onChange={setQ} className="search chub-search" placeholder={tab === 'lib' ? 'Buscar nos seus jogos…  ( / )' : `Buscar entre ${plural(cat.data?.length ?? 0, 'recomp', 'recomps')}…  ( / )`}
+              onDone={() => { const first = root.current?.querySelector<HTMLElement>('.grid [data-hf], .rows [data-hf]'); if (first) nav.focusEl(first); }} />
             <span className="grow" />
             <button className="btn acc" data-hf disabled={add.isPending} onClick={() => add.mutate()}>{add.isPending ? 'Lendo a pasta…' : '+ Adicionar jogo'}</button>
           </header>
-          <p className="chub-note">Versão provisória do hub. A interface no estilo do {c.name} chega numa próxima etapa.</p>
+          {!isOther && <p className="chub-note">Versão provisória do hub. A interface no estilo do {c.name} chega numa próxima etapa.</p>}
           {add.error && <p className="err">{add.error.message}</p>}
           {add.data && !add.data.adapter && <p className="warn">Adicionei <b>{add.data.title}</b>, mas ainda não sei ler as conquistas dele.</p>}
 
-          <div className="chub-body">
-            {tab === 'lib' ? (
-              mine.length ? <BySource on={id === 'other'} items={mine} only={only} setOnly={setOnly} cls="rows"
-                  render={g => <GameRow key={g.id} g={g} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'game', id: g.id }); }} />} />
-                : <EmptyLib />
-            ) : (
-              <>
-                <div className="toolbar"><input className="search" placeholder={`Buscar entre ${plural(cat.data?.length ?? 0, 'recomp', 'recomps')}…`} value={search} onChange={e => setSearch(e.target.value)} /></div>
-                {cat.data?.length === 0 && <p className="pad24 dim">{q ? 'Nada encontrado.' : 'Ainda não há recomps deste console no catálogo.'}</p>}
-                <BySource on={id === 'other'} items={cat.data ?? []} only={only} setOnly={setOnly} cls="grid"
-                  render={g => <GameCard key={g.id} g={g} installed={installedBy.has(g.id)} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'cat', game: g }); }} />} />
-                <p className="credit">Catálogo: <a href="https://recompendium.com/" target="_blank" rel="noreferrer">Recompendium</a></p>
-              </>
-            )}
-          </div>
+          {isOther ? (
+            <div className={`chub-body oth ${wide ? 'wide' : ''}`}>
+              {tab === 'lib'
+                ? <OtherBrowser items={mineShown} only={only} setOnly={setOnly} cls="rows" empty={q ? <p className="pad24 dim">Nada encontrado.</p> : <EmptyLib />}
+                    render={g => <GameRow key={g.id} g={g} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'game', id: g.id }); }} />} />
+                : <OtherBrowser items={catShown} only={only} setOnly={setOnly} cls="grid"
+                    empty={<p className="pad24 dim">{q ? 'Nada encontrado.' : 'Nenhum recomp por aqui ainda.'}</p>}
+                    render={g => <GameCard key={g.id} g={g} installed={installedBy.has(g.id)} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'cat', game: g }); }} />} />}
+            </div>
+          ) : (
+            <div className="chub-body">
+              {tab === 'lib' ? (
+                mine.length ? mineShown.length ? <div className="rows">{mineShown.map(g => <GameRow key={g.id} g={g} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'game', id: g.id }); }} />)}</div> : <p className="pad24 dim">Nada encontrado.</p>
+                  : <EmptyLib />
+              ) : (
+                <>
+                  {catShown.length === 0 && <p className="pad24 dim">{q ? 'Nada encontrado.' : 'Ainda não há recomps deste console no catálogo.'}</p>}
+                  <div className="grid">{catShown.map(g => <GameCard key={g.id} g={g} installed={installedBy.has(g.id)} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'cat', game: g }); }} />)}</div>
+                  <p className="credit">Catálogo: <a href="https://recompendium.com/" target="_blank" rel="noreferrer">Recompendium</a></p>
+                </>
+              )}
+            </div>
+          )}
           <Hints items={[['ud', 'Navegar'], ['ok', 'Abrir'], ['lb', 'Aba'], ['back', 'Cartucho']]} />
         </div>
       )}
@@ -92,33 +113,52 @@ export function ConsoleView({ id, game, tab: tab0, active, onBack }: Props) {
   );
 }
 
-/** Console de origem de um jogo em Outros: o nome que o catálogo dá ("Game Boy Advance", "Xbox"…). */
 const sourceOf = (g: { console: ConsoleId; platformName: string | null }) => g.platformName ?? (g.console === 'other' ? 'Outros' : CONSOLE_NAME[g.console]);
 
-/** Em Outros, os jogos vêm em blocos por console de origem (o maior primeiro), com atalhos para ver um só. */
-function BySource<T extends { console: ConsoleId; platformName: string | null }>({ on, items, only, setOnly, cls, render }: {
-  on: boolean; items: T[]; only: string | null; setOnly: (s: string | null) => void; cls: string; render: (g: T) => ReactNode;
+const SHORT: [RegExp, string][] = [
+  [/super famicom|snes/i, 'SNES'], [/gamecube/i, 'GC'], [/game ?boy advance/i, 'GBA'], [/game ?boy color/i, 'GBC'], [/game ?boy/i, 'GB'],
+  [/\bnes\b|famicom/i, 'NES'], [/nintendo 64/i, 'N64'], [/arcade/i, 'ARC'], [/mega-?cd|sega cd/i, 'MCD'], [/mega drive|genesis/i, 'MD'],
+  [/32x/i, '32X'], [/3ds/i, '3DS'], [/nintendo ds/i, 'DS'], [/wii ?u/i, 'WIIU'], [/wii/i, 'WII'], [/switch 2/i, 'NS2'], [/switch/i, 'NSW'],
+  [/mac/i, 'MAC'], [/mobile/i, 'MOB'], [/dreamcast/i, 'DC'], [/vita/i, 'VITA'], [/neo ?geo/i, 'NEO'], [/virtual boy/i, 'VB'],
+  [/game gear/i, 'GG'], [/xbox one/i, 'XB1'], [/xbox 360/i, '360'], [/^xbox$/i, 'XBOX'], [/turbografx|pc engine/i, 'PCE'],
+  [/master system/i, 'SMS'], [/saturn/i, 'SAT'], [/playstation (\d)/i, 'PS$1'], [/^playstation$/i, 'PS1'], [/psp/i, 'PSP'],
+];
+const shortOf = (name: string, console: ConsoleId) => {
+  for (const [re, sh] of SHORT) { const m = name.match(re); if (m) return sh.replace('$1', m[1] ?? ''); }
+  const c = CONSOLES.find(x => x.id === console && x.id !== 'other');
+  return c?.short ?? name.split(/[\s/]+/).filter(Boolean).slice(0, 3).map(w => w[0]!.toUpperCase()).join('');
+};
+
+function OtherBrowser<T extends { console: ConsoleId; platformName: string | null }>({ items, only, setOnly, cls, render, empty }: {
+  items: T[]; only: string | null; setOnly: (s: string | null) => void; cls: string; render: (g: T) => ReactNode; empty: ReactNode;
 }) {
-  if (!on) return <div className={cls}>{items.map(render)}</div>;
   const groups = new Map<string, T[]>();
   for (const g of items) { const k = sourceOf(g); groups.set(k, [...(groups.get(k) ?? []), g]); }
   const list = [...groups].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
-  const shown = only && groups.has(only) ? list.filter(([k]) => k === only) : list;
-  const color = (g: T) => CONSOLES.find(c => c.id === g.console && c.id !== 'other')?.color;
+  const sel = only && groups.has(only) ? only : null;
+  const color = (g: T | undefined) => (g ? CONSOLES.find(c => c.id === g.console && c.id !== 'other')?.color : undefined);
+  const shown = sel ? list.filter(([k]) => k === sel) : list;
   return (
     <>
-      {list.length > 1 && (
-        <div className="oth-chips">
-          <button data-hf className={!only ? 'on' : ''} onClick={() => setOnly(null)}>Todos</button>
-          {list.map(([k, gs]) => <button key={k} data-hf className={only === k ? 'on' : ''} onClick={() => setOnly(only === k ? null : k)}>{k} · {gs.length}</button>)}
-        </div>
-      )}
-      {shown.map(([k, gs]) => (
-        <section key={k} style={{ ['--cc' as string]: color(gs[0]!) }}>
-          <h2 className="oth-sec">{k.toUpperCase()}<small>{plural(gs.length, 'jogo', 'jogos')}</small></h2>
-          <div className={cls}>{gs.map(render)}</div>
-        </section>
-      ))}
+      <nav className="oth-side" aria-label="Console de origem">
+        <button data-hf data-src="" className={!sel ? 'on' : ''} onClick={() => setOnly(null)}>
+          <span className="sh">TUDO</span><span className="nm">Todos</span><span className="ct">{items.length}</span>
+        </button>
+        {list.map(([k, gs]) => (
+          <button key={k} data-hf data-src={k} title={k} className={sel === k ? 'on' : ''} style={{ ['--sc' as string]: color(gs[0]) }} onClick={() => setOnly(k)}>
+            <span className="sh">{shortOf(k, gs[0]!.console)}</span><span className="nm">{k}</span><span className="ct">{gs.length}</span>
+          </button>
+        ))}
+      </nav>
+      <div className="oth-main">
+        {!items.length ? empty : shown.map(([k, gs]) => (
+          <section key={k} style={{ ['--sc' as string]: color(gs[0]) }}>
+            <h2 className="oth-head">{k}<small>{plural(gs.length, 'jogo', 'jogos')}</small></h2>
+            <div className={cls}>{gs.map(render)}</div>
+          </section>
+        ))}
+        {cls === 'grid' && <p className="credit">Catálogo: <a href="https://recompendium.com/" target="_blank" rel="noreferrer">Recompendium</a></p>}
+      </div>
     </>
   );
 }

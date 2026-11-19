@@ -1,9 +1,4 @@
-/**
- * Hub do Nintendo Switch e do Switch 2: tela 1920×1080 clara, fileira de blocos, atalhos redondos embaixo
- * e telas internas com barra lateral. Inspirado no visual dos consoles, com conteúdo do Cartucho.
- * `v1` = Switch 1 (blocos colados, nome em cima do bloco, rodapé com régua).
- */
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConsoleId } from '@shared/types';
 import { isSelfInstall, SELF_INSTALL_NOTE, STATUS_LABEL } from '@shared/consoles';
@@ -13,6 +8,8 @@ import { getSettings, setSettings, useSettings } from '../lib/settings';
 import { setSfxProfile, sfx } from '../lib/sfx';
 import { ago, fmtDate, fmtPlay, plural } from '../lib/format';
 import { GameArt } from '../components/GameArt';
+import { SearchBox } from '../components/SearchBox';
+import { matchesQuery } from '../lib/search';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useDeviceStatus, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
@@ -20,7 +17,7 @@ import { useGameProgress, useHubActions, useHubData, type HubGame } from './data
 
 type Page = 'home' | 'cat' | 'news' | 'time' | 'upd' | 'cfg' | 'game';
 type Zone = 'row' | 'dock' | 'side' | 'main';
-interface St { page: Page; zone: Zone; idx: number; di: number; si: number; mi: number; game: string | null; from: Page | null; lastZone: Zone }
+interface St { page: Page; zone: Zone; idx: number; di: number; si: number; mi: number; game: string | null; from: Page | null; fromSi?: number; lastZone: Zone }
 type Side = { k: string; l: string; ic?: IconName; n?: number; gap?: boolean; v?: string };
 
 const DOCK: [Page | 'off', string, IconName, string][] = [
@@ -34,37 +31,40 @@ const Art = ({ g, v }: { g: HubGame; v: 'cover' | 'wide' | 'square' }) =>
 
 export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: string; tab?: 'lib' | 'cat'; onBack: () => void }) {
   const v1 = id === 'switch';
-  const self = isSelfInstall(id);   // o Cartucho não baixa nem atualiza recomps deste console
+  const self = isSelfInstall(id);
   const c = CONSOLES.find(x => x.id === id)!;
   const data = useHubData(id);
   const act = useHubActions();
   const trpc = useTRPC(), qc = useQueryClient();
   const [toast, show] = useHubToast();
   const [launch, setLaunch] = useState<HubGame | null>(null);
-  // vindo da Home (um jogo) ou do radar (Descobrir), abre direto na tela certa
-  const [st, set] = useState<St>(() => ({ page: game0 ? 'game' : tab === 'cat' ? 'cat' : 'home', zone: game0 ? 'side' : tab === 'cat' ? 'main' : 'row', idx: 0, di: 0, si: 0, mi: 0, game: game0 ?? null, from: game0 ? 'home' : null, lastZone: 'row' }));
+  const [st, set] = useState<St>(() => ({ page: game0 ? 'game' : tab === 'cat' ? 'cat' : 'home', zone: game0 ? 'side' : tab === 'cat' ? 'main' : 'row', idx: 0, di: 0, si: !game0 && tab === 'cat' ? 1 : 0, mi: 0, game: game0 ?? null, from: game0 ? 'home' : null, lastZone: 'row' }));
   const up = (p: Partial<St>) => set(s => ({ ...s, ...p }));
+  const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const go = () => { sfx.play('ok'); set(s => ({ ...s, page: 'cat', si: 0, mi: 0, zone: 'side', game: null, from: null })); setTimeout(() => searchRef.current?.focus(), 50); };
+    addEventListener('cartucho:search', go);
+    return () => removeEventListener('cartucho:search', go);
+  }, []);
   const s = useSettings();
   const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show('Pasta dos jogos alterada'); } }));
   const chooseExe = useMutation(trpc.games.chooseExe.mutationOptions({ onSuccess: () => void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }) }));
   const openFolder = useMutation(trpc.games.openFolder.mutationOptions());
 
   useEffect(() => { setSfxProfile('click'); const t = setTimeout(() => sfx.play('boot'), 150); return () => { clearTimeout(t); setSfxProfile('soft'); }; }, []);
-  useEffect(() => { if (act.error) { show(act.error); act.reset(); } }, [act.error]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (act.error) { show(act.error); act.reset(); } }, [act.error]);
 
-  // a fileira é só dos seus jogos (como no console); o catálogo fica em Descobrir
   const row = data.lib;
-  // um jogo do catálogo que acabou de ser instalado (ou adicionado) continua achável pelo id do catálogo
   const all = useMemo(() => new Map([...data.lib, ...data.catalog].flatMap(g => [[g.key, g] as const, ...(g.installed && g.catalog ? [[g.catalog.id, g] as const] : [])])), [data.lib, data.catalog]);
   const game = st.game ? all.get(st.game) ?? null : null;
   const timeList = data.lib.filter(g => g.installed!.playMs > 0).sort((a, b) => b.installed!.playMs - a.installed!.playMs);
 
-  // ---------- barra lateral de cada tela ----------
   const side: Side[] = (() => {
     const p = st.page;
     if (p === 'cat') {
       const cnt = (f: (g: HubGame) => boolean) => String(data.catalog.filter(f).length);
-      return [{ k: 'all', l: 'Todos', ic: 'grid', v: String(data.catalog.length) }, { k: 'new', l: 'Novos', ic: 'star', n: data.catalog.filter(g => g.isNew).length },
+      return [{ k: 'search', l: 'Buscar', ic: 'search' }, { k: 'all', l: 'Todos', ic: 'grid', v: String(data.catalog.length) }, { k: 'new', l: 'Novos', ic: 'star', n: data.catalog.filter(g => g.isNew).length },
         { k: 'full', l: 'Totalmente jogáveis', ic: 'play', v: cnt(g => g.status === 'full') }, { k: 'play', l: 'Jogáveis', ic: 'pad', v: cnt(g => g.status === 'play') },
         { k: 'wip', l: 'Em progresso', ic: 'refresh', v: cnt(g => g.status === 'wip') }, { k: 'inst', l: 'Já instalados', ic: 'folder', gap: true, v: cnt(g => !!g.installed) }];
     }
@@ -74,7 +74,6 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     if (p === 'cfg') return [{ k: 'dir', l: 'Pasta dos jogos', ic: 'folder' }, { k: 'snd', l: 'Sons da interface', ic: 'sound', v: s.snd ? 'Ligados' : 'Desligados' }, { k: 'radar', l: 'Radar de novidades', ic: 'bell' }, { k: 'about', l: 'Sobre o Cartucho', ic: 'info', gap: true }];
     if (p === 'game' && game) {
       const g = game, inst = g.installed;
-      // consoles em que o usuário pesquisa e instala sozinho: aqui ele só liga a pasta
       if (!inst && self) return [{ k: 'add', l: 'Já instalei: adicionar pasta', ic: 'folder' }, { k: 'info', l: 'Informações', ic: 'info', gap: true }];
       const first: Side = inst?.running ? { k: 'quit', l: 'Fechar o jogo', ic: 'stop' } : inst ? (inst.exe ? { k: 'play', l: 'Jogar', ic: 'play' } : { k: 'exe', l: 'Escolher o .exe', ic: 'folder' }) : { k: 'install', l: 'Instalar', ic: 'dl' };
       return [first, { k: 'info', l: 'Informações', ic: 'info', gap: true },
@@ -93,15 +92,14 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     if (k === 'new') return data.catalog.filter(g => g.isNew);
     if (k === 'full' || k === 'play' || k === 'wip') return data.catalog.filter(g => g.status === k);
     if (k === 'inst') return data.catalog.filter(g => g.installed);
+    if (k === 'search') return query.trim() ? [...data.catalog, ...data.lib.filter(g => !g.catalog)].filter(g => matchesQuery(query, g.title, g.platformName, g.catalog?.developer)) : [];
     return data.catalog;
   })();
   const mainList = st.page === 'cat' ? catList : st.page === 'upd' && sk === 'all' ? data.withUpdate : [];
-  // em Descobrir, entrar na grade recolhe a lateral (só ícones) e cabem mais jogos na tela
   const wide = st.page === 'cat' && st.zone === 'main';
   const cols = st.page === 'cat' ? (wide ? 5 : 2) : 1;
 
-  // ---------- ações ----------
-  const open = (page: Page, extra: Partial<St> = {}) => { sfx.play('ok'); up({ page, si: 0, mi: 0, zone: page === 'cat' ? 'main' : 'side', ...extra }); };
+  const open = (page: Page, extra: Partial<St> = {}) => { sfx.play('ok'); up({ page, si: page === 'cat' ? 1 : 0, mi: 0, zone: page === 'cat' ? 'main' : 'side', ...extra }); };
   const doPrimary = (g: HubGame) => {
     const r = act.primary(g);
     if (r === 'play') { sfx.play('ok'); setLaunch(g); setTimeout(() => setLaunch(null), 1600); show(`${g.title} aberto · o tempo de jogo começou a contar`); }
@@ -118,10 +116,11 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
       const g = row[st.idx]; if (!g) return open('cat');
       return doPrimary(g);
     }
+    if (p === 'cat' && st.zone === 'side' && sk === 'search') { sfx.play('ok'); searchRef.current?.focus(); return; }
     if (st.zone === 'side' && mainList.length && (p === 'cat' || (p === 'upd' && sk === 'all'))) { sfx.play('move'); return up({ zone: 'main', mi: 0 }); }
     if (st.zone === 'main') {
       const g = mainList[st.mi]; if (!g) return;
-      if (p === 'cat') return open('game', { game: g.key, from: 'cat' });
+      if (p === 'cat') return open('game', { game: g.key, from: 'cat', fromSi: st.si });
       if (p === 'upd') return doUpdate(g);
     }
     if (p === 'upd' && sk === 'check') { sfx.play('ok'); return act.checkAll(data.lib); }
@@ -140,7 +139,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     if (st.page === 'home') { if (st.zone === 'dock') { sfx.play('back'); return up({ zone: 'row', lastZone: 'row' }); } sfx.play('back'); return onBack(); }
     sfx.play('back');
     if (st.zone === 'main') return up({ zone: 'side' });
-    if (st.page === 'game' && st.from && st.from !== 'home') return up({ page: st.from, from: null, zone: 'main', si: 0 });
+    if (st.page === 'game' && st.from && st.from !== 'home') return up({ page: st.from, from: null, zone: 'main', si: st.fromSi ?? 0 });
     up({ page: 'home', zone: st.lastZone === 'dock' ? 'dock' : 'row' });
   };
 
@@ -179,7 +178,6 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     else if (k === 'ArrowUp' && st.mi - cols >= 0) mv({ mi: st.mi - cols });
   });
 
-  // ---------- desenho ----------
   const hints: [Parameters<typeof Glyph>[0]['a'], string][] = (() => {
     if (st.page === 'home') {
       if (st.zone === 'dock') return [['ok', 'OK']];
@@ -188,6 +186,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
       return [['x', 'Detalhes'], ['ok', g.installed?.running ? 'Fechar' : g.installed ? (v1 ? 'Iniciar' : 'Jogar') : 'Instalar']];
     }
     if (st.zone === 'main') return [['back', 'Voltar'], ['ok', st.page === 'cat' ? 'Ver' : 'Atualizar']];
+    if (st.page === 'cat' && sk === 'search') return [['back', 'Voltar'], ['ok', 'Digitar']];
     return [['back', 'Voltar'], ['ok', st.page === 'game' && sk === 'add' ? 'Escolher a pasta' : st.page === 'game' && st.si === 0 ? side[0]?.l ?? 'OK' : 'OK']];
   })();
   const Hints = () => <div className="s2h">{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>;
@@ -221,7 +220,8 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
                 <div className="vr" />
                 <div className="main">
                   <div className="page-in" key={st.page + sk}>
-                    <Main page={st.page} k={sk} st={st} cols={cols} self={self} data={data} catList={catList} timeList={timeList} game={game} c={c.name}
+                    <Main page={st.page} k={sk} st={st} cols={cols} self={self} query={query} setQuery={setQuery} searchRef={searchRef}
+                      onSearchDone={() => { if (catList.length) up({ zone: 'main', mi: 0 }); }} data={data} catList={catList} timeList={timeList} game={game} c={c.name}
                       onCard={i => { if (st.zone === 'main' && st.mi === i) enter(); else { sfx.play('move'); up({ zone: 'main', mi: i }); } }} />
                   </div>
                 </div>
@@ -236,8 +236,6 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     </section>
   );
 }
-
-// ---------------- Home: fileira e atalhos ----------------
 
 function Home({ v1, row, st, feedCount, updCount, newCount, onTile, onDock, hints }: {
   v1: boolean; row: HubGame[]; st: St; feedCount: number; updCount: number; newCount: number; onTile: (i: number) => void; onDock: (j: number) => void; hints: ReactNode;
@@ -310,19 +308,31 @@ const Chip = ({ s }: { s: NonNullable<HubGame['status']> }) => <span className={
 const Pill = ({ g }: { g: HubGame }) => g.isNew ? <span className="pill new">NOVO</span> : g.update?.updateAvailable ? <span className="pill upd">UPDATE</span> : g.installed ? <span className="pill inst">INSTALADO</span> : null;
 const Empty = ({ children }: { children: ReactNode }) => <div className="empty2">{children}</div>;
 
-// ---------------- conteúdo das telas internas ----------------
-
-function Main({ page, k, st, cols, self, data, catList, timeList, game, c, onCard }: {
-  page: Page; k: string | undefined; st: St; cols: number; self: boolean; data: ReturnType<typeof useHubData>; catList: HubGame[]; timeList: HubGame[]; game: HubGame | null; c: string; onCard: (i: number) => void;
+function Main({ page, k, st, cols, self, query, setQuery, searchRef, onSearchDone, data, catList, timeList, game, c, onCard }: {
+  page: Page; k: string | undefined; st: St; cols: number; self: boolean; query: string; setQuery: (q: string) => void; searchRef: RefObject<HTMLInputElement | null>; onSearchDone: () => void; data: ReturnType<typeof useHubData>; catList: HubGame[]; timeList: HubGame[]; game: HubGame | null; c: string; onCard: (i: number) => void;
 }) {
   const trpc = useTRPC();
   const portsDir = useQuery(trpc.settings.portsDir.queryOptions());
   const info = useQuery(trpc.catalog.info.queryOptions());
   const s = useSettings();
 
+  if (page === 'cat' && k === 'search') {
+    const r = Math.floor(st.mi / cols), pitch = cols > 2 ? 266 : 410;
+    return (
+      <div className="main-in" style={{ transform: `translateY(-${st.zone === 'main' ? Math.max(0, r - 1) * pitch : 0}px)` }}>
+        <SearchBox ref={searchRef} value={query} onChange={setQuery} nav={false} className="sbox" placeholder="Nome do jogo…" onDone={onSearchDone} />
+        {!query.trim() ? <Empty>Digite o nome de um jogo de {c}: aparecem os seus e os do catálogo.</Empty>
+          : !catList.length ? <Empty>Nada encontrado para “{query.trim()}”.</Empty>
+          : <div className="cards">{catList.map((g, i) => (
+              <button key={g.key} className={`card ${st.zone === 'main' && i === st.mi ? 'on' : ''}`} onClick={() => onCard(i)}>
+                <Art g={g} v="wide" /><div className="ttl"><span>{g.title}</span><Pill g={g} /></div>
+              </button>
+            ))}</div>}
+      </div>
+    );
+  }
   if (page === 'cat') {
     if (!catList.length) return <Empty>{data.catalog.length ? 'Nada nessa categoria.' : `O catálogo ainda não tem recomps para ${c}. O radar avisa quando aparecer o primeiro.`}</Empty>;
-    // altura de uma linha da grade (card + espaço), igual ao switch.css
     const r = Math.floor(st.mi / cols), pitch = cols > 2 ? 266 : 410;
     return (
       <div className="main-in" style={{ transform: `translateY(-${st.zone === 'main' ? Math.max(0, r - 1) * pitch : 0}px)` }}>
@@ -473,7 +483,6 @@ function GameAch({ id }: { id: string }) {
   );
 }
 
-/** Joy-Cons (ou teclado, se não houver controle): como o console mostra o que está conectado. */
 function PadIndicator({ v1, label = false }: { v1: boolean; label?: boolean }) {
   const kind = usePadKind();
   if (kind === 'kb') return (
@@ -488,12 +497,10 @@ function PadIndicator({ v1, label = false }: { v1: boolean; label?: boolean }) {
   return (
     <span className="pad"><svg className="joy" viewBox="0 0 64 40" aria-hidden="true">
       <defs><linearGradient id="s2ring" x1="0" x2="1"><stop offset="0" stopColor="#2fb7ff" /><stop offset="1" stopColor="#ff4b5c" /></linearGradient></defs>
-      {/* Joy-Con esquerdo */}
       <path d="M28 4h-12a12 12 0 0 0-12 12v8a12 12 0 0 0 12 12h12z" fill={L} />
       <circle cx="16" cy="14" r="4.2" fill="#1d1d22" /><circle cx="16" cy="14" r="2.6" fill="#55555e" />
       <circle cx="16" cy="23.2" r="1.5" fill="#e9e9ee" /><circle cx="16" cy="29.2" r="1.5" fill="#e9e9ee" /><circle cx="13" cy="26.2" r="1.5" fill="#e9e9ee" /><circle cx="19" cy="26.2" r="1.5" fill="#e9e9ee" />
       <rect x="22.5" y="8" width="3.4" height="1.2" rx=".6" fill="#e9e9ee" />
-      {/* Joy-Con direito */}
       <path d="M36 4h12a12 12 0 0 1 12 12v8a12 12 0 0 1-12 12h-12z" fill={R} />
       <circle cx="48" cy="11" r="1.5" fill="#e9e9ee" /><circle cx="48" cy="17" r="1.5" fill="#e9e9ee" /><circle cx="45" cy="14" r="1.5" fill="#e9e9ee" /><circle cx="51" cy="14" r="1.5" fill="#e9e9ee" />
       <circle cx="48" cy="26" r="4.2" fill="#1d1d22" /><circle cx="48" cy="26" r="2.6" fill="#55555e" />

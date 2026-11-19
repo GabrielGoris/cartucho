@@ -1,7 +1,3 @@
-/**
- * Dados de um console para os hubs: biblioteca, catálogo, novidades, tempo de jogo e atualizações,
- * juntos numa lista só (um jogo instalado que está no catálogo aparece uma vez).
- */
 import { useMemo } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CatalogGame, ConsoleId, InstalledGame, PlayStatus, RadarEvent, UpdateInfo } from '@shared/types';
@@ -10,16 +6,17 @@ import { useProgress } from '../lib/progress';
 import { isSelfInstall } from '@shared/consoles';
 
 export interface HubGame {
-  key: string;                      
+  key: string;
+  title: string;
   coverUrl: string | null;
   status: PlayStatus | null;
   installed: InstalledGame | null;
   catalog: CatalogGame | null;
-  isNew: boolean;                   
-  update: UpdateInfo | null;         
+  isNew: boolean;
+  update: UpdateInfo | null;
   repo: string | null;
   console: ConsoleId;
-  platformName: string | null;      
+  platformName: string | null;
 }
 
 const FRESH_MS = 14 * 86400_000;
@@ -50,14 +47,14 @@ export function useHubData(consoleId: ConsoleId) {
     const catalog = [...lib.filter(g => g.catalog), ...notInstalled].sort((a, b) => Number(b.isNew) - Number(a.isNew) || Number(!!a.installed) - Number(!!b.installed));
     return {
       loading: games.isLoading || cat.isLoading,
-      lib,                                    
-      notInstalled,                           
-      catalog,                               
+      lib,
+      notInstalled,
+      catalog,
       feed,
       withUpdate: lib.filter(g => g.update?.updateAvailable),
       playMs: mine.reduce((s, g) => s + g.playMs, 0),
     };
-  }, [mine, cat.data, radar.data, consoleId, cat.isLoading, games.isLoading, updates.map(u => u.dataUpdatedAt).join()]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mine, cat.data, radar.data, consoleId, cat.isLoading, games.isLoading, updates.map(u => u.dataUpdatedAt).join()]);
 }
 
 export function useHubActions() {
