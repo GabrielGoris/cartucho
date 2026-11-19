@@ -10,17 +10,16 @@ import { useProgress } from '../lib/progress';
 import { isSelfInstall } from '@shared/consoles';
 
 export interface HubGame {
-  key: string;                       // id do jogo instalado, ou do catálogo
-  title: string;
+  key: string;                      
   coverUrl: string | null;
   status: PlayStatus | null;
   installed: InstalledGame | null;
   catalog: CatalogGame | null;
-  isNew: boolean;                    // chegou no catálogo nos últimos 14 dias
-  update: UpdateInfo | null;         // só para instalados com projeto no GitHub
+  isNew: boolean;                   
+  update: UpdateInfo | null;         
   repo: string | null;
   console: ConsoleId;
-  platformName: string | null;      // plataforma de origem (para "Outros")
+  platformName: string | null;      
 }
 
 const FRESH_MS = 14 * 86400_000;
@@ -51,9 +50,9 @@ export function useHubData(consoleId: ConsoleId) {
     const catalog = [...lib.filter(g => g.catalog), ...notInstalled].sort((a, b) => Number(b.isNew) - Number(a.isNew) || Number(!!a.installed) - Number(!!b.installed));
     return {
       loading: games.isLoading || cat.isLoading,
-      lib,                                    // instalados, o último jogado primeiro
-      notInstalled,                           // do catálogo, ainda não instalados (mais estrelas primeiro)
-      catalog,                                // tudo do catálogo, novos primeiro
+      lib,                                    
+      notInstalled,                           
+      catalog,                               
       feed,
       withUpdate: lib.filter(g => g.update?.updateAvailable),
       playMs: mine.reduce((s, g) => s + g.playMs, 0),
@@ -61,7 +60,6 @@ export function useHubData(consoleId: ConsoleId) {
   }, [mine, cat.data, radar.data, consoleId, cat.isLoading, games.isLoading, updates.map(u => u.dataUpdatedAt).join()]);   // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-/** Ações que todo hub oferece: jogar, instalar, atualizar, fechar, ver no GitHub. */
 export function useHubActions() {
   const trpc = useTRPC(), qc = useQueryClient();
   const refresh = () => { void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }); void qc.invalidateQueries({ queryKey: trpc.library.summary.queryKey() }); };
@@ -76,7 +74,6 @@ export function useHubActions() {
   return {
     error: error?.message ?? null,
     reset: () => { play.reset(); install.reset(); update.reset(); quit.reset(); add.reset(); },
-    /** Instalado: abre (ou fecha, se já estiver aberto). Não instalado: instala, ou pede a pasta (consoles em que o usuário instala sozinho). */
     primary(g: HubGame): 'play' | 'quit' | 'install' | 'add' | 'pick' | 'none' {
       if (g.installed?.running) { quit.mutate({ id: g.installed.id }); return 'quit'; }
       if (g.installed) { if (!g.installed.exe) return 'pick'; play.mutate({ id: g.installed.id }); return 'play'; }
@@ -84,15 +81,14 @@ export function useHubActions() {
       if (g.catalog?.repo) { install.mutate({ catalogId: g.catalog.id }); return 'install'; }
       return 'none';
     },
-    /** Consoles em que o usuário instala sozinho também não são atualizados pelo Cartucho. */
     update: (g: HubGame) => { if (g.installed && !isSelfInstall(g.console)) update.mutate({ id: g.installed.id }); },
+    addFolder: (g: HubGame) => { if (g.catalog && !g.installed) add.mutate({ catalogId: g.catalog.id }); },
     github: (g: HubGame) => { if (g.repo) window.open(`https://github.com/${g.repo}`, '_blank'); },
     checkAll: (gs: HubGame[]) => checkAll.mutate(gs.filter(g => g.installed?.sourceRepo).map(g => g.installed!.id)),
     checking: checkAll.isPending,
   };
 }
 
-/** Progresso de instalação/atualização deste jogo, se houver. */
 export const useGameProgress = (g: HubGame | null | undefined) => {
   const a = useProgress(g?.installed?.id), b = useProgress(g?.catalog?.id);
   return a ?? b;

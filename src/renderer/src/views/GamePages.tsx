@@ -1,4 +1,3 @@
-/** Ficha de um jogo da biblioteca (jogar, atualizar, tempo) e ficha de um jogo do catálogo (instalar). */
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CatalogGame } from '@shared/types';
@@ -133,15 +132,20 @@ export function CatalogPage({ game: c, installedId, active, onBack, onOpenInstal
           <div className="hm-btns">
             {installedId
               ? <button className="hm-go" data-hf data-main onClick={() => onOpenInstalled(installedId)}>NA BIBLIOTECA ▶</button>
-              : self
-                ? <button className="hm-go" data-hf data-main disabled={add.isPending} onClick={() => add.mutate({ catalogId: c.id })}>JÁ INSTALEI: ADICIONAR PASTA</button>
-                : c.repo && <button className="hm-go" data-hf data-main disabled={install.isPending || !!progress} onClick={() => { sfx.play('ok'); install.mutate({ catalogId: c.id }); }}>⬇ INSTALAR</button>}
+              : <>
+                  {c.repo && !self && <button className="hm-go" data-hf data-main disabled={install.isPending || !!progress} onClick={() => { sfx.play('ok'); install.mutate({ catalogId: c.id }); }}>⬇ INSTALAR</button>}
+                  <button className={`hm-go ${c.repo && !self ? 'ghost' : ''}`} data-hf data-main={c.repo && !self ? undefined : true} disabled={add.isPending || !!progress}
+                    onClick={() => add.mutate({ catalogId: c.id })}>{self ? 'JÁ INSTALEI: ADICIONAR PASTA' : 'ESCOLHER PASTA'}</button>
+                </>}
             {c.repo && <button className="hm-go ghost" data-hf onClick={() => gh(c.repo!)}>VER NO GITHUB</button>}
           </div>
           {progress && <ProgressBar p={progress} />}
           {(install.error ?? add.error) && !progress && <p className="err" style={{ margin: 0 }}>{(install.error ?? add.error)!.message}</p>}
           {!installedId && self && <p className="dim small">{SELF_INSTALL_NOTE}</p>}
-          {!installedId && c.repo && !self && <p className="dim small">Instala em {portsDir.data ?? '…'} (dá para mudar nas configurações). O download é conferido pelo hash do GitHub e pelo Windows Defender antes de ser aberto.</p>}
+          {!installedId && !self && <p className="dim small">
+            {c.repo ? <>Instalar baixa para {portsDir.data ?? '…'} (dá para mudar nas configurações); o download é conferido pelo hash do GitHub e pelo Windows Defender antes de ser aberto. </> : null}
+            Já tem o jogo instalado em outro lugar? Escolher pasta coloca ele na biblioteca ligado a este jogo, sem copiar nada.
+          </p>}
           <div className="gp-cards">
             {c.needs && <section className="gp-card"><h3>O QUE VOCÊ PRECISA</h3><p className="txt">{c.needs}</p></section>}
             {c.description && <section className="gp-card wide"><h3>SOBRE</h3><p className="txt">{c.description}</p></section>}
