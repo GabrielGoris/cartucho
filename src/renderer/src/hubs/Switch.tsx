@@ -41,7 +41,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
   const [toast, show] = useHubToast();
   const [launch, setLaunch] = useState<HubGame | null>(null);
   // vindo da Home (um jogo) ou do radar (Descobrir), abre direto na tela certa
-  const [st, set] = useState<St>(() => ({ page: game0 ? 'game' : tab === 'cat' ? 'cat' : 'home', zone: game0 || tab === 'cat' ? 'side' : 'row', idx: 0, di: 0, si: 0, mi: 0, game: game0 ?? null, from: game0 ? 'home' : null, lastZone: 'row' }));
+  const [st, set] = useState<St>(() => ({ page: game0 ? 'game' : tab === 'cat' ? 'cat' : 'home', zone: game0 ? 'side' : tab === 'cat' ? 'main' : 'row', idx: 0, di: 0, si: 0, mi: 0, game: game0 ?? null, from: game0 ? 'home' : null, lastZone: 'row' }));
   const up = (p: Partial<St>) => set(s => ({ ...s, ...p }));
   const s = useSettings();
   const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show('Pasta dos jogos alterada'); } }));
@@ -60,7 +60,12 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
   // ---------- barra lateral de cada tela ----------
   const side: Side[] = (() => {
     const p = st.page;
-    if (p === 'cat') return [{ k: 'all', l: 'Destaques', ic: 'star' }, { k: 'new', l: 'Novos', n: data.catalog.filter(g => g.isNew).length }, { k: 'full', l: 'Totalmente jogáveis' }, { k: 'play', l: 'Jogáveis' }, { k: 'wip', l: 'Em progresso' }, { k: 'inst', l: 'Já instalados', gap: true }];
+    if (p === 'cat') {
+      const cnt = (f: (g: HubGame) => boolean) => String(data.catalog.filter(f).length);
+      return [{ k: 'all', l: 'Todos', ic: 'grid', v: String(data.catalog.length) }, { k: 'new', l: 'Novos', ic: 'star', n: data.catalog.filter(g => g.isNew).length },
+        { k: 'full', l: 'Totalmente jogáveis', ic: 'play', v: cnt(g => g.status === 'full') }, { k: 'play', l: 'Jogáveis', ic: 'pad', v: cnt(g => g.status === 'play') },
+        { k: 'wip', l: 'Em progresso', ic: 'refresh', v: cnt(g => g.status === 'wip') }, { k: 'inst', l: 'Já instalados', ic: 'folder', gap: true, v: cnt(g => !!g.installed) }];
+    }
     if (p === 'news') return [{ k: 'all', l: 'Tudo', n: data.feed.length }, { k: 'new', l: 'Novos no catálogo' }, { k: 'upd', l: 'Versões novas' }, { k: 'up', l: 'Mudou de status' }];
     if (p === 'time') return [{ k: 'sum', l: 'Resumo', ic: 'chart' }, ...timeList.map((g, i) => ({ k: 'g:' + g.key, l: g.title, gap: i === 0, v: fmtPlay(g.installed!.playMs) }))];
     if (p === 'upd') return [{ k: 'all', l: 'Atualizações disponíveis', ic: 'dl', n: data.withUpdate.length }, { k: 'check', l: act.checking ? 'Verificando…' : 'Verificar agora', ic: 'refresh' }];
@@ -87,10 +92,12 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     return data.catalog;
   })();
   const mainList = st.page === 'cat' ? catList : st.page === 'upd' && sk === 'all' ? data.withUpdate : [];
-  const cols = st.page === 'cat' ? 2 : 1;
+  // em Descobrir, entrar na grade recolhe a lateral (só ícones) e cabem mais jogos na tela
+  const wide = st.page === 'cat' && st.zone === 'main';
+  const cols = st.page === 'cat' ? (wide ? 5 : 2) : 1;
 
   // ---------- ações ----------
-  const open = (page: Page, extra: Partial<St> = {}) => { sfx.play('ok'); up({ page, si: 0, mi: 0, zone: 'side', ...extra }); };
+  const open = (page: Page, extra: Partial<St> = {}) => { sfx.play('ok'); up({ page, si: 0, mi: 0, zone: page === 'cat' ? 'main' : 'side', ...extra }); };
   const doPrimary = (g: HubGame) => {
     const r = act.primary(g);
     if (r === 'play') { sfx.play('ok'); setLaunch(g); setTimeout(() => setLaunch(null), 1600); show(`${g.title} aberto · o tempo de jogo começou a contar`); }
@@ -181,7 +188,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
 
   return (
     <section className="view hub sk-tiles2" style={{ ['--cc' as string]: c.color }}>
-      <Fit w={1920} h={1080} className={`s2 ${v1 ? 'v1' : ''}`} style={{ ['--cc' as string]: c.color }}>
+      <Fit w={1920} h={1080} className={`s2 ${v1 ? 'v1' : ''} ${wide ? 'wide' : ''}`} style={{ ['--cc' as string]: c.color }}>
         <div className="s2-in">
           {st.page === 'home'
             ? <Home v1={v1} row={row} st={st} feedCount={data.feed.length} updCount={data.withUpdate.length} newCount={data.catalog.filter(g => g.isNew).length}
@@ -192,12 +199,13 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
                 <div className="hd">
                   <Ic n={st.page === 'game' ? 'info' : PAGES[st.page as keyof typeof PAGES][1]} />
                   <span>{st.page === 'game' ? game?.title : PAGES[st.page as keyof typeof PAGES][0]}</span>
+                  {st.page === 'cat' && <span className="crumb">{side[st.si]?.l} · {plural(catList.length, 'jogo', 'jogos')}</span>}
                   <span className="sp" /><div className="av">G</div>
                 </div>
                 <nav className="side">
                   <div className="side-in" style={{ transform: `translateY(-${Math.max(0, st.si - 6) * 92}px)` }}>
                     {side.map((x, j) => (
-                      <button key={x.k} className={`si ${j === st.si ? (st.zone === 'side' ? 'on' : 'sel') : ''} ${x.gap ? 'gap' : ''}`}
+                      <button key={x.k} title={x.l} className={`si ${j === st.si ? (st.zone === 'side' ? 'on' : 'sel') : ''} ${x.gap ? 'gap' : ''}`}
                         onClick={() => { if (st.si === j && st.zone === 'side') enter(); else { sfx.play('move'); up({ zone: 'side', si: j, mi: 0 }); } }}>
                         {x.ic && <Ic n={x.ic} />}<span>{x.l}</span>{x.n ? <span className="n">{x.n}</span> : x.v ? <span className="v">{x.v}</span> : null}
                       </button>
@@ -207,7 +215,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
                 <div className="vr" />
                 <div className="main">
                   <div className="page-in" key={st.page + sk}>
-                    <Main page={st.page} k={sk} st={st} data={data} catList={catList} timeList={timeList} game={game} c={c.name}
+                    <Main page={st.page} k={sk} st={st} cols={cols} data={data} catList={catList} timeList={timeList} game={game} c={c.name}
                       onCard={i => { if (st.zone === 'main' && st.mi === i) enter(); else { sfx.play('move'); up({ zone: 'main', mi: i }); } }} />
                   </div>
                 </div>
@@ -299,8 +307,8 @@ const Empty = ({ children }: { children: ReactNode }) => <div className="empty2"
 
 // ---------------- conteúdo das telas internas ----------------
 
-function Main({ page, k, st, data, catList, timeList, game, c, onCard }: {
-  page: Page; k: string | undefined; st: St; data: ReturnType<typeof useHubData>; catList: HubGame[]; timeList: HubGame[]; game: HubGame | null; c: string; onCard: (i: number) => void;
+function Main({ page, k, st, cols, data, catList, timeList, game, c, onCard }: {
+  page: Page; k: string | undefined; st: St; cols: number; data: ReturnType<typeof useHubData>; catList: HubGame[]; timeList: HubGame[]; game: HubGame | null; c: string; onCard: (i: number) => void;
 }) {
   const trpc = useTRPC();
   const portsDir = useQuery(trpc.settings.portsDir.queryOptions());
@@ -309,9 +317,10 @@ function Main({ page, k, st, data, catList, timeList, game, c, onCard }: {
 
   if (page === 'cat') {
     if (!catList.length) return <Empty>{data.catalog.length ? 'Nada nessa categoria.' : `O catálogo ainda não tem recomps para ${c}. O radar avisa quando aparecer o primeiro.`}</Empty>;
-    const r = Math.floor(st.mi / 2);
+    // altura de uma linha da grade (card + espaço), igual ao switch.css
+    const r = Math.floor(st.mi / cols), pitch = cols > 2 ? 266 : 410;
     return (
-      <div className="main-in" style={{ transform: `translateY(-${st.zone === 'main' ? Math.max(0, r - 1) * 410 : 0}px)` }}>
+      <div className="main-in" style={{ transform: `translateY(-${st.zone === 'main' ? Math.max(0, r - 1) * pitch : 0}px)` }}>
         <div className="cards">{catList.map((g, i) => (
           <button key={g.key} className={`card ${st.zone === 'main' && i === st.mi ? 'on' : ''}`} onClick={() => onCard(i)}>
             <Art g={g} v="wide" /><div className="ttl"><span>{g.title}</span><Pill g={g} /></div>

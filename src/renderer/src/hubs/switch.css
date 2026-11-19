@@ -189,3 +189,25 @@
 .s2 .foot .pad svg.joy, .s2 .foot .pad svg.kbd { width: 104px; height: 65px; }
 .s2 .foot .pad small { font-size: 24px; }
 .s2 .ft .pad svg.joy, .s2 .ft .pad svg.kbd { width: 84px; height: 52px; }
+
+/* Descobrir: com o foco na grade, a lateral recolhe para uma coluna de ícones e a grade ganha 5 colunas */
+.s2 .side, .s2 .vr, .s2 .main { transition: width .28s cubic-bezier(.2,.8,.3,1), left .28s cubic-bezier(.2,.8,.3,1); }
+.s2 .hd .crumb { font-size: 30px; font-weight: 500; color: #7b7b86; margin-left: 6px; }
+.s2.wide .side { width: 112px; }
+.s2.wide .si { padding: 0; justify-content: center; }
+.s2.wide .si > span:not(.n), .s2.wide .si .v { display: none; }
+.s2.wide .si .n { position: absolute; top: 12px; right: 14px; min-width: 16px; height: 16px; padding: 0; font-size: 0; }
+.s2.wide .si.gap::before { left: 14px; right: 14px; }
+.s2.wide .si.sel { background: #fff; box-shadow: 0 0 0 3px var(--ac); }
+.s2.wide .vr { left: 248px; }
+.s2.wide .main { left: 278px; right: 70px; }
+.s2.wide .cards { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 26px; }
+.s2.wide .card .cv { height: 172px; padding: 16px; }
+.s2.wide .card .cv .ini { font-size: 34px; top: 16px; left: 16px; }
+.s2.wide .card .ttl { height: 68px; font-size: 23px; padding: 0 16px; gap: 10px; }
+.s2.wide .card .ttl .pill { font-size: 14px; padding: 3px 8px; }
+.s2.wide .card.on { transform: scale(1.04); }
+.s2.v1.wide .side { width: 150px; padding: 26px 16px; }
+.s2.v1.wide .si.on::after, .s2.v1.wide .si.sel::after { display: none; }
+.s2.wide .card { position: relative; }
+.s2.wide .card .ttl .pill { position: absolute; top: 10px; right: 10px; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
