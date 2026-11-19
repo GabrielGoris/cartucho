@@ -36,7 +36,7 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
   useSpatialNav(root, { active, initial: '[data-main]', onKey: k => { if (k === 'Escape') { sfx.play('back'); onBack(); return true; } } });
 
   const g = game.data;
-  if (!g) return <p className="dim pad">{game.error ? game.error.message : 'Carregando…'}</p>;
+  if (!g) return <p className="dim pad24">{game.error ? game.error.message : 'Carregando…'}</p>;
   const u = upd.data, a = g.achievements, st = stats.data;
   const err = play.error ?? update.error ?? uninstall.error ?? chooseExe.error ?? quit.error;
 

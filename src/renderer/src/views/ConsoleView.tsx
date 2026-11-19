@@ -72,7 +72,7 @@ export function ConsoleView({ id, game, tab: tab0, active, onBack }: Props) {
             ) : (
               <>
                 <div className="toolbar"><input className="search" placeholder={`Buscar entre ${plural(cat.data?.length ?? 0, 'recomp', 'recomps')}…`} value={search} onChange={e => setSearch(e.target.value)} /></div>
-                {cat.data?.length === 0 && <p className="pad dim">{q ? 'Nada encontrado.' : 'Ainda não há recomps deste console no catálogo.'}</p>}
+                {cat.data?.length === 0 && <p className="pad24 dim">{q ? 'Nada encontrado.' : 'Ainda não há recomps deste console no catálogo.'}</p>}
                 <div className="grid">{cat.data?.map(g => <GameCard key={g.id} g={g} installed={installedBy.has(g.id)} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'cat', game: g }); }} />)}</div>
                 <p className="credit">Catálogo: <a href="https://recompendium.com/" target="_blank" rel="noreferrer">Recompendium</a></p>
               </>
@@ -99,14 +99,14 @@ function EmptyLib() {
 
 function GameCard({ g, installed, onOpen }: { g: CatalogGame; installed: boolean; onOpen: () => void }) {
   return (
-    <button className="card" data-hf onClick={onOpen}>
+    <button className="lcard" data-hf onClick={onOpen}>
       <div style={{ position: 'relative' }}>
         <Cover title={g.title} url={g.coverUrl} />
         <span className={`st st-${g.status}`}>{STATUS_LABEL[g.status]}</span>
         {installed && <span className="inlib">NA BIBLIOTECA</span>}
         {g.noLink && <span className="nolink" title="O Recompendium lista este projeto, mas prefere não pôr link para ele">SEM LINK</span>}
       </div>
-      <div className="meta">
+      <div className="lmeta">
         <div className="title">{g.title}</div>
         <div className="dim">{g.console === 'other' ? g.platformName : g.developer ?? ''}{g.year ? ` · ${g.year}` : ''}</div>
         {g.repo && <span className="repo">{g.repo}</span>}
@@ -119,7 +119,7 @@ function GameRow({ g, onOpen }: { g: InstalledGame; onOpen: () => void }) {
   const a = g.achievements;
   const pct = a && a.total ? Math.round((a.unlocked / a.total) * 100) : 0;
   return (
-    <button className="row" data-hf onClick={onOpen}>
+    <button className="lrow" data-hf onClick={onOpen}>
       <Cover title={g.title} url={g.coverUrl} className="thumb" />
       <div className="row-main">
         <div className="title">{g.title}</div>
@@ -128,7 +128,7 @@ function GameRow({ g, onOpen }: { g: InstalledGame; onOpen: () => void }) {
       {a && a.total > 0 && (
         <div className="prog">
           <div className="prog-n">{a.unlocked}/{a.total}</div>
-          <div className="bar"><i style={{ width: `${pct}%` }} /></div>
+          <div className="pbar"><i style={{ width: `${pct}%` }} /></div>
         </div>
       )}
     </button>
@@ -147,7 +147,7 @@ function Achievements({ id, active, onBack }: { id: string; active: boolean; onB
   const root = useRef<HTMLDivElement>(null);
   useSpatialNav(root, { active, onKey: k => { if (k === 'Escape') { onBack(); return true; } } });
 
-  if (!data.data) return <p className="dim pad">{data.error ? data.error.message : 'Carregando…'}</p>;
+  if (!data.data) return <p className="dim pad24">{data.error ? data.error.message : 'Carregando…'}</p>;
   const d = data.data;
   const got = d.list.filter(a => a.unlockedAt != null);
   const pts = d.list.reduce((s, a) => s + (a.points ?? 0), 0), gotPts = got.reduce((s, a) => s + (a.points ?? 0), 0);
@@ -165,8 +165,8 @@ function Achievements({ id, active, onBack }: { id: string; active: boolean; onB
       </header>
       <div className="chub-body">
         <div className="ach-head">
-          <div className="big">{got.length}<span>/{d.list.length}</span></div>
-          <div className="bar wide"><i style={{ width: `${d.list.length ? (got.length / d.list.length) * 100 : 0}%` }} /></div>
+          <div className="achbig">{got.length}<span>/{d.list.length}</span></div>
+          <div className="pbar wide"><i style={{ width: `${d.list.length ? (got.length / d.list.length) * 100 : 0}%` }} /></div>
           {pts > 0 && <div className="dim">{gotPts}/{pts} G</div>}
           <div className="seg small">
             {(['all', 'on', 'off'] as const).map(f => <button key={f} data-hf className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? 'Todas' : f === 'on' ? 'Desbloqueadas' : 'Bloqueadas'}</button>)}
@@ -195,5 +195,5 @@ function Achievements({ id, active, onBack }: { id: string; active: boolean; onB
 
 function Icon({ src }: { src: string | null }) {
   const [broken, setBroken] = useState(false);
-  return <div className="ico">{src && !broken ? <img src={src} alt="" onError={() => setBroken(true)} /> : <span>★</span>}</div>;
+  return <div className="achico">{src && !broken ? <img src={src} alt="" onError={() => setBroken(true)} /> : <span>★</span>}</div>;
 }

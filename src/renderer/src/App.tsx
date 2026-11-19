@@ -15,6 +15,7 @@ import { Boot } from './views/Boot';
 import { Select, type Page } from './views/Select';
 import { ConsoleView } from './views/ConsoleView';
 import { Settings } from './views/Settings';
+import { HUBS } from './hubs';
 
 type Inside = { id: ConsoleId; game?: string; tab?: 'lib' | 'cat'; key: number };
 const LAST = 'cartucho.lastConsole';
@@ -82,9 +83,9 @@ export function App() {
   }));
 
   const tvClass = useMemo(() => [
-    tvAnim, s.crtLvl ? '' : 'no-crt', s.flicker && !s.reduce ? '' : 'no-flicker', s.frame ? '' : 'no-frame',
+    tvAnim, inside && HUBS[inside.id]?.hd ? 'hd' : '', s.crtLvl ? '' : 'no-crt', s.flicker && !s.reduce ? '' : 'no-flicker', s.frame ? '' : 'no-frame',
     s.glow ? '' : 'no-glow', s.blur ? '' : 'no-blur', s.reduce ? 'reduce' : '',
-  ].filter(Boolean).join(' '), [tvAnim, s]);
+  ].filter(Boolean).join(' '), [tvAnim, s, inside]);
 
   // com um jogo aberto o palco 3D para de desenhar (a placa de vídeo fica para o jogo)
   const gameOpen = Object.keys(playing).length > 0;
@@ -97,7 +98,11 @@ export function App() {
         <Select active={!booting && !settingsOpen} page={page} setPage={setPage} sel={sel} setSel={setSel}
           onEnterConsole={enterConsole} onSettings={() => { sfx.play('ok'); setSettingsOpen(true); }} />
       )}
-      {inside && <ConsoleView key={inside.key} id={inside.id} game={inside.game} tab={inside.tab} active={!settingsOpen} onBack={leaveConsole} />}
+      {inside && (() => {
+        const H = HUBS[inside.id];
+        if (H) return <H.component key={inside.key} id={inside.id} game={inside.game} tab={inside.tab} onBack={leaveConsole} />;
+        return <ConsoleView key={inside.key} id={inside.id} game={inside.game} tab={inside.tab} active={!settingsOpen} onBack={leaveConsole} />;
+      })()}
       {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}
       {booting && <Boot summary={summary.data} onDone={() => setBooting(false)} />}
 

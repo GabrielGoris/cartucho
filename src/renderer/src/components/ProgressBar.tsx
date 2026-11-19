@@ -4,7 +4,7 @@ export function ProgressBar({ p }: { p: InstallProgress }) {
   return (
     <div className="dl">
       <div className="dl-t">{p.stage}{p.pct > 0 && p.pct < 1 ? ` · ${Math.round(p.pct * 100)}%` : ''}</div>
-      <div className={`bar ${p.pct >= 1 && !p.done ? 'busy' : ''}`}><i style={{ width: `${Math.round((p.pct || 0.02) * 100)}%` }} /></div>
+      <div className={`pbar ${p.pct >= 1 && !p.done ? 'busy' : ''}`}><i style={{ width: `${Math.round((p.pct || 0.02) * 100)}%` }} /></div>
     </div>
   );
 }
