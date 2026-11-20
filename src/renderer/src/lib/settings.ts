@@ -19,8 +19,10 @@ export interface Settings {
   picked: boolean;
   translate: boolean;
   xmbTheme: Record<string, number>;
+  name: string;
+  avatar: string;
 }
-export const DEFAULTS: Settings = { pal: 'neon', crtLvl: 30, flicker: true, frame: true, glow: true, pixel: true, blur: true, snd: true, vol: 70, bootSnd: true, pad: 'auto', boot: true, start: 'act', reduce: false, hidden: [], picked: false, translate: true, xmbTheme: {} };
+export const DEFAULTS: Settings = { pal: 'neon', crtLvl: 30, flicker: true, frame: true, glow: true, pixel: true, blur: true, snd: true, vol: 70, bootSnd: true, pad: 'auto', boot: true, start: 'act', reduce: false, hidden: [], picked: false, translate: true, xmbTheme: {}, name: '', avatar: 'acc' };
 
 const KEY = 'cartucho.set';
 let state: Settings = (() => { try { const s = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; if (typeof s.xmbTheme !== 'object' || !s.xmbTheme) s.xmbTheme = {}; return s; } catch { return { ...DEFAULTS }; } })();

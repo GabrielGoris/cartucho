@@ -1,3 +1,4 @@
+import { useProfile } from '../lib/profile';
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConsoleId } from '@shared/types';
@@ -32,6 +33,7 @@ const Art = ({ g, v }: { g: HubGame; v: 'cover' | 'wide' | 'square' }) =>
   <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant={v} />;
 
 export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: string; tab?: 'lib' | 'cat'; onBack: () => void }) {
+  const me = useProfile();
   const v1 = id === 'switch';
   const self = isSelfInstall(id);
   const c = CONSOLES.find(x => x.id === id)!;
@@ -226,7 +228,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
                 <div className="hd">
                   <Ic n={PAGES[st.page as keyof typeof PAGES][1]} />
                   <span>{PAGES[st.page as keyof typeof PAGES][0]}</span>
-                  <span className="sp" /><div className="av">G</div>
+                  <span className="sp" /><div className="av" title={me.name}>{me.initial}</div>
                 </div>
                 <nav className="side">
                   <div className="side-in" style={{ transform: `translateY(-${Math.max(0, st.si - 6) * 92}px)` }}>
@@ -261,13 +263,14 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
 function Home({ v1, row, st, feedCount, updCount, newCount, onTile, onDock, hints }: {
   v1: boolean; row: HubGame[]; st: St; feedCount: number; updCount: number; newCount: number; onTile: (i: number) => void; onDock: (j: number) => void; hints: ReactNode;
 }) {
+  const me = useProfile();
   const clock = useClock();
   const P = v1 ? 392 : 394, X0 = v1 ? 104 : 150, n = row.length, inDock = st.zone === 'dock', i = st.idx;
   const shift = Math.max(0, i - 2) * P, x = X0 + i * P - shift, g = row[i];
   return (
     <>
       <div className="top">
-        <div className="av">G</div>
+        <div className="av" title={me.name}>{me.initial}</div>
         <span className="brand">Cartucho<small>{v1 ? 'Nintendo Switch' : 'Nintendo Switch 2'}</small></span>
         <div className="sp" />
         {feedCount > 0 && <span className="radar"><i />{plural(feedCount, 'novidade', 'novidades')}</span>}
@@ -299,12 +302,13 @@ function Home({ v1, row, st, feedCount, updCount, newCount, onTile, onDock, hint
 }
 
 function Tile({ g, on, first, onClick }: { g: HubGame; on: boolean; first: boolean; onClick: () => void }) {
+  const { initial } = useProfile();
   const p = useGameProgress(g);
   return (
     <button className={`tile ${g.installed && !g.installed.missing ? '' : 'off'} ${on ? 'on' : ''}`} onClick={onClick} aria-label={g.title}>
       <Art g={g} v="square" />
       {!g.installed && !p && <span className="dlb"><Ic n="dl" /></span>}
-      {first && g.installed?.lastPlayed && !g.installed.running && <span className="cont"><b>G</b>Continuar</span>}
+      {first && g.installed?.lastPlayed && !g.installed.running && <span className="cont"><b>{initial}</b>Continuar</span>}
       {g.installed?.running && <span className="cont run"><b>▶</b>Jogando</span>}
       {p && !p.error && <span className="tprog"><i style={{ width: `${Math.max(4, p.pct * 100)}%` }} /></span>}
     </button>

@@ -1,3 +1,4 @@
+import { useProfile } from '../lib/profile';
 import { useRef, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CONSOLE_NAME } from '@shared/consoles';
@@ -24,7 +25,6 @@ function Shell({ title, onClose, children, initial }: { title: string; onClose: 
   );
 }
 
-/** Radar: novidades do Recompendium desde a última olhada. */
 export function RadarOverlay({ onClose, onOpenConsole }: { onClose: () => void; onOpenConsole: (c: ConsoleId) => void }) {
   const trpc = useTRPC(), qc = useQueryClient();
   const radar = useQuery(trpc.catalog.radar.queryOptions());
@@ -51,8 +51,8 @@ export function RadarOverlay({ onClose, onOpenConsole }: { onClose: () => void; 
   );
 }
 
-/** Perfil: conquistas (e, na próxima etapa, tempo de jogo). */
 export function MeOverlay({ onClose }: { onClose: () => void }) {
+  const me = useProfile();
   const trpc = useTRPC();
   const summary = useQuery(trpc.library.summary.queryOptions());
   const recent = useQuery(trpc.achievements.recent.queryOptions({ limit: 8 }));
@@ -60,7 +60,7 @@ export function MeOverlay({ onClose }: { onClose: () => void }) {
   const a = summary.data?.achievements, st = stats.data;
   const week = st ? st.days.slice(7).reduce((x, y) => x + y, 0) : 0;
   return (
-    <Shell title="GORIS" onClose={onClose}>
+    <Shell title={me.name.toUpperCase()} onClose={onClose}>
       <div className="hm-big glow">{fmtPlay(st?.totalMs ?? 0)}<small>{fmtPlay(week * 3600_000)} nos últimos 7 dias · {plural(summary.data?.installed ?? 0, 'jogo', 'jogos')} na biblioteca</small></div>
       {st && <Bars days={st.days.slice(7)} />}
       <div className="hm-sub">CONQUISTAS · {a?.unlocked ?? 0} de {a?.total ?? 0}</div>

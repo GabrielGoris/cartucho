@@ -1,4 +1,6 @@
 import { useRef, type ReactNode } from 'react';
+import { SearchBox } from '../components/SearchBox';
+import { AVATARS, useProfile } from '../lib/profile';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSubscription } from '@trpc/tanstack-react-query';
 import { useState } from 'react';
@@ -15,6 +17,9 @@ type Row =
   | { k: keyof S; t: string; d: string; kind: 'pick'; opts: [string, string][] };
 
 const SECTIONS: [string, Row[]][] = [
+  ['PERFIL', [
+    { k: 'avatar', t: 'Cor do avatar', d: 'A bolinha com a sua inicial, no topo e nos consoles.', kind: 'pick', opts: AVATARS },
+  ]],
   ['VISUAL', [
     { k: 'pal', t: 'Paleta', d: 'Cores do Cartucho e do palco.', kind: 'pick', opts: PALETTES.map(p => [p.id, p.n]) },
     { k: 'crtLvl', t: 'Filtro CRT', d: 'Linhas e cantos escuros de TV antiga. 0 desliga.', kind: 'lvl', step: 10 },
@@ -48,6 +53,19 @@ export function Settings({ onClose, onPickConsoles }: { onClose: () => void; onP
   useSubscription(trpc.art.onStatus.subscriptionOptions(undefined, { onData: d => setArtStatus(d) }));
   const artRefresh = useMutation(trpc.art.refresh.mutationOptions());
   const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => qc.setQueryData(trpc.settings.portsDir.queryKey(), d) }));
+  const me = useProfile();
+  const nameRef = useRef<HTMLInputElement>(null);
+  const win = useQuery(trpc.win.state.queryOptions());
+  useSubscription(trpc.win.onState.subscriptionOptions(undefined, { onData: d => qc.setQueryData(trpc.win.state.queryKey(), d) }));
+  const toggleFs = useMutation(trpc.win.toggleFullScreen.mutationOptions());
+  const bg = useQuery(trpc.background.get.queryOptions());
+  const setBg = useMutation(trpc.background.set.mutationOptions({ onSuccess: d => qc.setQueryData(trpc.background.get.queryKey(), d) }));
+  const bgRow = (k: 'tray' | 'track' | 'autostart', t: string, d: string) => (
+    <button key={k} className="st-r" data-hf data-k={k} onClick={() => { sfx.play('move'); setBg.mutate({ [k]: !bg.data?.[k] }); }}>
+      <span><span className="t">{t}</span><span className="d">{d}</span></span>
+      <span className="c"><span className={`st-sw ${bg.data?.[k] ? 'f' : ''}`}><i /></span></span>
+    </button>
+  );
 
   const change = (r: Row, dir: 1 | -1) => {
     initAudio();
@@ -62,7 +80,13 @@ export function Settings({ onClose, onPickConsoles }: { onClose: () => void; onP
     active: true,
     onKey: (k: Key) => {
       if (k === 'Escape') { sfx.play('back'); onClose(); return true; }
-      if (k === 'ArrowLeft' || k === 'ArrowRight') { const r = rowOf(root.current?.querySelector('[data-on]') ?? null); if (r) change(r, k === 'ArrowRight' ? 1 : -1); return true; }
+      if (k === 'ArrowLeft' || k === 'ArrowRight') {
+        const el = root.current?.querySelector<HTMLElement>('[data-on]') ?? null;
+        const r = rowOf(el); if (r) { change(r, k === 'ArrowRight' ? 1 : -1); return true; }
+        const bk = el?.dataset.k as 'tray' | 'track' | 'autostart' | 'fs' | undefined;
+        if (bk === 'fs') { toggleFs.mutate(); return true; }
+        if (bk && bg.data) { sfx.play('move'); setBg.mutate({ [bk]: !bg.data[bk] }); return true; }
+      }
     },
   });
 
@@ -83,6 +107,13 @@ export function Settings({ onClose, onPickConsoles }: { onClose: () => void; onP
           {SECTIONS.map(([sec, rows]) => (
             <div key={sec}>
               <div className="st-sec">{sec}</div>
+              {sec === 'PERFIL' && (
+                <button className="st-r" data-hf onClick={() => nameRef.current?.focus()}>
+                  <span><span className="t">Seu nome</span><span className="d">Aparece no perfil e nos consoles. Em branco, o Cartucho usa o nome do Windows.</span></span>
+                  <span className="c"><span className="st-av" style={{ background: me.color }}>{me.initial}</span>
+                    <SearchBox ref={nameRef} value={s.name} onChange={v => setSettings({ name: v.slice(0, 24) })} placeholder={me.suggested || 'Jogador'} nav={false} className="st-name" /></span>
+                </button>
+              )}
               {rows.map(r => (
                 <button key={r.k} className="st-r" data-hf data-k={r.k} onClick={() => change(r, 1)}>
                   <span><span className="t">{r.t}</span>{r.d && <span className="d">{r.d}</span>}</span>
@@ -91,6 +122,17 @@ export function Settings({ onClose, onPickConsoles }: { onClose: () => void; onP
               ))}
             </div>
           ))}
+          <div className="st-sec">JANELA</div>
+          <button className="st-r" data-hf data-k="fs" onClick={() => toggleFs.mutate()}>
+            <span><span className="t">Tela cheia</span><span className="d">Também com Alt+Enter ou F11. O Cartucho lembra do tamanho e da posição da janela.</span></span>
+            <span className="c"><span className={`st-sw ${win.data?.fullscreen ? 'f' : ''}`}><i /></span></span>
+          </button>
+          {bg.data && <>
+            <div className="st-sec">SEGUNDO PLANO</div>
+            {bgRow('track', 'Contar jogos abertos fora do Cartucho', 'Com o Cartucho aberto (ou na bandeja), o tempo conta mesmo se você abrir o jogo pelo .exe ou por um atalho.')}
+            {bgRow('tray', 'Fechar para a bandeja', 'O X esconde o Cartucho perto do relógio em vez de fechar. Para sair de vez, use Sair no ícone da bandeja.')}
+            {bgRow('autostart', 'Abrir com o Windows', 'Liga escondido na bandeja quando o computador inicia, pronto para contar o tempo.')}
+          </>}
           <div className="st-sec">PALCO</div>
           <button className="st-r" data-hf onClick={() => { sfx.play('ok'); onPickConsoles(); }}>
             <span><span className="t">Consoles no palco</span><span className="d">Quais aparecem no palco. Os que ficam de fora vão para Outros.</span></span>
@@ -111,7 +153,7 @@ export function Settings({ onClose, onPickConsoles }: { onClose: () => void; onP
             Jeffrey fan 2000 (GameCube, CC BY), elouisetrewartha (Wii, CC BY-NC), Smoggybeard (Switch, CC BY-NC-SA), NAIT Studio (Switch 2, CC BY),
             ecjhr0awipso (PS1, CC BY), ATEZ (PS2, CGTrader), Ilya Ostrovsky (PSP, CC BY), Vasily (PS3, CC BY), Laxity (PS4, CC BY), DatSketch (PS5, CC BY-ND),
             A.stark (NES, CC BY), danny_p3d (Game Boy, CC BY-NC), Cianon (DS Lite, CC BY), rubikreef (Xbox, CC BY), synthetic worlds (Mega Drive, CC BY),
-            Rob Bryant, Jr (Xbox 360, CC BY), MadeByYeshe (PC, CC BY), Daniel Brück (fliperama, CC BY). Instalação e atualização adaptadas do Harbour (MIT-0). Atalhos: S configurações, C botões, M som, P paleta, F11 tela cheia.
+            Rob Bryant, Jr (Xbox 360, CC BY), MadeByYeshe (PC, CC BY), Daniel Brück (fliperama, CC BY). Instalação e atualização adaptadas do Harbour (MIT-0). Atalhos: S configurações, C botões, M som, P paleta, F11 ou Alt+Enter tela cheia.
           </p>
         </div>
       </div>

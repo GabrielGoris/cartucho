@@ -1,3 +1,4 @@
+import { useProfile } from '../lib/profile';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConsoleId } from '@shared/types';
@@ -300,6 +301,7 @@ function Home({ c, g, row, st, self, clock, feedCount, catCount, primary, feed, 
   feed: { kind: 'new' | 'upd' | 'up'; detail: string; at: number } | null;
   onTile: (i: number) => void; onTop: (j: number) => void; onAct: (j: number) => void; onCard: (j: number) => void; hints: ReactNode; menu: ReactNode;
 }) {
+  const me = useProfile();
   const z = st.zone, i = st.idx, n = row.length;
   const art = useArt(g?.console, g?.title ?? '', g?.platformName);
   const bg = g ? art.fanart ?? art.cover ?? g.coverUrl : null;
@@ -311,7 +313,7 @@ function Home({ c, g, row, st, self, clock, feedCount, catCount, primary, feed, 
         {TOP.map(([k, l], j) => {
           const on = z === 'top' && st.di === j;
           if (k === 'games' || k === 'cat') return <button key={k} className={`p5-tab ${k === 'games' ? 'cur' : ''} ${on ? 'on' : ''}`} onClick={() => onTop(j)}>{l}</button>;
-          if (k === 'ach') return <button key={k} className={`p5-av ${on ? 'on' : ''}`} aria-label="Conquistas" onClick={() => onTop(j)}>G</button>;
+          if (k === 'ach') return <button key={k} className={`p5-av ${on ? 'on' : ''}`} aria-label="Conquistas" onClick={() => onTop(j)}>{me.initial}</button>;
           return <button key={k} className={`i ${on ? 'on' : ''}`} aria-label={k} onClick={() => onTop(j)}><Ic n={l as IconName} />{k === 'news' && feedCount > 0 && <span className="n">{feedCount}</span>}</button>;
         }).reduce<ReactNode[]>((a, x, j) => (j === 2 ? [...a, <span key="sp" className="sp" />, x] : [...a, x]), [])}
         <span className="p5-brand">Cartucho</span>

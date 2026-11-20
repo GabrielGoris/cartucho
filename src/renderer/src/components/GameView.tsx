@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { useTRPC } from '../trpc';
 import { SELF_INSTALL_NOTE, STATUS_LABEL } from '@shared/consoles';
 import { Glyph, useKeys, type Key } from '../lib/input';
 import { sfx } from '../lib/sfx';
@@ -11,7 +13,7 @@ import type { DOpt } from './Discover';
 
 type Zone = 'acts' | 'shots' | 'text';
 
-export function GameView({ theme, g, opts, run, onBack, self, logo = true, extra }: {
+export function GameView({ theme, g, opts: base, run, onBack, self, logo = true, extra }: {
   theme: string; g: HubGame; opts: DOpt[]; run: (k: string, g: HubGame) => void; onBack: () => void; self: boolean; logo?: boolean; extra?: ReactNode;
 }) {
   const art = useArt(g.console, g.title, g.platformName);
@@ -20,13 +22,17 @@ export function GameView({ theme, g, opts, run, onBack, self, logo = true, extra
   const needs = useTranslated(g.catalog?.needs);
   const p = useGameProgress(g);
   const inst = g.installed;
+  const trpc = useTRPC();
+  const [note, setNote] = useState<string | null>(null);
+  const lnk = useMutation(trpc.background.shortcut.mutationOptions({ onSuccess: () => setNote('Atalho criado na Área de Trabalho. Ele abre o jogo pelo Cartucho e conta o tempo.'), onError: e => setNote(e.message) }));
+  const opts: DOpt[] = inst && !inst.missing && inst.exe && navigator.userAgent.includes('Windows') ? [...base, { k: '__lnk', l: 'Atalho na Área de Trabalho' }] : base;
   const [zone, setZone] = useState<Zone>('acts');
   const [ai, setAi] = useState(0);
   const [si, setSi] = useState(0);
   const [view, setView] = useState<number | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
   const strip = useRef<HTMLDivElement>(null);
-  useEffect(() => { setZone('acts'); setAi(0); setSi(0); setView(null); scroll.current?.scrollTo({ top: 0 }); }, [g.key]);
+  useEffect(() => { setNote(null); setZone('acts'); setAi(0); setSi(0); setView(null); scroll.current?.scrollTo({ top: 0 }); }, [g.key]);
   useEffect(() => { if (ai >= opts.length && opts.length) setAi(opts.length - 1); }, [opts.length]);
 
   useEffect(() => {
@@ -38,7 +44,7 @@ export function GameView({ theme, g, opts, run, onBack, self, logo = true, extra
   useEffect(() => { strip.current?.children[si]?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); }, [si]);
 
   const mv = (f: () => void) => { sfx.play('move'); f(); };
-  const act = (j: number) => { const o = opts[j]; if (o) run(o.k, g); };
+  const act = (j: number) => { const o = opts[j]; if (!o) return; if (o.k === '__lnk') { sfx.play('ok'); lnk.mutate({ id: inst!.id }); } else run(o.k, g); };
 
   useKeys((k: Key) => {
     const R = k === 'ArrowRight', L = k === 'ArrowLeft', U = k === 'ArrowUp', D = k === 'ArrowDown';
@@ -94,6 +100,7 @@ export function GameView({ theme, g, opts, run, onBack, self, logo = true, extra
             </div>
             {inst?.missing && <p className="gv-warn">A pasta do jogo não foi encontrada em {inst.installDir}.</p>}
             {p && <div className="gv-prog"><span>{p.error ?? p.stage}</span>{!p.error && p.pct > 0 && p.pct < 1 && <i style={{ width: `${Math.round(p.pct * 100)}%` }} />}</div>}
+            {note && <p className="gv-note">{note}</p>}
             <div className="gv-acts">{opts.map((o, j) => (
               <button key={o.k + j} className={`${j === 0 ? 'pri' : ''} ${zone === 'acts' && ai === j ? 'on' : ''}`}
                 onClick={() => { if (zone === 'acts' && ai === j) act(j); else mv(() => { setZone('acts'); setAi(j); }); }}>

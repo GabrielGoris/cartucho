@@ -1,12 +1,7 @@
-/**
- * Jogar e contar o tempo, como na Steam: cada jogo aberto pelo Cartucho é acompanhado até o processo
- * fechar, e cada sessão fica guardada (início e fim). Atalhos (.lnk, .url, .bat) abrem pelo sistema e
- * não têm processo para acompanhar: contam só como "jogado agora".
- */
-import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
+import { type ChildProcess, execFile, spawn, spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { existsSync } from 'node:fs';
-import { basename, dirname } from 'node:path';
+import { basename, dirname, normalize } from 'node:path';
 import type { PlayEvent, PlayStats } from '@shared/types';
 import type { DB } from './db';
 import type { AchievementService } from './achievements/service';
@@ -14,15 +9,16 @@ import type { AchievementService } from './achievements/service';
 export class Player {
   readonly events = new EventEmitter<{ play: [PlayEvent] }>();
   private running = new Map<string, { child: ChildProcess; session: number; start: number }>();
+  private external = new Map<string, { pid: number; session: number; start: number }>();
+  private scanTimer: NodeJS.Timeout | null = null;
+  private scanning = false;
 
   constructor(private db: DB, private games: AchievementService, private openPath: (p: string) => Promise<string>, private onExit: () => void = () => {}) {
-    // Sessões que ficaram abertas (o Cartucho fechou com o jogo rodando): fecham no último sinal de vida conhecido.
     db.prepare('UPDATE play_session SET ended_at = started_at WHERE ended_at IS NULL').run();
   }
 
-  isRunning = (id: string) => this.running.has(id);
+  isRunning = (id: string) => this.running.has(id) || this.external.has(id);
 
-  /** Enquanto a Steam está aberta ela cuida do Steam Controller; o SDL dos jogos não deve disputar com ela. */
   private env() {
     if (process.platform !== 'win32') return process.env;
     const r = spawnSync('tasklist', ['/FI', 'IMAGENAME eq steam.exe', '/NH'], { windowsHide: true, encoding: 'utf8' });
@@ -66,30 +62,76 @@ export class Player {
     this.running.delete(gameId);
     const end = Date.now();
     this.db.prepare('UPDATE play_session SET ended_at = ? WHERE id = ?').run(end, r.session);
-    let title = ''; try { title = this.games.getGame(gameId).title; } catch { /* removido */ }
+    let title = ''; try { title = this.games.getGame(gameId).title; } catch {  }
     this.events.emit('play', { gameId, title, running: false, sessionMs: end - r.start });
     this.onExit();
   }
 
-  /** Fecha o jogo (e o que ele abriu). */
+  watchExternal(on: boolean) {
+    if (process.platform !== 'win32') return;
+    if (on && !this.scanTimer) { this.scanTimer = setInterval(() => void this.scan(), 5000); void this.scan(); }
+    else if (!on && this.scanTimer) { clearInterval(this.scanTimer); this.scanTimer = null; this.endExternal(); }
+  }
+
+  private async scan() {
+    if (this.scanning) return;
+    this.scanning = true;
+    try {
+      const procs = await listProcesses();
+      const seen = new Set<string>();
+      for (const g of this.games.listGames()) {
+        if (!g.exe || !/\.exe$/i.test(g.exe) || this.running.has(g.id)) continue;
+        const pids = procs.get(basename(g.exe).toLowerCase());
+        if (!pids?.length) continue;
+        const cur = this.external.get(g.id);
+        if (cur && pids.includes(cur.pid)) { seen.add(g.id); continue; }
+        const paths = await processPaths(pids);
+        const want = normalize(g.exe).toLowerCase();
+        const pid = pids.find(p => paths.get(p) === want);
+        if (pid == null) continue;
+        seen.add(g.id);
+        if (cur) { cur.pid = pid; continue; }
+        const start = Date.now();
+        const session = Number(this.db.prepare('INSERT INTO play_session (game_id, started_at) VALUES (?, ?)').run(g.id, start).lastInsertRowid);
+        this.external.set(g.id, { pid, session, start });
+        this.events.emit('play', { gameId: g.id, title: g.title, running: true });
+      }
+      for (const id of [...this.external.keys()]) if (!seen.has(id)) this.endExternal(id);
+    } catch { } finally { this.scanning = false; }
+  }
+
+  private endExternal(only?: string) {
+    const end = Date.now();
+    for (const [id, r] of [...this.external]) {
+      if (only && id !== only) continue;
+      this.external.delete(id);
+      this.db.prepare('UPDATE play_session SET ended_at = ? WHERE id = ?').run(end, r.session);
+      let title = ''; try { title = this.games.getGame(id).title; } catch { }
+      this.events.emit('play', { gameId: id, title, running: false, sessionMs: end - r.start });
+    }
+  }
+
   quit(gameId: string) {
+    const ext = this.external.get(gameId);
+    if (ext) { try { spawn('taskkill', ['/pid', String(ext.pid), '/t', '/f'], { windowsHide: true, stdio: 'ignore' }); } catch { } return true; }
     const r = this.running.get(gameId);
     if (!r?.child.pid) return false;
     try {
       if (process.platform === 'win32') spawn('taskkill', ['/pid', String(r.child.pid), '/t', '/f'], { windowsHide: true, stdio: 'ignore' });
       else process.kill(-r.child.pid, 'SIGTERM');
-    } catch { try { r.child.kill(); } catch { /* já fechou */ } }
+    } catch { try { r.child.kill(); } catch {  } }
     return true;
   }
 
-  /** O Cartucho vai fechar: as sessões em andamento terminam agora (o jogo continua aberto). */
   stop() {
     const now = Date.now();
     for (const r of this.running.values()) this.db.prepare('UPDATE play_session SET ended_at = ? WHERE id = ?').run(now, r.session);
     this.running.clear();
+    if (this.scanTimer) { clearInterval(this.scanTimer); this.scanTimer = null; }
+    for (const r of this.external.values()) this.db.prepare('UPDATE play_session SET ended_at = ? WHERE id = ?').run(now, r.session);
+    this.external.clear();
   }
 
-  /** Tempo total, sessões e horas por dia nos últimos 14 dias (de um jogo, ou de todos). */
   stats(gameId?: string): PlayStats {
     const where = gameId ? 'WHERE game_id = ?' : '', args = gameId ? [gameId] : [];
     const sum = this.db.prepare(`SELECT COALESCE(SUM(COALESCE(ended_at, ?) - started_at), 0) ms, COUNT(*) n, MAX(started_at) last FROM play_session ${where}`)
@@ -100,7 +142,6 @@ export class Player {
     const rows = this.db.prepare(`SELECT started_at s, COALESCE(ended_at, ?) e FROM play_session ${where ? where + ' AND' : 'WHERE'} COALESCE(ended_at, ?) > ?`)
       .all(Date.now(), ...args, Date.now(), from) as { s: number; e: number }[];
     for (const { s, e } of rows) {
-      // reparte a sessão pelos dias que ela atravessa
       for (let d = 0; d < 14; d++) {
         const a = from + d * 86400_000, b = a + 86400_000, ov = Math.min(e, b) - Math.max(s, a);
         if (ov > 0) days[d]! += ov / 3600_000;
@@ -108,4 +149,36 @@ export class Player {
     }
     return { totalMs: sum.ms, sessions: sum.n, lastPlayed: sum.last, days };
   }
+}
+
+const run = (cmd: string, args: string[]) => new Promise<string>((ok, fail) => {
+  execFile(cmd, args, { windowsHide: true, encoding: 'utf8', timeout: 8000, maxBuffer: 8 * 1024 * 1024 }, (err, out) => (err ? fail(err) : ok(out)));
+});
+
+export function parseTasklist(csv: string) {
+  const m = new Map<string, number[]>();
+  for (const line of csv.split(/\r?\n/)) {
+    const f = line.match(/^"([^"]*)","(\d+)"/);
+    if (!f) continue;
+    const k = f[1]!.toLowerCase();
+    m.set(k, [...(m.get(k) ?? []), Number(f[2])]);
+  }
+  return m;
+}
+
+async function listProcesses() {
+  return parseTasklist(await run('tasklist', ['/fo', 'csv', '/nh']));
+}
+
+async function processPaths(pids: number[]) {
+  const m = new Map<number, string>();
+  const ids = pids.filter(p => Number.isInteger(p) && p > 0).slice(0, 32);
+  if (!ids.length) return m;
+  const out = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Get-Process -Id ${ids.join(',')} -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Id)|$($_.Path)" }`]);
+  for (const line of out.split(/\r?\n/)) {
+    const i = line.indexOf('|'); if (i < 0) continue;
+    const path = line.slice(i + 1).trim();
+    if (path) m.set(Number(line.slice(0, i)), normalize(path).toLowerCase());
+  }
+  return m;
 }

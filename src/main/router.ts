@@ -1,6 +1,6 @@
 import { EventEmitter, on } from 'node:events';
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 import { dirname, extname, join, parse } from 'node:path';
 import { BrowserWindow, dialog, shell } from 'electron';
 import { initTRPC } from '@trpc/server';
@@ -17,8 +17,10 @@ import { parseRepo } from './ports/github';
 import type { Player } from './play';
 import type { Artwork } from './artwork/service';
 import type { Translator } from './translate';
+import type { WinCtl, WinState } from './window';
+import type { Background } from './background';
 
-export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; tr: Translator; defaultPortsDir: string }
+export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; tr: Translator; defaultPortsDir: string; win?: () => WinCtl | null; bg?: () => Background | null }
 export const portsDirOf = (d: Pick<RouterDeps, 'db' | 'defaultPortsDir'>) => kvGet(d.db, 'portsDir') || d.defaultPortsDir;
 
 export interface PickRequest { id: number; title: string; kind: 'dir' | 'exe'; start: string }
@@ -81,6 +83,33 @@ export function createRouter(deps: RouterDeps) {
       refresh: t.procedure.mutation(() => art.refresh()),
       onChanged: t.procedure.subscription(async function* ({ signal }) { for await (const _ of on(art.events, 'changed', { signal })) yield Date.now(); }),
       onStatus: t.procedure.subscription(async function* ({ signal }) { for await (const [s] of on(art.events, 'status', { signal })) yield s as string | null; }),
+    }),
+
+    win: t.router({
+      state: t.procedure.query(() => deps.win?.()?.state() ?? { fullscreen: false, maximized: false }),
+      onState: t.procedure.subscription(async function* ({ signal }) {
+        const c = deps.win?.(); if (!c) return;
+        for await (const [s] of on(c.events, 'state', { signal })) yield s as WinState;
+      }),
+      setFullScreen: t.procedure.input(z.object({ on: z.boolean() })).mutation(({ input }) => { deps.win?.()?.setFullScreen(input.on); }),
+      toggleFullScreen: t.procedure.mutation(() => { deps.win?.()?.toggle(); }),
+      overlay: t.procedure.input(z.object({ color: z.string().regex(/^#[0-9a-f]{6}$/i), symbol: z.string().regex(/^#[0-9a-f]{6}$/i) })).mutation(({ input }) => { deps.win?.()?.setOverlay(input.color, input.symbol); }),
+    }),
+
+    system: t.router({
+      user: t.procedure.query(() => { try { return userInfo().username; } catch { return ''; } }),
+    }),
+
+    background: t.router({
+      get: t.procedure.query(() => deps.bg?.()?.prefs() ?? { tray: false, track: false, autostart: false }),
+      set: t.procedure.input(z.object({ tray: z.boolean().optional(), track: z.boolean().optional(), autostart: z.boolean().optional() })).mutation(({ input }) => {
+        const b = deps.bg?.(); if (!b) throw new Error('Indisponível.');
+        return b.set(input);
+      }),
+      shortcut: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
+        const b = deps.bg?.(); if (!b) throw new Error('Indisponível.');
+        return b.shortcut(input.id);
+      }),
     }),
 
     i18n: t.router({

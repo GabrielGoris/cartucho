@@ -1,3 +1,4 @@
+import { useProfile } from '../lib/profile';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConsoleId, InstalledGame } from '@shared/types';
@@ -28,6 +29,7 @@ function Clock() {
 }
 
 export function Select({ active, list, page, setPage, sel, setSel, onEnterConsole, onSettings }: Props) {
+  const me = useProfile();
   const trpc = useTRPC(), qc = useQueryClient();
   const summary = useQuery(trpc.library.summary.queryOptions());
   const games = useQuery(trpc.games.list.queryOptions());
@@ -94,7 +96,7 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
         <div className="top-right">
           <button className={`hm-pill ${unseen ? 'has' : ''}`} data-hf data-cap="Radar" onClick={() => { sfx.play('ok'); setOv('radar'); }}><i />{unseen ? plural(unseen, 'novidade', 'novidades') : 'radar'}</button>
           <button className="hm-set" data-hf aria-label="Configurações" title="Configurações (S)" onClick={onSettings}>⚙</button>
-          <button className="hm-me" data-hf aria-label="Perfil" onClick={() => { sfx.play('ok'); setOv('me'); }}>G</button>
+          <button className="hm-me" data-hf aria-label={`Perfil de ${me.name}`} title={me.name} style={{ background: me.color }} onClick={() => { sfx.play('ok'); setOv('me'); }}>{me.initial}</button>
           <Clock />
         </div>
       </header>

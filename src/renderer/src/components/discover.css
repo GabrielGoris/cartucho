@@ -175,3 +175,4 @@
 .dsc.square .dsc-grid { grid-auto-rows: 300px; }
 .dsc.square .dsc-c .cv-w { height: 220px; }
 .dsc.square .dsc-d .cv-w { width: 300px; height: 300px; }
+.gv-note { margin: 0; font-size: 21px; color: var(--d-acc); }
