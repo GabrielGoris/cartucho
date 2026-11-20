@@ -81,12 +81,14 @@ export function createRouter(deps: RouterDeps) {
 
     library: t.router({
       summary: t.procedure.query((): LibrarySummary => {
-        const pc = perConsole(db), rc = radarCounts(db);
+        const pc = perConsole(db), rc = radarCounts(db), games = ach.listGames().filter(g => !g.missing);
+        for (const x of Object.values(pc)) x.installed = 0;
+        for (const g of games) (pc[g.console] ??= { recomps: 0, installed: 0, fresh: 0, platforms: 0 }).installed++;
         return {
           catalogTotal: Object.values(pc).reduce((s, x) => s + x.recomps, 0),
           platforms: platformCount(db),
           perConsole: pc,
-          installed: ach.listGames().length,
+          installed: games.length,
           playMs: player.stats().totalMs,
           radar: { unseen: rc.unseen ?? 0, fresh: rc.fresh ?? 0, updates: rc.updates ?? 0 },
           achievements: ach.totals(),
@@ -119,6 +121,10 @@ export function createRouter(deps: RouterDeps) {
       addFromDialog: t.procedure.input(z.object({ catalogId: z.string().optional() }).optional()).mutation(async ({ input }) => {
         const dir = await pick(input?.catalogId ? 'Escolha a pasta onde você instalou o jogo' : 'Escolha a pasta do jogo', ['openDirectory']);
         return dir ? ach.addGame(dir, { catalogId: input?.catalogId ?? null }) : null;
+      }),
+      relink: t.procedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+        const dir = await pick(`Onde está ${ach.getGame(input.id).title} agora?`, ['openDirectory']);
+        return dir ? ach.relocate(input.id, dir) : null;
       }),
       remove: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => ach.removeGame(input.id)),
       openFolder: t.procedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {

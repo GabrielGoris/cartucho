@@ -1,9 +1,3 @@
-/**
- * Instalar, atualizar e desinstalar recomps a partir do GitHub.
- *
- * Cada jogo vai para a sua própria pasta dentro da pasta de jogos do Cartucho, com o nome do projeto
- * ("UnleashedRecomp"). Arquivos que já existirem ali são seus (de uma instalação anterior) e não são substituídos.
- */
 import { EventEmitter } from 'node:events';
 import { existsSync, mkdirSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -16,7 +10,7 @@ import type { AchievementService } from '../achievements/service';
 import { type GitHub, type Release, githubToken, parseRepo } from './github';
 import { NotReadyToRun, fetchRelease, filesIn, findGameExe, guessProgram, installInto, isRunning, manifestOf, placeRelease, removeInstalled, unpackRelease, type Progress } from './files';
 
-const CHECK_MS = 3 * 3600_000;   // sem conta no GitHub são 60 consultas por hora: guardamos a resposta por 3 h
+const CHECK_MS = 3 * 3600_000;
 
 export class Ports {
   readonly events = new EventEmitter<{ progress: [InstallProgress] }>();
@@ -28,18 +22,17 @@ export class Ports {
   private toInstalled = (rel: Release, prev?: InstalledRelease | null): InstalledRelease =>
     ({ tag: rel.tag, assetId: rel.assetId, date: rel.publishedAt, uploader: rel.uploader ?? prev?.uploader ?? null });
 
-  /** Instala o projeto de uma entrada do catálogo. A chave de progresso é o id do catálogo. */
   async installFromCatalog(catalogId: string): Promise<InstalledGame> {
     const cat = this.db.prepare('SELECT id, title, console, repo FROM catalog_game WHERE id = ?').get(catalogId) as { id: string; title: string; console: string; repo: string | null } | undefined;
     if (!cat) throw new Error('Esse jogo não está no catálogo.');
     if (!cat.repo) throw new Error('O catálogo não diz em qual projeto do GitHub este jogo está.');
     if (isSelfInstall(cat.console)) throw new Error(SELF_INSTALL_NOTE);
-    const have = this.db.prepare('SELECT id FROM installed_game WHERE catalog_id = ? OR lower(source_repo) = lower(?)').get(catalogId, cat.repo) as { id: string } | undefined;
-    if (have) throw new Error('Este jogo já está na sua biblioteca.');
-    return this.install(parseRepo(cat.repo), { key: catalogId, catalogId, title: cat.title, console: cat.console });
+    const have = this.db.prepare('SELECT id, install_dir FROM installed_game WHERE catalog_id = ? OR lower(source_repo) = lower(?)').get(catalogId, cat.repo) as { id: string; install_dir: string } | undefined;
+    if (have && existsSync(have.install_dir)) throw new Error('Este jogo já está na sua biblioteca.');
+    return this.install(parseRepo(cat.repo), { key: catalogId, catalogId, title: cat.title, console: cat.console, replace: have?.id });
   }
 
-  async install(repo: string, opts: { key?: string; catalogId?: string; title?: string; console?: string } = {}): Promise<InstalledGame> {
+  async install(repo: string, opts: { key?: string; catalogId?: string; title?: string; console?: string; replace?: string } = {}): Promise<InstalledGame> {
     const key = opts.key ?? repo;
     if (this.busy.has(key)) throw new Error('Já está instalando.');
     this.busy.add(key);
@@ -59,9 +52,8 @@ export class Ports {
       const src = await unpackRelease(rel, archive, tmp, send);
       send({ stage: 'Copiando para a pasta de jogos…', pct: 1 });
 
-      // Pasta própria com o nome do projeto. Se já foi instalado e removido antes, a mesma pasta de novo (com seus saves).
       const base = this.portsDir(); mkdirSync(base, { recursive: true });
-      const used = (f: string) => !!this.db.prepare('SELECT 1 FROM installed_game WHERE lower(install_dir) = lower(?)').get(resolve(f));
+      const used = (f: string) => !!this.db.prepare('SELECT 1 FROM installed_game WHERE lower(install_dir) = lower(?) AND id != ?').get(resolve(f), opts.replace ?? '');
       const name = repo.split('/')[1]!.replace(/[<>:"|?*]/g, '');
       let folder = join(base, name);
       for (let n = 2; used(folder); n++) folder = join(base, `${name} ${n}`);
@@ -70,10 +62,12 @@ export class Ports {
       const exe = findGameExe(folder) ?? guessProgram(folder, repo);
       if (!exe) { if ((await filesIn(folder)).length === (await filesIn(src)).length) await fsp.rm(folder, { recursive: true, force: true }); throw notReady(); }
 
-      const game = await this.games.addGame(folder, {
-        catalogId: opts.catalogId, title: opts.title, console: opts.console, exe, sourceRepo: repo,
-        release: this.toInstalled(rel), managed: true, manifest: await manifestOf(src),
-      });
+      const game = opts.replace
+        ? this.games.relocate(opts.replace, folder, { exe, release: this.toInstalled(rel), managed: true, manifest: await manifestOf(src) })
+        : await this.games.addGame(folder, {
+          catalogId: opts.catalogId, title: opts.title, console: opts.console, exe, sourceRepo: repo,
+          release: this.toInstalled(rel), managed: true, manifest: await manifestOf(src),
+        });
       kvSet(this.db, `upd.${game.id}`, JSON.stringify({ at: Date.now(), latest: rel }));
       console.log(`[instalar] ${repo} ${rel.tag} (${rel.assetName}, defender: ${scan}) em ${folder}`);
       send({ stage: 'Pronto', pct: 1, done: true });
@@ -96,7 +90,6 @@ export class Ports {
     };
   }
 
-  /** Há versão nova? Guarda a resposta por 3 h para não gastar o limite do GitHub. */
   async checkUpdate(gameId: string, force = false): Promise<UpdateInfo> {
     const g = this.games.getGame(gameId);
     if (!g.sourceRepo) return { repo: null, installed: g.version, latest: null, updateAvailable: null, checkedAt: null };
@@ -111,11 +104,11 @@ export class Ports {
     }
   }
 
-  /** Baixa a versão nova e copia por cima (com cópia de segurança dos arquivos trocados). */
   async update(gameId: string) {
     const g = this.games.getGame(gameId);
     if (isSelfInstall(g.console)) throw new Error('O Cartucho não atualiza recomps deste console: instale a versão nova por cima da pasta do jogo.');
     if (!g.sourceRepo) throw new Error('Este jogo não tem um projeto do GitHub ligado a ele.');
+    if (g.missing) throw new Error('A pasta do jogo não existe mais. Instale de novo ou escolha onde ele está.');
     if (this.busy.has(gameId)) throw new Error('Já está atualizando.');
     if (this.running(gameId) || isRunning(g.exe)) throw new Error('Feche o jogo antes de atualizar.');
     this.busy.add(gameId);
@@ -125,7 +118,6 @@ export class Ports {
       send({ stage: 'Procurando a versão mais nova…', pct: 0 });
       const rel = await this.gh.findRelease(g.sourceRepo);
       const { release: inst, manifest } = this.games.internals(gameId);
-      // Uma atualização só entra se veio da mesma conta da versão instalada: projeto que trocou de dono, ou arquivo de terceiros, para aqui.
       if (inst?.uploader && rel.uploader && inst.uploader.toLowerCase() !== rel.uploader.toLowerCase())
         throw new Error(`A versão ${rel.tag} foi publicada por outra conta (${rel.uploader}; antes era ${inst.uploader}). O Cartucho não instalou: confira a página do projeto.`);
       const exeName = g.exe?.split(/[\\/]/).pop()?.toLowerCase();
@@ -156,7 +148,6 @@ export class Ports {
     }
   }
 
-  /** Só para jogos que o Cartucho instalou: apaga o que veio no download; arquivos seus (saves, mods) ficam. */
   async uninstall(gameId: string) {
     const g = this.games.getGame(gameId);
     if (!g.managed) throw new Error('O Cartucho só desinstala jogos que ele mesmo instalou. Use "Remover da biblioteca" (os arquivos ficam).');

@@ -14,7 +14,7 @@ import { MeOverlay, RadarOverlay } from './Overlays';
 export type Page = 'act' | 'stage';
 interface Props {
   active: boolean;
-  list: StageConsole[];   // consoles à mostra no palco
+  list: StageConsole[];
   page: Page; setPage: (p: Page) => void;
   sel: number; setSel: (i: number | ((prev: number) => number)) => void;
   onEnterConsole: (id: ConsoleId, opts?: { game?: string; tab?: 'lib' | 'cat' }) => void;
@@ -27,7 +27,6 @@ function Clock() {
   return <span className="clock">{t}</span>;
 }
 
-/** Fora dos consoles: topo, Início e o palco. */
 export function Select({ active, list, page, setPage, sel, setSel, onEnterConsole, onSettings }: Props) {
   const trpc = useTRPC(), qc = useQueryClient();
   const summary = useQuery(trpc.library.summary.queryOptions());
@@ -45,7 +44,6 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
   const move = (d: number) => { initAudio(); sfx.play('move'); setSel(prev => prev + d); };
   const openGame = (g: InstalledGame) => onEnterConsole(g.console, { game: g.id });
 
-  // palco: setas trocam de console, Enter liga
   useKeys(k => {
     if (k === 'ArrowLeft' || k === 'LB') move(-1);
     else if (k === 'ArrowRight' || k === 'RB') move(1);
@@ -53,14 +51,12 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
     else if (k === 'Escape' || k === 'Tab') go('act');
   }, active && page === 'stage' && !ov);
 
-  // Início: navegação espacial entre topo e conteúdo
   useSpatialNav(root, {
     active: active && page === 'act' && !ov, initial: '[data-main]',
     onFocus: setCaption,
     onKey: k => { if (k === 'Tab' || k === 'LB' || k === 'RB') { go('stage'); return true; } if (k === 'Escape') return true; },
   });
 
-  // Outros soma os consoles escondidos
   const c = list[sel]!, group = c.id === 'other' ? otherConsoles(s.hidden) : [c.id];
   const pc = group.reduce((t, id) => { const x = summary.data?.perConsole[id]; return x ? { recomps: t.recomps + x.recomps, installed: t.installed + x.installed, fresh: t.fresh + x.fresh, platforms: t.platforms + x.platforms } : t; },
     { recomps: 0, installed: 0, fresh: 0, platforms: 0 });
@@ -82,7 +78,7 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
         </div>
       </header>
 
-      {page === 'act' && <Home games={games.data} summary={summary.data} onOpenGame={openGame} onPlay={g => { initAudio(); sfx.play('ok'); play.mutate({ id: g.id }); }} playError={play.error?.message ?? null} onStage={() => go('stage')} onAddGame={() => add.mutate()} adding={add.isPending} />}
+      {page === 'act' && <Home games={games.data?.filter(g => !g.missing)} summary={summary.data} onOpenGame={openGame} onPlay={g => { initAudio(); if (g.missing) return openGame(g); sfx.play('ok'); play.mutate({ id: g.id }); }} playError={play.error?.message ?? null} onStage={() => go('stage')} onAddGame={() => add.mutate()} adding={add.isPending} />}
 
       {page === 'stage' && (
         <div className="stage-ui">

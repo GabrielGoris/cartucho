@@ -60,6 +60,7 @@ export interface InstalledGame {
   playMs: number;
   lastPlayed: number | null;
   running: boolean;
+  missing: boolean;
 }
 
 export interface InstalledRelease { tag: string; assetId: number; date: string | null; uploader: string | null }

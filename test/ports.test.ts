@@ -1,6 +1,5 @@
-/** Instalar, atualizar e desinstalar com um "GitHub" de mentira num servidor local. */
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,7 +15,6 @@ import { buildZip } from './fixtures';
 const tmp = () => mkdtempSync(join(tmpdir(), 'cartucho-'));
 const sha = (b: Uint8Array) => 'sha256:' + createHash('sha256').update(b).digest('hex');
 
-// estado do servidor: as versões publicadas e os arquivos para baixar
 const files = new Map<string, Uint8Array>();
 let releases: { tag: string; uploader: string; assets: { name: string; zip: Uint8Array; digest?: string }[] }[] = [];
 let server: Server, base = '';
@@ -87,7 +85,6 @@ describe('instalar, atualizar e desinstalar', () => {
     publish('v1', 'autor', { 'MeuRecomp/MeuRecomp.exe': 'exe v1', 'MeuRecomp/data/a.txt': 'a1', 'MeuRecomp/config.ini': 'padrao' });
     const { ach, ports, dir, progress } = setup();
 
-    // espiar dentro do zip remoto
     const names = await createGitHub({ api: base }).remoteZipNames(`${base}/dl/v1/MeuRecomp-windows-x64.zip`);
     expect(names).toContain('MeuRecomp/MeuRecomp.exe');
 
@@ -101,16 +98,13 @@ describe('instalar, atualizar e desinstalar', () => {
 
     expect(await ports.checkUpdate(g.id)).toMatchObject({ installed: 'v1', updateAvailable: false });
 
-    // o usuário mexe na configuração e cria um save
     writeFileSync(join(g.installDir, 'config.ini'), 'minha config');
     writeFileSync(join(g.installDir, 'save.dat'), 'meu save');
 
-    // versão nova publicada por outra conta: barrada
     publish('v2', 'estranho', { 'MeuRecomp/MeuRecomp.exe': 'exe v2', 'MeuRecomp/data/a.txt': 'a2', 'MeuRecomp/config.ini': 'padrao2' });
     expect(await ports.checkUpdate(g.id, true)).toMatchObject({ installed: 'v1', updateAvailable: true, latest: { tag: 'v2' } });
     await expect(ports.update(g.id)).rejects.toThrow(/outra conta/);
 
-    // da mesma conta: entra, mantém a config, guarda cópia de segurança
     releases.pop();
     publish('v3', 'autor', { 'MeuRecomp/MeuRecomp.exe': 'exe v3', 'MeuRecomp/data/a.txt': 'a3', 'MeuRecomp/config.ini': 'padrao3', 'MeuRecomp/data/b.txt': 'novo' });
     const up = await ports.update(g.id);
@@ -120,13 +114,32 @@ describe('instalar, atualizar e desinstalar', () => {
     expect(readFileSync(join(g.installDir, '_cartucho-backup', 'v1', 'MeuRecomp.exe'), 'utf8')).toBe('exe v1');
     expect(ach.getGame(g.id).version).toBe('v3');
 
-    // desinstalar: some o que veio no download; save e config mudada ficam
     const r = await ports.uninstall(g.id);
     expect(r.removed).toBeGreaterThan(0);
     expect(existsSync(g.exe!)).toBe(false);
     expect(readFileSync(join(g.installDir, 'save.dat'), 'utf8')).toBe('meu save');
     expect(readFileSync(join(g.installDir, 'config.ini'), 'utf8')).toBe('minha config');
     expect(ach.listGames()).toEqual([]);
+  });
+
+  it('pasta apagada por fora: o jogo fica como "não encontrado" e instalar de novo reaproveita a mesma entrada', async () => {
+    releases = []; publish('v1', 'autor', { 'MeuRecomp/MeuRecomp.exe': 'exe v1' });
+    const { db, ach, ports, dir } = setup();
+    const g = await ports.installFromCatalog('recomps/meu');
+    db.prepare('INSERT INTO play_session (game_id, started_at, ended_at) VALUES (?, 0, 60000)').run(g.id);
+    rmSync(g.installDir, { recursive: true, force: true });
+    expect(ach.getGame(g.id).missing).toBe(true);
+    await expect(ports.update(g.id)).rejects.toThrow(/não existe mais/);
+    const again = await ports.installFromCatalog('recomps/meu');
+    expect(again.id).toBe(g.id);
+    expect(again).toMatchObject({ missing: false, installDir: join(dir, 'MeuRecomp'), playMs: 60000, managed: true });
+    expect(ach.listGames()).toHaveLength(1);
+
+    rmSync(again.installDir, { recursive: true, force: true });
+    const mine = tmp(); writeFileSync(join(mine, 'MeuRecomp.exe'), 'x');
+    const moved = await ach.addGame(mine, { catalogId: 'recomps/meu' });
+    expect(moved).toMatchObject({ id: g.id, installDir: mine, missing: false, exe: join(mine, 'MeuRecomp.exe') });
+    expect(ach.listGames()).toHaveLength(1);
   });
 
   it('hash diferente do publicado: nada é instalado', async () => {
@@ -149,13 +162,12 @@ describe('instalar, atualizar e desinstalar', () => {
     db.prepare("UPDATE catalog_game SET console = 'switch2'").run();
     await expect(ports.installFromCatalog('recomps/meu')).rejects.toThrow(/não baixa recomps deste console/);
     expect(existsSync(join(dir, 'MeuRecomp'))).toBe(false);
-    // a pasta que o usuário instalou fica ligada ao jogo do catálogo, mas atualizar continua manual
     const mine = tmp(); writeFileSync(join(mine, 'MeuRecomp.exe'), 'x');
     const g = await ach.addGame(mine, { catalogId: 'recomps/meu' });
     expect(g.catalogId).toBe('recomps/meu');
-    expect(g.sourceRepo).toBeNull();                                    // o projeto não chega na tela
+    expect(g.sourceRepo).toBeNull();
     expect(listCatalog(db, { console: 'switch2' })[0]!.repo).toBeNull();
-    expect((await ports.checkUpdate(g.id)).latest).toBeNull();          // nem consulta o GitHub
+    expect((await ports.checkUpdate(g.id)).latest).toBeNull();
     await expect(ports.update(g.id)).rejects.toThrow(/não atualiza recomps/);
   });
 
@@ -166,14 +178,13 @@ describe('instalar, atualizar e desinstalar', () => {
     add.run('p/b', 'Pokémon Pokopia', 'b/b', 'switch2', 'play', 1);
     add.run('p/c', 'Pokémon Pokopia', 'c/c', 'switch2', 'wip', 9);
     add.run('k/a', 'Mario Kart World', 'd/d', 'switch2', 'full', 0);
-    add.run('n/a', 'Pokémon Pokopia', 'e/e', 'n64', 'wip', 0);        // outro console: não junta
+    add.run('n/a', 'Pokémon Pokopia', 'e/e', 'n64', 'wip', 0);
     db.prepare("INSERT INTO radar_event (game_id, kind, detail, at) VALUES ('p/a', 'new', 'a/a', 1), ('p/c', 'new', 'c/c', 2)").run();
     let sw2 = listCatalog(db, { console: 'switch2' });
     expect(sw2.map(g => g.title).sort()).toEqual(['Mario Kart World', 'Pokémon Pokopia']);
-    expect(sw2.find(g => g.title.startsWith('Pok'))).toMatchObject({ id: 'p/b', status: 'play', repo: null });   // melhor status do grupo
+    expect(sw2.find(g => g.title.startsWith('Pok'))).toMatchObject({ id: 'p/b', status: 'play', repo: null });
     expect(listRadar(db).filter(e => e.console === 'switch2')).toHaveLength(1);
     expect(perConsole(db).switch2!.recomps).toBe(2);
-    // a pasta que o usuário ligou passa a representar o jogo
     const mine = tmp(); writeFileSync(join(mine, 'Pokopia.exe'), 'x');
     await ach.addGame(mine, { catalogId: 'p/c' });
     sw2 = listCatalog(db, { console: 'switch2' });

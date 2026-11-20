@@ -351,3 +351,4 @@ body.pal-light .stage-behind { filter: blur(8px) brightness(.85) saturate(.6); }
 .chub-body.oth.wide .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 .chub-search { flex: 0 1 380px; }
 .search[data-on] { border-color: var(--acc); }
+.gp-main .warn { margin: 0; color: #ffcf7a; }

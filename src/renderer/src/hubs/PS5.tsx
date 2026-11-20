@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConsoleId } from '@shared/types';
 import { isSelfInstall, SELF_INSTALL_NOTE, STATUS_LABEL } from '@shared/consoles';
@@ -18,7 +18,7 @@ import { Ic, type IconName } from './icons';
 import { useGameProgress, useHubActions, useHubData, type HubGame } from './data';
 
 type Page = 'home' | 'cat' | 'ach' | 'news' | 'cfg' | 'game';
-type Zone = 'top' | 'row' | 'acts' | 'cards' | 'tabs' | 'shelf' | 'side' | 'main' | 'gacts' | 'gshots';
+type Zone = 'top' | 'row' | 'acts' | 'cards' | 'tabs' | 'shelf' | 'side' | 'main' | 'gacts' | 'gshots' | 'gtext';
 interface St { page: Page; zone: Zone; di: number; idx: number; ai: number; ci: number; ti: number; si: number; gi: number; game: string | null; from: { page: Page; zone: Zone; si: number } | null }
 type Opt = { k: string; l: string; ic: IconName };
 type Hint = [Parameters<typeof Glyph>[0]['a'], string];
@@ -70,6 +70,13 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   const game = st.page === 'game' && st.game ? all.get(st.game) ?? null : null;
   const shots = useShots(game?.console, game?.title ?? '', game?.platformName);
   const [view, setView] = useState<number | null>(null);
+  const gScroll = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = gScroll.current; if (!el || st.page !== 'game') return;
+    if (st.zone === 'gacts') el.scrollTo({ top: 0, behavior: 'smooth' });
+    else if (st.zone === 'gshots') el.querySelector('.p5-gshots')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    else if (st.zone === 'gtext') el.querySelector('.p5-gsec.text')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [st.zone, st.page]);
 
   const catList = useMemo(() => {
     const L = data.catalog;
@@ -87,7 +94,11 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   const options = (x: HubGame, home: boolean): Opt[] => {
     const inst = x.installed;
     const L: Opt[] = [];
-    if (inst) {
+    if (inst?.missing) {
+      if (x.catalog?.repo && !self) L.push({ k: 'reinstall', l: 'Instalar de novo', ic: 'dl' });
+      L.push({ k: 'relink', l: 'Procurar a pasta', ic: 'folder' });
+      L.push({ k: 'remove', l: 'Tirar da biblioteca', ic: 'stop' });
+    } else if (inst) {
       L.push(inst.running ? { k: 'quit', l: 'Fechar o jogo', ic: 'stop' } : inst.exe ? { k: 'play', l: 'Jogar', ic: 'play' } : { k: 'exe', l: 'Escolher o .exe', ic: 'folder' });
       if (x.update?.updateAvailable && !self) L.push({ k: 'update', l: `Atualizar para ${x.update.latest?.tag}`, ic: 'dl' });
       if (inst.adapter) L.push({ k: 'ach', l: 'Conquistas', ic: 'medal' });
@@ -111,10 +122,14 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       else if (r === 'install') show(`Baixando ${x.repo} do GitHub…`);
       else if (r === 'quit') show(`Fechando ${x.title}…`);
       else if (r === 'pick') chooseExe.mutate({ id: x.installed!.id });
+      else if (r === 'relink') show('Escolha onde o jogo está agora');
       return;
     }
     sfx.play('ok');
     if (k === 'add') { act.addFolder(x); return show('Escolha a pasta onde o jogo está instalado'); }
+    if (k === 'reinstall') { act.reinstall(x); return show(`Baixando ${x.repo} de novo… o tempo de jogo continua`); }
+    if (k === 'relink') { act.relink(x); return show('Escolha onde o jogo está agora'); }
+    if (k === 'remove') { act.remove(x); if (st.page === 'game') up({ page: st.from?.page ?? 'home', zone: st.from?.zone ?? 'row', game: null, from: null }); return show(`${x.title} saiu da biblioteca · nenhum arquivo foi apagado`); }
     if (k === 'update') { act.update(x); return show(`Atualizando para ${x.update?.latest?.tag}… configurações e saves ficam`); }
     if (k === 'ach') { up({ page: 'ach', zone: 'side', gi: Math.max(0, achGames.indexOf(x)), si: 0 }); return; }
     if (k === 'folder') return openFolder.mutate({ id: x.installed!.id });
@@ -195,10 +210,11 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     }
     if (k === 'Enter') return enter();
     if (st.page === 'game' && !menu) {
-      if (st.zone === 'gacts') { if (R && st.ai < gameOpts.length - 1) mv({ ai: st.ai + 1 }); else if (L && st.ai > 0) mv({ ai: st.ai - 1 }); else if (D && shots.length) mv({ zone: 'gshots', si: 0 }); return; }
-      const col = st.si % 2;
-      if (R && col === 0 && st.si + 1 < shots.length) mv({ si: st.si + 1 }); else if (L && col === 1) mv({ si: st.si - 1 });
-      else if (D && st.si + 2 < shots.length) mv({ si: st.si + 2 }); else if (U) { if (st.si >= 2) mv({ si: st.si - 2 }); else mv({ zone: 'gacts' }); }
+      const el = gScroll.current;
+      if (st.zone === 'gacts') { if (R && st.ai < gameOpts.length - 1) mv({ ai: st.ai + 1 }); else if (L && st.ai > 0) mv({ ai: st.ai - 1 }); else if (D) mv({ zone: shots.length ? 'gshots' : 'gtext', si: 0 }); return; }
+      if (st.zone === 'gshots') { if (R && st.si < shots.length - 1) mv({ si: st.si + 1 }); else if (L && st.si > 0) mv({ si: st.si - 1 }); else if (U) mv({ zone: 'gacts' }); else if (D) mv({ zone: 'gtext' }); return; }
+      if (D) { sfx.play('move'); el?.scrollBy({ top: 260, behavior: 'smooth' }); }
+      else if (U) { if (!el || el.scrollTop <= 4 || (shots.length && el.scrollTop <= 400)) mv({ zone: shots.length ? 'gshots' : 'gacts' }); else { sfx.play('move'); el.scrollBy({ top: -260, behavior: 'smooth' }); } }
       return;
     }
     if (menu) {
@@ -238,7 +254,9 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     : st.page === 'home' && st.zone === 'row' && g ? [['ok', primaryOf(g).l], ['x', 'Opções']]
     : st.page === 'cat' && st.zone === 'tabs' ? [['lb', 'Categoria'], ['ok', st.ti === 4 ? 'Digitar' : 'Confirmar'], ['back', 'Voltar']]
     : st.page === 'cat' ? [['ok', 'Ver jogo'], ['x', 'Opções'], ['back', 'Voltar']]
-    : st.page === 'game' && st.zone === 'gshots' ? [['ok', 'Ampliar'], ['back', 'Voltar']]
+    : st.page === 'game' && st.zone === 'gshots' ? [['ok', 'Ampliar'], ['ud', 'Rolar'], ['back', 'Voltar']]
+    : st.page === 'game' && st.zone === 'gtext' ? [['ud', 'Rolar'], ['back', 'Voltar']]
+    : st.page === 'game' ? [['ok', 'Confirmar'], ['ud', 'Rolar'], ['back', 'Voltar']]
     : [['ok', 'Confirmar'], ['back', 'Voltar']];
   const H = ({ className }: { className: string }) => <div className={className}>{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>;
 
@@ -262,10 +280,10 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
             onCard={j => { if (st.zone === 'cards' && st.ci === j) enter(); else { sfx.play('move'); up({ zone: 'cards', ci: j }); } }}
             hints={<H className="p5-hint" />} menu={menuNode} />
         ) : (
-          <div className={`p5-pg ${st.page === 'game' ? 'gp' : ''}`} key={st.page}>
-            {st.page === 'game' && game && <GamePage g={game} st={st} opts={gameOpts} shots={shots} self={self}
+          <div className={`p5-pg ${st.page === 'game' ? 'p5-gpage' : ''}`} key={st.page}>
+            {st.page === 'game' && game && <GamePage g={game} st={st} opts={gameOpts} shots={shots} self={self} scrollRef={gScroll}
               onAct={j => { if (st.zone === 'gacts' && st.ai === j) enter(); else { sfx.play('move'); up({ zone: 'gacts', ai: j }); } }}
-              onShot={j => { if (st.zone === 'gshots' && st.si === j) { sfx.play('ok'); setView(j); } else { sfx.play('move'); up({ zone: 'gshots', si: j }); } }} />}
+              onShot={j => { sfx.play('ok'); up({ zone: 'gshots', si: j }); setView(j); }} />}
             {st.page === 'cat' && (
               <>
                 <div className="p5-ph"><span className="ic"><Ic n="compass" /></span>Descobrir</div>
@@ -360,45 +378,54 @@ function PortsDir() {
   return <>{q.data ?? '…'}</>;
 }
 
-function GamePage({ g, st, opts, shots, self, onAct, onShot }: { g: HubGame; st: St; opts: Opt[]; shots: string[]; self: boolean; onAct: (j: number) => void; onShot: (j: number) => void }) {
+function GamePage({ g, st, opts, shots, self, scrollRef, onAct, onShot }: { g: HubGame; st: St; opts: Opt[]; shots: string[]; self: boolean; scrollRef: RefObject<HTMLDivElement | null>; onAct: (j: number) => void; onShot: (j: number) => void }) {
   const art = useArt(g.console, g.title, g.platformName);
   const about = useTranslated(g.catalog?.description);
   const needs = useTranslated(g.catalog?.needs);
   const p = useGameProgress(g);
   const inst = g.installed;
   const bg = art.fanart ?? art.cover ?? g.coverUrl;
+  const [more, setMore] = useState(false);
+  const check = () => { const el = scrollRef.current; if (el) setMore(el.scrollTop + el.clientHeight < el.scrollHeight - 8); };
+  useEffect(() => { check(); const el = scrollRef.current; if (!el) return; const ro = new ResizeObserver(check); ro.observe(el); if (el.lastElementChild) ro.observe(el.lastElementChild); return () => ro.disconnect(); });
   return (
     <>
-      <div className="p5-gp-art">{bg ? <img src={bg} alt="" /> : <div className="p5-glow" />}</div>
-      <div className="p5-gp-head">
-        {art.logo ? <img className="logo" src={art.logo} alt={g.title} /> : <h1>{g.title}</h1>}
-        <p className="meta">
-          {[g.status && STATUS_LABEL[g.status], g.catalog?.developer, g.catalog?.year, g.platformName,
-            inst ? (inst.running ? 'jogando agora' : inst.playMs ? `${fmtPlay(inst.playMs)} jogadas` : 'ainda não jogado') : null,
-            inst?.achievements?.total ? `${inst.achievements.unlocked}/${inst.achievements.total} conquistas` : null].filter(Boolean).join(' · ')}
-        </p>
-        {p && <p className="prog">{p.error ?? `${p.stage}${p.pct > 0 && p.pct < 1 ? ` · ${Math.round(p.pct * 100)}%` : ''}`}</p>}
-        <div className="p5-acts">{opts.map((o, j) => (
-          <button key={o.k + j} className={`p5-b ${j === 0 ? 'pri' : ''} ${st.zone === 'gacts' && st.ai === j ? 'on' : ''}`} onClick={() => onAct(j)}>
-            {j === 0 ? o.l : <><Ic n={o.ic} />{o.l}</>}
-          </button>
-        ))}</div>
+    <div className="p5-gscroll" ref={scrollRef} onScroll={check}>
+      <div className="p5-ghero">
+        <div className="p5-gp-art">{bg ? <img src={bg} alt="" /> : <div className="p5-glow" />}</div>
+        <div className="p5-gp-head">
+          {art.logo ? <img className="logo" src={art.logo} alt={g.title} /> : <h1>{g.title}</h1>}
+          {inst?.missing && <p className="warn">A pasta do jogo não foi encontrada em {inst.installDir}. {g.catalog?.repo && !self ? 'Instale de novo ou mostre onde ele está agora.' : 'Mostre onde ele está agora.'}</p>}
+          <p className="meta">
+            {[g.status && STATUS_LABEL[g.status], g.catalog?.developer, g.catalog?.year, g.platformName,
+              inst ? (inst.running ? 'jogando agora' : inst.playMs ? `${fmtPlay(inst.playMs)} jogadas` : 'ainda não jogado') : null,
+              inst?.achievements?.total ? `${inst.achievements.unlocked}/${inst.achievements.total} conquistas` : null].filter(Boolean).join(' · ')}
+          </p>
+          {p && <p className="prog">{p.error ?? `${p.stage}${p.pct > 0 && p.pct < 1 ? ` · ${Math.round(p.pct * 100)}%` : ''}`}</p>}
+          <div className="p5-acts">{opts.map((o, j) => (
+            <button key={o.k + j} className={`p5-b ${j === 0 ? 'pri' : ''} ${st.zone === 'gacts' && st.ai === j ? 'on' : ''}`} onClick={() => onAct(j)}>
+              {j === 0 ? o.l : <><Ic n={o.ic} />{o.l}</>}
+            </button>
+          ))}</div>
+        </div>
       </div>
-      <div className="p5-gp-body">
-        <section className="about">
-          {about.text && <><h4>Sobre</h4><p>{about.text}</p></>}
-          {needs.text && <><h4>O que você precisa</h4><p>{needs.text}</p></>}
-          {self && !inst && <p className="dim">{SELF_INSTALL_NOTE}</p>}
-          {(about.auto || needs.auto) && <small>Traduzido automaticamente do inglês</small>}
-          {!about.text && !needs.text && <p className="dim">O catálogo não traz descrição deste jogo.</p>}
-        </section>
-        <section className="shots">
+      <div className="p5-gbody">
+        <section className="p5-gsec">
           <h4>Imagens</h4>
-          {shots.length ? <div className="grid">{shots.map((u, j) => (
+          {shots.length ? <div className="p5-gshots">{shots.map((u, j) => (
             <button key={u} className={st.zone === 'gshots' && st.si === j ? 'on' : ''} onClick={() => onShot(j)}><img src={u} alt="" /></button>
           ))}</div> : <p className="dim">Sem capturas de tela no LaunchBox para este jogo.</p>}
         </section>
+        <section className={`p5-gsec text ${st.zone === 'gtext' ? 'on' : ''}`}>
+          {about.text && <><h4>Sobre</h4><p>{about.text}</p></>}
+          {needs.text && <><h4>O que você precisa</h4><p>{needs.text}</p></>}
+          {self && !inst && <p className="dim">{SELF_INSTALL_NOTE}</p>}
+          {!about.text && !needs.text && <p className="dim">O catálogo não traz descrição deste jogo.</p>}
+          {(about.auto || needs.auto) && <small>Traduzido automaticamente do inglês</small>}
+        </section>
       </div>
+    </div>
+    <div className={`p5-gmore ${more ? 'on' : ''}`}><Ic n="down" /></div>
     </>
   );
 }
@@ -443,7 +470,7 @@ function Home({ c, g, row, st, self, clock, feedCount, catCount, primary, feed, 
       </div>
       <div className="p5-row" style={{ transform: `translateX(-${Math.max(0, i - 2) * 126}px)` }}>
         {row.map((x, k) => (
-          <button key={x.key} className={`p5-t ${k === i ? 'on' : ''}`} aria-label={x.title} onClick={() => onTile(k)}>
+          <button key={x.key} className={`p5-t ${k === i ? 'on' : ''} ${x.installed?.missing ? 'missing' : ''}`} aria-label={x.title} onClick={() => onTile(k)}>
             <Art g={x} v="square" />
             {x.installed?.running && <span className="run"><Ic n="play" /></span>}
             {k === i && z === 'row' && <span className="p5-lab">{x.title}</span>}
@@ -458,7 +485,7 @@ function Home({ c, g, row, st, self, clock, feedCount, catCount, primary, feed, 
           <h1>{g.title}</h1>
           <p>
             {g.status ? `${STATUS_LABEL[g.status]} · ` : ''}
-            {g.installed?.running ? 'jogando agora' : g.installed?.playMs ? `${fmtPlay(g.installed.playMs)} jogadas${g.installed.lastPlayed ? ` · última vez ${ago(g.installed.lastPlayed)}` : ''}` : 'ainda não jogado'}
+            {g.installed?.missing ? 'pasta do jogo não encontrada' : g.installed?.running ? 'jogando agora' : g.installed?.playMs ? `${fmtPlay(g.installed.playMs)} jogadas${g.installed.lastPlayed ? ` · última vez ${ago(g.installed.lastPlayed)}` : ''}` : 'ainda não jogado'}
           </p>
           {p && <p className="prog">{p.error ?? `${p.stage}${p.pct > 0 && p.pct < 1 ? ` · ${Math.round(p.pct * 100)}%` : ''}`}</p>}
           <div className="p5-acts">

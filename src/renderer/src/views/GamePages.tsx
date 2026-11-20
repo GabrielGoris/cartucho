@@ -31,6 +31,8 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
   const uninstall = useMutation(trpc.ports.uninstall.mutationOptions({ onSuccess: () => { void qc.invalidateQueries(); onBack(); } }));
   const progress = useProgress(id);
   const [more, setMore] = useState(false);
+  const relink = useMutation(trpc.games.relink.mutationOptions({ onSuccess: refresh }));
+  const reinstall = useMutation(trpc.ports.install.mutationOptions({ onSuccess: refresh }));
 
   const root = useRef<HTMLDivElement>(null);
   useSpatialNav(root, { active, initial: '[data-main]', onKey: k => { if (k === 'Escape') { sfx.play('back'); onBack(); return true; } } });
@@ -38,7 +40,8 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
   const g = game.data;
   if (!g) return <p className="dim pad24">{game.error ? game.error.message : 'Carregando…'}</p>;
   const u = upd.data, a = g.achievements, st = stats.data;
-  const err = play.error ?? update.error ?? uninstall.error ?? chooseExe.error ?? quit.error;
+  const err = play.error ?? update.error ?? uninstall.error ?? chooseExe.error ?? quit.error ?? relink.error ?? reinstall.error;
+  const canReinstall = !!g.catalogId && !!g.sourceRepo && !isSelfInstall(g.console);
 
   return (
     <div ref={root} className="gp-page">
@@ -47,12 +50,20 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
         <span className="grow" />
       </header>
       <div className="gp-body">
-        <GameArt title={g.title} console={g.console} fallback={g.coverUrl} className="gp-cover" />
+        <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} className="gp-cover" />
         <div className="gp-main">
           <span className="k">{CONSOLE_NAME[g.console].toUpperCase()}{g.version ? ` · ${g.version}` : ''}{g.running ? ' · JOGANDO AGORA' : ''}</span>
           <h1>{g.title}</h1>
           <p className="dim">{g.playMs ? `${fmtPlay(g.playMs)} jogadas` : 'Ainda não jogado pelo Cartucho'}{g.lastPlayed ? ` · ${ago(g.lastPlayed)}` : ''}{a && a.total ? ` · ${a.unlocked}/${a.total} conquistas` : ''}</p>
 
+          {g.missing && <p className="warn">A pasta do jogo não foi encontrada em {g.installDir}. {canReinstall ? 'Instale de novo ou mostre onde ele está agora.' : 'Mostre onde ele está agora.'} O tempo de jogo e as conquistas ficam guardados.</p>}
+          {g.missing ? (
+            <div className="hm-btns">
+              {canReinstall && <button className="hm-go" data-hf data-main disabled={reinstall.isPending || !!progress} onClick={() => { sfx.play('ok'); reinstall.mutate({ catalogId: g.catalogId! }); }}>⬇ INSTALAR DE NOVO</button>}
+              <button className={`hm-go ${canReinstall ? 'ghost' : ''}`} data-hf data-main={canReinstall ? undefined : true} disabled={relink.isPending} onClick={() => relink.mutate({ id })}>PROCURAR A PASTA</button>
+              <button className="hm-go ghost" data-hf onClick={() => { if (confirm(`Tirar ${g.title} da biblioteca? Nenhum arquivo é apagado.`)) remove.mutate({ id }); }}>TIRAR DA BIBLIOTECA</button>
+            </div>
+          ) : (
           <div className="hm-btns">
             {g.running
               ? <button className="hm-go" data-hf data-main onClick={() => quit.mutate({ id })}>■ FECHAR O JOGO</button>
@@ -63,6 +74,7 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
             {u?.updateAvailable && !progress && <button className="hm-go ghost upd" data-hf disabled={update.isPending || g.running} onClick={() => update.mutate({ id })}>⬇ ATUALIZAR PARA {u.latest?.tag}</button>}
             <button className="hm-go ghost" data-hf onClick={() => setMore(m => !m)}>⋯</button>
           </div>
+          )}
 
           {more && (
             <div className="gp-more">

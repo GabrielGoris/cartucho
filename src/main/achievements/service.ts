@@ -1,7 +1,3 @@
-/**
- * Junta as camadas 1 e 2: guarda a lista de conquistas de cada jogo instalado no banco, lê os
- * desbloqueios do arquivo do recomp e fica de olho nele enquanto o Cartucho está aberto.
- */
 import { EventEmitter } from 'node:events';
 import { existsSync, unwatchFile, watchFile } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -15,14 +11,12 @@ import { absUrl } from '../catalog';
 import { type Adapter, type AdapterContext, adapterById, adapterForDir } from './adapters';
 import type { Unlock } from './saves';
 
-/** Console de origem quando o jogo não está no catálogo. */
 const ADAPTER_CONSOLE: Record<string, ConsoleId> = { 'unleashed-recomp': 'x360', 'marathon-recomp': 'x360', sonic3air: 'other', rsdkv4: 'other' };
 
 type GameRow = {
   id: string; catalog_id: string | null; title: string; console: string; install_dir: string; adapter: string | null; added_at: number; cover_url: string | null; platform_name: string | null;
   exe: string | null; version: string | null; source_repo: string | null; managed: number; play_ms: number; last_played: number | null;
 };
-/** Dados extras de um jogo instalado pelo Cartucho (ou com projeto do GitHub já conhecido). */
 export interface AddExtra { catalogId?: string | null; title?: string; console?: string; exe?: string | null; sourceRepo?: string | null; release?: InstalledRelease | null; managed?: boolean; manifest?: Record<string, number> | null }
 const GAME_SQL = `SELECT g.*, c.cover_url, c.platform_name,
   (SELECT COALESCE(SUM(p.ended_at - p.started_at), 0) FROM play_session p WHERE p.game_id = g.id AND p.ended_at IS NOT NULL) play_ms,
@@ -38,9 +32,6 @@ export class AchievementService {
 
   constructor(private db: DB, private appData: string) {}
 
-  // ---------- jogos instalados ----------
-
-  /** Quem está jogando agora (o Player avisa). */
   isRunning: (id: string) => boolean = () => false;
 
   private row(id: string) {
@@ -56,7 +47,7 @@ export class AchievementService {
       id: r.id, title: r.title, console: r.console as ConsoleId, platformName: r.platform_name ?? null, installDir: r.install_dir, adapter: r.adapter, adapterLabel: adapter?.label ?? null,
       catalogId: r.catalog_id, coverUrl: absUrl(r.cover_url), addedAt: r.added_at, achievements: counts,
       exe: r.exe, sourceRepo: isSelfInstall(r.console) ? null : r.source_repo, version: r.version, managed: !!r.managed,
-      playMs: r.play_ms ?? 0, lastPlayed: r.last_played ?? null, running: this.isRunning(r.id),
+      playMs: r.play_ms ?? 0, lastPlayed: r.last_played ?? null, running: this.isRunning(r.id), missing: !existsSync(r.install_dir),
     };
   }
   private ctx(r: GameRow): AdapterContext { return { installDir: r.install_dir, appData: this.appData, title: r.title }; }
@@ -65,12 +56,10 @@ export class AchievementService {
     return (this.db.prepare(`${GAME_SQL} ORDER BY g.title`).all() as GameRow[]).map(r => this.toGame(r));
   }
   getGame(id: string) { return this.toGame(this.row(id)); }
-  /** Dados internos (versão instalada e lista de arquivos), para o instalador. */
   internals(id: string) {
     const r = this.db.prepare('SELECT release_json, manifest_json FROM installed_game WHERE id = ?').get(id) as { release_json: string | null; manifest_json: string | null } | undefined;
     return { release: r?.release_json ? JSON.parse(r.release_json) as InstalledRelease : null, manifest: r?.manifest_json ? JSON.parse(r.manifest_json) as Record<string, number> : null };
   }
-  /** Atualiza campos de um jogo (depois de uma atualização, ou quando o usuário escolhe o .exe). */
   patchGame(id: string, p: { exe?: string | null; sourceRepo?: string | null; release?: InstalledRelease | null; manifest?: Record<string, number> | null; title?: string }) {
     const sets: string[] = [], args: (string | null)[] = [];
     if (p.exe !== undefined) { sets.push('exe = ?'); args.push(p.exe); }
@@ -82,7 +71,6 @@ export class AchievementService {
     this.events.emit('changed', id);
   }
 
-  /** Acha o jogo do catálogo pelo nome do repositório. Se houver mais de um (Sonic 1 e 2 dividem o RSDKv4), usa o nome da pasta para desempatar. */
   private matchCatalog(adapter: Adapter, dir: string) {
     const rows = adapter.repos.flatMap(name => this.db.prepare(`SELECT id, title, console, repo FROM catalog_game WHERE retired = 0 AND (lower(repo) = ? OR lower(repo) LIKE ?)`)
       .all(name, `%/${name}`) as { id: string; title: string; console: string; repo: string | null }[]);
@@ -92,10 +80,27 @@ export class AchievementService {
     return rows.find(r => /\b2\b/.test(r.title) === wants2) ?? rows[0]!;
   }
 
+  relocate(id: string, dir: string, p: { exe?: string | null; release?: InstalledRelease | null; manifest?: Record<string, number> | null; managed?: boolean } = {}) {
+    dir = resolve(dir);
+    const other = this.db.prepare('SELECT id FROM installed_game WHERE install_dir = ? AND id != ?').get(dir, id) as { id: string } | undefined;
+    if (other) throw new Error('Essa pasta já é de outro jogo da biblioteca.');
+    const r = this.row(id);
+    let exe = p.exe ?? null;
+    if (!exe) try { exe = findGameExe(dir) ?? guessProgram(dir, r.source_repo); } catch { exe = null; }
+    this.unwatch(id);
+    this.db.prepare('UPDATE installed_game SET install_dir = ?, exe = ? WHERE id = ?').run(dir, exe, id);
+    if (p.managed !== undefined) this.db.prepare('UPDATE installed_game SET managed = ? WHERE id = ?').run(p.managed ? 1 : 0, id);
+    this.patchGame(id, { ...(p.release !== undefined ? { release: p.release } : {}), ...(p.manifest !== undefined ? { manifest: p.manifest } : {}) });
+    if (r.adapter) this.watch(id);
+    return this.toGame(this.row(id));
+  }
+
   async addGame(dir: string, extra: AddExtra = {}): Promise<InstalledGame> {
     dir = resolve(dir);
     const dup = this.db.prepare('SELECT id FROM installed_game WHERE install_dir = ?').get(dir) as { id: string } | undefined;
     if (dup) return this.toGame(this.row(dup.id));
+    const lost = extra.catalogId ? (this.db.prepare('SELECT id, install_dir FROM installed_game WHERE catalog_id = ?').all(extra.catalogId) as { id: string; install_dir: string }[]).find(x => !existsSync(x.install_dir)) : undefined;
+    if (lost) return this.relocate(lost.id, dir, { exe: extra.exe, release: extra.release, manifest: extra.manifest, managed: extra.managed });
     const adapter = adapterForDir(dir);
     const cat = extra.catalogId
       ? this.db.prepare('SELECT id, title, console, repo FROM catalog_game WHERE id = ?').get(extra.catalogId) as { id: string; title: string; console: string; repo: string | null } | undefined
@@ -111,7 +116,7 @@ export class AchievementService {
       extra.managed ? 1 : 0, extra.manifest ? JSON.stringify(extra.manifest) : null);
     if (adapter) {
       await this.syncDefinitions(id);
-      await this.syncUnlocks(id, { silent: true });   // o que já estava desbloqueado antes não vira notificação
+      await this.syncUnlocks(id, { silent: true });
       this.watch(id);
     }
     return this.toGame(this.row(id));
@@ -125,8 +130,6 @@ export class AchievementService {
       this.db.prepare("DELETE FROM kv WHERE key LIKE ?").run(`ach.%.${id}`);
     });
   }
-
-  // ---------- camada 2: a lista ----------
 
   async syncDefinitions(id: string) {
     const r = this.row(id), adapter = adapterById(r.adapter);
@@ -145,11 +148,7 @@ export class AchievementService {
     }
   }
 
-  // ---------- camada 1: os desbloqueios ----------
-
-  /** Lê o arquivo de desbloqueios e grava os novos. Devolve os ids que apareceram agora. */
   syncUnlocks(id: string, opts: { silent?: boolean } = {}): Promise<number[]> {
-    // Um por vez por jogo: o watcher e o botão "sincronizar" podem chegar juntos.
     const prev = this.busy.get(id) ?? Promise.resolve([]);
     const next = prev.catch(() => []).then(() => this.doSyncUnlocks(id, opts));
     this.busy.set(id, next);
@@ -160,10 +159,10 @@ export class AchievementService {
     const r = this.row(id), adapter = adapterById(r.adapter);
     if (!adapter) return [];
     const file = adapter.unlockFile(this.ctx(r));
-    if (!existsSync(file)) { this.db.prepare('DELETE FROM kv WHERE key = ?').run(`ach.unlockError.${id}`); return []; }   // ainda não jogou
+    if (!existsSync(file)) { this.db.prepare('DELETE FROM kv WHERE key = ?').run(`ach.unlockError.${id}`); return []; }
 
     let unlocks: Unlock[] | null = null, lastErr: unknown;
-    for (let i = 0; i < 4 && !unlocks; i++) {      // o jogo pode estar no meio da gravação
+    for (let i = 0; i < 4 && !unlocks; i++) {
       try { unlocks = adapter.readUnlocks(new Uint8Array(await readFile(file))); }
       catch (e) { lastErr = e; await sleep(250 * (i + 1)); }
     }
@@ -174,7 +173,6 @@ export class AchievementService {
     const have = new Map((this.db.prepare('SELECT ach_id, unlocked_at FROM achievement_unlock WHERE game_id = ?').all(id) as { ach_id: number; unlocked_at: number | null }[]).map(u => [u.ach_id, u.unlocked_at]));
     const ins = this.db.prepare('INSERT INTO achievement_unlock (game_id, ach_id, unlocked_at, seen_at) VALUES (?, ?, ?, ?)');
     const fix = this.db.prepare('UPDATE achievement_unlock SET unlocked_at = ? WHERE game_id = ? AND ach_id = ?');
-    // Se o save some ou é apagado, o histórico continua no Cartucho (como na Steam).
     tx(this.db, () => {
       for (const u of unlocks!) {
         if (!have.has(u.id)) { ins.run(id, u.id, u.at, now); fresh.push(u.id); }
@@ -195,9 +193,6 @@ export class AchievementService {
     return fresh;
   }
 
-  // ---------- observação ----------
-
-  /** watchFile (por polling) e não fs.watch: funciona com arquivo que ainda não existe e com gravação por renomear no Windows. */
   watch(id: string) {
     const r = this.row(id), adapter = adapterById(r.adapter);
     if (!adapter || this.watching.has(id)) return;
@@ -213,13 +208,11 @@ export class AchievementService {
     const file = this.watching.get(id);
     if (file) { unwatchFile(file); this.watching.delete(id); }
   }
-  /** Ao abrir o Cartucho: confere o que mudou enquanto ele estava fechado e começa a observar. */
   async start() {
-    // Jogos adicionados antes de existir o Jogar/atualizar: acha o .exe e o projeto do catálogo
     for (const r of this.db.prepare(`SELECT g.id, g.install_dir, g.exe, g.source_repo, c.repo FROM installed_game g LEFT JOIN catalog_game c ON c.id = g.catalog_id
         WHERE g.exe IS NULL OR (g.source_repo IS NULL AND c.repo IS NOT NULL)`).all() as { id: string; install_dir: string; exe: string | null; source_repo: string | null; repo: string | null }[]) {
       let exe = r.exe;
-      if (!exe) try { exe = findGameExe(r.install_dir) ?? guessProgram(r.install_dir, r.repo); } catch { /* pasta sumiu */ }
+      if (!exe) try { exe = findGameExe(r.install_dir) ?? guessProgram(r.install_dir, r.repo); } catch {  }
       this.db.prepare('UPDATE installed_game SET exe = ?, source_repo = COALESCE(source_repo, ?) WHERE id = ?').run(exe, r.repo, r.id);
     }
     for (const g of this.listGames()) {
@@ -231,9 +224,6 @@ export class AchievementService {
   }
   stop() { for (const id of [...this.watching.keys()]) this.unwatch(id); }
 
-  // ---------- leitura para a tela ----------
-
-  /** Últimos desbloqueios de todos os jogos (para o perfil e a abertura). */
   recentUnlocks(limit = 8): RecentUnlock[] {
     return (this.db.prepare(`SELECT u.game_id, g.title game, u.ach_id, COALESCE(d.name, 'Conquista #' || u.ach_id) name, d.points, COALESCE(u.unlocked_at, u.seen_at) at
       FROM achievement_unlock u JOIN installed_game g ON g.id = u.game_id LEFT JOIN achievement_def d ON d.game_id = u.game_id AND d.ach_id = u.ach_id
@@ -256,7 +246,6 @@ export class AchievementService {
       id: d.ach_id, name: d.name, description: d.description, points: d.points, unlockedAt: unlocks.get(d.ach_id) ?? null,
       icon: d.image ? `data:image/png;base64,${Buffer.from(d.image).toString('base64')}` : null,
     }));
-    // Desbloqueios de ids que a lista não tem (lista ausente ou de outra versão do jogo).
     const known = new Set(defs.map(d => d.ach_id));
     for (const [achId, at] of unlocks) if (!known.has(achId)) list.push({ id: achId, name: `Conquista #${achId}`, description: '', points: null, unlockedAt: at, icon: null });
     const errors = [kvGet(this.db, `ach.defError.${id}`), kvGet(this.db, `ach.unlockError.${id}`)].filter((e): e is string => !!e);

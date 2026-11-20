@@ -15,6 +15,12 @@ import './styles.css';
 import './hubs/hubs.css';
 import './hubs/switch.css';
 import './hubs/ps5.css';
+import './hubs/ps4.css';
+import './hubs/ps3.css';
+import './hubs/x360.css';
+import './hubs/wii.css';
+import './hubs/retro.css';
+import './hubs/pc.css';
 import { queryClient, trpcClient, TRPCProvider } from './trpc';
 import { App } from './App';
 

@@ -75,6 +75,11 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     if (p === 'cfg') return [{ k: 'dir', l: 'Pasta dos jogos', ic: 'folder' }, { k: 'snd', l: 'Sons da interface', ic: 'sound', v: s.snd ? 'Ligados' : 'Desligados' }, { k: 'radar', l: 'Radar de novidades', ic: 'bell' }, { k: 'about', l: 'Sobre o Cartucho', ic: 'info', gap: true }];
     if (p === 'game' && game) {
       const g = game, inst = g.installed;
+      if (inst?.missing) return [
+        ...(g.repo && !self ? [{ k: 'reinstall', l: 'Instalar de novo', ic: 'dl' as IconName }] : []),
+        { k: 'relink', l: 'Procurar a pasta', ic: 'folder' }, { k: 'info', l: 'Informações', ic: 'info', gap: true },
+        { k: 'remove', l: 'Tirar da biblioteca', ic: 'stop' },
+      ];
       if (!inst && self) return [{ k: 'add', l: 'Já instalei: adicionar pasta', ic: 'folder' }, { k: 'info', l: 'Informações', ic: 'info', gap: true }];
       const first: Side = inst?.running ? { k: 'quit', l: 'Fechar o jogo', ic: 'stop' } : inst ? (inst.exe ? { k: 'play', l: 'Jogar', ic: 'play' } : { k: 'exe', l: 'Escolher o .exe', ic: 'folder' }) : { k: 'install', l: 'Instalar', ic: 'dl' };
       return [first, { k: 'info', l: 'Informações', ic: 'info', gap: true },
@@ -108,6 +113,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     else if (r === 'add') { sfx.play('ok'); show('Escolha a pasta onde você instalou o jogo'); }
     else if (r === 'quit') { sfx.play('back'); show(`Fechando ${g.title}…`); }
     else if (r === 'pick') { show('Escolha qual programa abre o jogo'); chooseExe.mutate({ id: g.installed!.id }); }
+    else if (r === 'relink') show('A pasta do jogo sumiu: escolha onde ele está agora');
   };
   const doUpdate = (g: HubGame) => { sfx.play('ok'); act.update(g); show(`Atualizando ${g.title} para ${g.update?.latest?.tag}… configurações e saves ficam`); };
   const enter = () => {
@@ -130,6 +136,9 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     if (p === 'game' && game) {
       if (sk === 'play' || sk === 'install' || sk === 'quit' || sk === 'add') return doPrimary(game);
       if (sk === 'exe') { sfx.play('ok'); return chooseExe.mutate({ id: game.installed!.id }); }
+      if (sk === 'reinstall') { sfx.play('ok'); act.reinstall(game); return show(`Baixando ${game.repo} de novo… o tempo de jogo continua`); }
+      if (sk === 'relink') { sfx.play('ok'); act.relink(game); return show('Escolha onde o jogo está agora'); }
+      if (sk === 'remove') { sfx.play('back'); act.remove(game); show(`${game.title} saiu da biblioteca · nenhum arquivo foi apagado`); return up({ page: 'home', zone: 'row', game: null, from: null }); }
       if (sk === 'folder') { sfx.play('ok'); return openFolder.mutate({ id: game.installed!.id }); }
       if (sk === 'gh') { sfx.play('ok'); return act.github(game); }
       if (sk === 'ver' && game.update?.updateAvailable) return doUpdate(game);
@@ -184,7 +193,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
       if (st.zone === 'dock') return [['ok', 'OK']];
       const g = row[st.idx];
       if (!g) return [['ok', 'Descobrir']];
-      return [['x', 'Detalhes'], ['ok', g.installed?.running ? 'Fechar' : g.installed ? (v1 ? 'Iniciar' : 'Jogar') : 'Instalar']];
+      return [['x', 'Detalhes'], ['ok', g.installed?.missing ? (g.repo && !self ? 'Instalar de novo' : 'Procurar a pasta') : g.installed?.running ? 'Fechar' : g.installed ? (v1 ? 'Iniciar' : 'Jogar') : 'Instalar']];
     }
     if (st.zone === 'main') return [['back', 'Voltar'], ['ok', st.page === 'cat' ? 'Ver' : 'Atualizar']];
     if (st.page === 'cat' && sk === 'search') return [['back', 'Voltar'], ['ok', 'Digitar']];
@@ -281,7 +290,7 @@ function Home({ v1, row, st, feedCount, updCount, newCount, onTile, onDock, hint
 function Tile({ g, on, first, onClick }: { g: HubGame; on: boolean; first: boolean; onClick: () => void }) {
   const p = useGameProgress(g);
   return (
-    <button className={`tile ${g.installed ? '' : 'off'} ${on ? 'on' : ''}`} onClick={onClick} aria-label={g.title}>
+    <button className={`tile ${g.installed && !g.installed.missing ? '' : 'off'} ${on ? 'on' : ''}`} onClick={onClick} aria-label={g.title}>
       <Art g={g} v="square" />
       {!g.installed && !p && <span className="dlb"><Ic n="dl" /></span>}
       {first && g.installed?.lastPlayed && !g.installed.running && <span className="cont"><b>G</b>Continuar</span>}
@@ -296,6 +305,7 @@ function Meta({ g, x }: { g: HubGame; x: number }) {
   return (
     <div className="meta" style={{ left: x }}>
       {p ? <span>{p.error ?? `${p.stage}${p.pct > 0 && p.pct < 1 ? ` · ${Math.round(p.pct * 100)}%` : ''}`}</span>
+        : inst?.missing ? <span>Pasta do jogo não encontrada</span>
         : inst ? (inst.playMs ? <><span>Jogado <strong>{fmtPlay(inst.playMs)}</strong></span><span>{inst.lastPlayed ? ago(inst.lastPlayed) : ''}</span></> : <span>Ainda não jogado</span>)
         : <span>{g.isNew ? <span className="pill new">NOVO</span> : 'Não instalado'}</span>}
       {g.status && <Chip s={g.status} />}

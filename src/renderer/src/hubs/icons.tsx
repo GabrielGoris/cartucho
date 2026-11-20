@@ -7,6 +7,7 @@ const P: Record<string, string> = {
   play: '<path d="M7 5l12 7-12 7z" fill="currentColor"/>',
   stop: '<rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/>',
   back: '<path d="M15 5l-7 7 7 7"/>',
+  down: '<path d="M5 9l7 7 7-7"/>',
   wifi: '<path d="M3 9a14 14 0 0118 0M6 12.5a9 9 0 0112 0M9 16a4 4 0 016 0"/><circle cx="12" cy="19" r=".8" fill="currentColor"/>',
   batt: '<rect x="3" y="8" width="16" height="9" rx="2"/><path d="M21 11v3"/>',
   dl: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',

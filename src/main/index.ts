@@ -19,7 +19,7 @@ if (!app.requestSingleInstanceLock()) app.quit();
 const APP_ORIGIN = 'app://cartucho';
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
-  { scheme: 'media', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+  { scheme: 'media', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
 ]);
 const DEV_URL = process.env.ELECTRON_RENDERER_URL;
 const isOurPage = (url: string) => (DEV_URL ? url.startsWith(DEV_URL) : url.startsWith(`${APP_ORIGIN}/`));
@@ -65,7 +65,11 @@ void app.whenReady().then(async () => {
   protocol.handle('media', req => {
     const u = new URL(req.url);
     const file = u.hostname === 'art' ? art.resolve(decodeURIComponent(u.pathname)) : null;
-    return file ? net.fetch(pathToFileURL(file).toString()) : new Response('não encontrado', { status: 404 });
+    if (!file) return new Response('não encontrado', { status: 404 });
+    return net.fetch(pathToFileURL(file).toString()).then(r => {
+      const h = new Headers(r.headers); h.set('Access-Control-Allow-Origin', '*');
+      return new Response(r.body, { status: r.status, headers: h });
+    });
   });
   const ports = new Ports(db, ach, gh, () => portsDirOf({ db, defaultPortsDir }), player.isRunning);
   createIPCHandler({

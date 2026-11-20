@@ -26,7 +26,7 @@ export function useHubData(consoleId: ConsoleId) {
   const games = useQuery(trpc.games.list.queryOptions());
   const cat = useQuery(trpc.catalog.list.queryOptions({ console: consoleId }));
   const radar = useQuery(trpc.catalog.radar.queryOptions());
-  const mine = useMemo(() => (games.data ?? []).filter(g => g.console === consoleId), [games.data, consoleId]);
+  const mine = useMemo(() => (games.data ?? []).filter(g => g.console === consoleId && !g.missing), [games.data, consoleId]);
   const updates = useQueries({ queries: mine.filter(g => g.sourceRepo).map(g => ({ ...trpc.ports.checkUpdate.queryOptions({ id: g.id }), staleTime: 5 * 60_000 })) });
   const updById = new Map(mine.filter(g => g.sourceRepo).map((g, i) => [g.id, updates[i]?.data ?? null]));
 
@@ -65,20 +65,29 @@ export function useHubActions() {
   const install = useMutation(trpc.ports.install.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
   const update = useMutation(trpc.ports.update.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
   const add = useMutation(trpc.games.addFromDialog.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
+  const relink = useMutation(trpc.games.relink.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
+  const remove = useMutation(trpc.games.remove.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
   const checkAll = useMutation({ mutationFn: async (ids: string[]) => { await Promise.all(ids.map(id => qc.fetchQuery(trpc.ports.checkUpdate.queryOptions({ id, force: true }, { staleTime: 0 })))); await qc.invalidateQueries({ queryKey: trpc.ports.checkUpdate.pathKey() }); } });
-  const error = play.error ?? install.error ?? update.error ?? quit.error ?? add.error;
+  const error = play.error ?? install.error ?? update.error ?? quit.error ?? add.error ?? relink.error ?? remove.error;
 
   return {
     error: error?.message ?? null,
-    reset: () => { play.reset(); install.reset(); update.reset(); quit.reset(); add.reset(); },
-    primary(g: HubGame): 'play' | 'quit' | 'install' | 'add' | 'pick' | 'none' {
+    reset: () => { play.reset(); install.reset(); update.reset(); quit.reset(); add.reset(); relink.reset(); },
+    primary(g: HubGame): 'play' | 'quit' | 'install' | 'add' | 'pick' | 'relink' | 'none' {
       if (g.installed?.running) { quit.mutate({ id: g.installed.id }); return 'quit'; }
+      if (g.installed?.missing) {
+        if (g.catalog?.repo && !isSelfInstall(g.console)) { install.mutate({ catalogId: g.catalog.id }); return 'install'; }
+        relink.mutate({ id: g.installed.id }); return 'relink';
+      }
       if (g.installed) { if (!g.installed.exe) return 'pick'; play.mutate({ id: g.installed.id }); return 'play'; }
       if (g.catalog && isSelfInstall(g.console)) { add.mutate({ catalogId: g.catalog.id }); return 'add'; }
       if (g.catalog?.repo) { install.mutate({ catalogId: g.catalog.id }); return 'install'; }
       return 'none';
     },
     update: (g: HubGame) => { if (g.installed && !isSelfInstall(g.console)) update.mutate({ id: g.installed.id }); },
+    relink: (g: HubGame) => { if (g.installed) relink.mutate({ id: g.installed.id }); },
+    remove: (g: HubGame) => { if (g.installed) remove.mutate({ id: g.installed.id }); },
+    reinstall: (g: HubGame) => { if (g.catalog?.repo) install.mutate({ catalogId: g.catalog.id }); },
     addFolder: (g: HubGame) => { if (g.catalog && !g.installed) add.mutate({ catalogId: g.catalog.id }); },
     github: (g: HubGame) => { if (g.repo) window.open(`https://github.com/${g.repo}`, '_blank'); },
     checkAll: (gs: HubGame[]) => checkAll.mutate(gs.filter(g => g.installed?.sourceRepo).map(g => g.installed!.id)),
