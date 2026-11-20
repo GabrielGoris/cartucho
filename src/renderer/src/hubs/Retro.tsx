@@ -1,313 +1,290 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AchievementView, ConsoleId, PlayStats } from '@shared/types';
-import { isSelfInstall, SELF_INSTALL_NOTE, STATUS_LABEL } from '@shared/consoles';
+import type { AchievementView, ConsoleId } from '@shared/types';
+import { isSelfInstall } from '@shared/consoles';
 import { useTRPC } from '../trpc';
 import { Glyph, useKeys, type Key } from '../lib/input';
-import { getSettings, reduceMotion, setSettings, useSettings } from '../lib/settings';
+import { getSettings, setSettings, useSettings } from '../lib/settings';
 import { setSfxProfile, sfx } from '../lib/sfx';
-import { ago, fmtDate, fmtPlay, hueOf, plural } from '../lib/format';
-import { matchesQuery } from '../lib/search';
-import { useShots } from '../lib/art';
-import { useTranslated } from '../lib/translate';
-import { SearchBox } from '../components/SearchBox';
+import { ago, fmtDate, fmtPlay, plural } from '../lib/format';
+import { focusSearch } from '../lib/search';
+import { GameArt } from '../components/GameArt';
+import { Discover, initialDiscover, type DOpt } from '../components/Discover';
+import { GameView } from '../components/GameView';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
-import { useGameProgress, useHubActions, useHubData, type HubGame } from './data';
-import { createShelf, type ShelfCfg } from './retro/shelf';
+import { useHubActions, useHubData, type HubGame } from './data';
+import { Obj, SHELLS, shellH, type Kind } from './shells';
 
-type Tab = 'games' | 'news' | 'ach' | 'time' | 'cfg';
-type Zone = 'gacts' | 'gshots' | 'gtext';
-interface Cfg extends Omit<ShelfCfg, 'aspect'> { res: [number, number]; sfx: string; boot: 'retro' | 'soft' | 'white'; dual?: boolean }
-interface St { tab: number; idx: number; li: number; opt: boolean; oi: number; search: boolean; game: string | null; zone: Zone; ai: number; gs: number; achOpen: boolean; ai2: number }
-type Opt = { k: string; l: string };
+type Tab = 'games' | 'disc' | 'news' | 'ach' | 'time' | 'cfg';
+interface Cfg { kind: Kind; sfx: string; boot: 'retro' | 'soft' | 'white' }
+interface St { tab: number; idx: number; li: number; game: string | null; achOpen: boolean; ai2: number }
 type Hint = [Parameters<typeof Glyph>[0]['a'], string];
 interface Row { key: string; g?: HubGame; t: string; v?: string; s?: string; id?: string; bar?: number }
 
 export const RETRO: Record<string, Cfg> = {
-  snes: { res: [512, 448], low: [256, 224], smooth: false, item: 'cart16', layout: 'row', bg: 0x2a1868, env: 'mode7', texRes: 64, sfx: 'square', boot: 'retro' },
-  n64: { res: [640, 480], low: [320, 240], smooth: true, item: 'cart64', layout: 'ring', bg: 0x0b2238, env: 'n64', texRes: 64, sfx: 'tri', boot: 'retro' },
-  ps1: { res: [640, 480], low: [320, 240], smooth: false, item: 'cd', layout: 'grid', bg: 0x000000, env: 'stars', texRes: 64, sfx: 'deep', boot: 'soft' },
-  gc: { res: [640, 480], low: [640, 480], smooth: true, item: 'mini', layout: 'ring', bg: 0x170f3a, env: 'bubbles', texRes: 128, sfx: 'bubble', boot: 'retro' },
-  ps2: { res: [640, 480], low: [640, 480], smooth: true, item: 'case', layout: 'shelf', bg: 0x01030f, env: 'dust', texRes: 128, sfx: 'deep', boot: 'soft' },
-  nes: { res: [512, 480], low: [256, 240], smooth: false, item: 'cart8', layout: 'row', bg: 0x0c0c0c, env: 'bricks', texRes: 48, sfx: 'square', boot: 'retro' },
-  megadrive: { res: [640, 448], low: [320, 224], smooth: false, item: 'cartmd', layout: 'row', bg: 0x02040c, env: 'lines', texRes: 64, sfx: 'square', boot: 'retro' },
-  nds: { res: [512, 784], low: [256, 192], smooth: false, item: 'cartds', layout: 'row', bg: 0xdfe5ee, env: 'dsgrid', texRes: 64, sfx: 'click', boot: 'white', dual: true },
-  gb: { res: [480, 432], low: [160, 144], smooth: false, item: 'cartgb', layout: 'row', bg: 0x0f380f, env: 'none', texRes: 48, palette: ['#0f380f', '#306230', '#8bac0f', '#9bbc0f'], sfx: 'square', boot: 'retro' },
+  snes: { kind: 'snes', sfx: 'square', boot: 'retro' },
+  n64: { kind: 'n64', sfx: 'tri', boot: 'retro' },
+  ps1: { kind: 'mc1', sfx: 'deep', boot: 'soft' },
+  gc: { kind: 'gc', sfx: 'bubble', boot: 'retro' },
+  ps2: { kind: 'mc2', sfx: 'deep', boot: 'soft' },
+  nes: { kind: 'nes', sfx: 'square', boot: 'retro' },
+  megadrive: { kind: 'md', sfx: 'square', boot: 'retro' },
+  nds: { kind: 'nds', sfx: 'click', boot: 'white' },
+  gb: { kind: 'gb', sfx: 'square', boot: 'retro' },
+  other: { kind: 'box', sfx: 'soft', boot: 'soft' },
 };
-const TABS: [Tab, string][] = [['games', 'JOGOS'], ['news', 'NOVIDADES'], ['ach', 'CONQUISTAS'], ['time', 'TEMPO'], ['cfg', 'AJUSTES']];
-const FEED = { new: 'NOVO NO CATÁLOGO', upd: 'VERSÃO NOVA', up: 'MUDOU DE STATUS' } as const;
-const CFG_ROWS: Row[] = [{ key: 'dir', id: 'dir', t: 'PASTA DOS JOGOS' }, { key: 'snd', id: 'snd', t: 'SONS' }, { key: 'radar', id: 'radar', t: 'RADAR DE NOVIDADES' }, { key: 'off', id: 'off', t: 'VOLTAR AO CARTUCHO' }];
-const VISIBLE = 6;
+const TABS: [Tab, string][] = [['games', 'Meus jogos'], ['disc', 'Descobrir'], ['news', 'Novidades'], ['ach', 'Conquistas'], ['time', 'Tempo'], ['cfg', 'Ajustes']];
+const FEED = { new: 'Novo no catálogo', upd: 'Versão nova', up: 'Mudou de status' } as const;
+const CFG_ROWS: Row[] = [{ key: 'dir', id: 'dir', t: 'Pasta dos jogos' }, { key: 'snd', id: 'snd', t: 'Sons' }, { key: 'radar', id: 'radar', t: 'Radar de novidades' }, { key: 'off', id: 'off', t: 'Voltar ao Cartucho' }];
+const VISIBLE = 7;
 
 export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: string; tab?: 'lib' | 'cat'; onBack: () => void }) {
   const c = CONSOLES.find(x => x.id === id)!;
   const cfg = RETRO[id] ?? RETRO.snes!;
+  const kind = cfg.kind;
+  const cols = SHELLS[kind].cols, rh = shellH(kind) + (kind === 'mc2' ? 190 : 140);
   const self = isSelfInstall(id);
   const data = useHubData(id);
   const act = useHubActions();
   const trpc = useTRPC(), qc = useQueryClient();
   const s = useSettings();
   const [toast, show] = useHubToast();
-  const [st, set] = useState<St>({ tab: 0, idx: 0, li: 0, opt: false, oi: 0, search: false, game: null, zone: 'gacts', ai: 0, gs: 0, achOpen: false, ai2: 0 });
+  const [st, set] = useState<St>({ tab: tab === 'cat' ? 1 : 0, idx: 0, li: 0, game: null, achOpen: false, ai2: 0 });
   const up = (p: Partial<St>) => set(x => ({ ...x, ...p }));
-  const [query, setQuery] = useState('');
-  const searchRef = useRef<HTMLInputElement>(null);
-  const cvRef = useRef<HTMLCanvasElement>(null);
-  const shelfRef = useRef<ReturnType<typeof createShelf> | null>(null);
-  const gScroll = useRef<HTMLDivElement>(null);
+  const [dst, setDst] = useState(initialDiscover);
   const clock = useClock();
-  const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show('PASTA DOS JOGOS ALTERADA'); } }));
+  const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show('Pasta dos jogos alterada'); } }));
   const chooseExe = useMutation(trpc.games.chooseExe.mutationOptions({ onSuccess: () => void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }) }));
   const openFolder = useMutation(trpc.games.openFolder.mutationOptions());
 
   useEffect(() => { setSfxProfile(cfg.sfx); const t = setTimeout(() => sfx.play('boot'), 150); return () => clearTimeout(t); }, [cfg.sfx]);
   useEffect(() => { if (act.error) { show(act.error); act.reset(); } }, [act.error]);
-  const focusSearch = () => setTimeout(() => searchRef.current?.focus(), 60);
   useEffect(() => {
-    const go = () => { sfx.play('ok'); set(x => ({ ...x, tab: 0, search: true, game: null, opt: false, achOpen: false })); focusSearch(); };
+    const go = () => { sfx.play('ok'); set(x => ({ ...x, tab: 1, game: null, achOpen: false })); setDst(d => ({ ...d, zone: 'search' })); setTimeout(focusSearch, 80); };
     addEventListener('cartucho:search', go);
     return () => removeEventListener('cartucho:search', go);
   }, []);
 
-  const allGames = useMemo(() => [...data.lib, ...[...data.notInstalled].sort((a, b) => Number(b.isNew) - Number(a.isNew))], [data.lib, data.notInstalled]);
-  const list = useMemo(() => query.trim() ? allGames.filter(x => matchesQuery(query, x.title, x.platformName, x.catalog?.developer)) : allGames, [allGames, query]);
+  const mine = data.lib;
   const lookup = useMemo(() => new Map([...data.lib, ...data.catalog].flatMap(x => [[x.key, x] as const, ...(x.installed && x.catalog ? [[x.catalog.id, x] as const] : [])])), [data.lib, data.catalog]);
   useEffect(() => {
     if (!game0) return;
-    const i = allGames.findIndex(g => g.key === game0 || g.catalog?.id === game0);
-    if (i >= 0) up({ idx: i });
-  }, [game0, allGames.length]);
-  useEffect(() => { if (st.idx >= list.length && list.length) up({ idx: list.length - 1 }); }, [list.length]);
-  const g = list[st.idx] ?? null;
+    const i = mine.findIndex(g => g.key === game0 || g.catalog?.id === game0);
+    if (i >= 0) up({ idx: i, tab: 0 });
+    else if (lookup.has(game0)) up({ game: lookup.get(game0)!.key });
+  }, [game0, mine.length, lookup.size]);
+  useEffect(() => { if (st.idx >= mine.length && mine.length) up({ idx: mine.length - 1 }); }, [mine.length]);
+  const g = mine[st.idx] ?? null;
   const tk = TABS[st.tab]![0];
-
-  const arts = useQueries({ queries: list.map(x => ({ ...trpc.art.get.queryOptions({ console: x.console, platformName: x.platformName, title: x.title }), staleTime: Infinity })) });
-  const covers = arts.map(a => a.data?.cover ?? null);
-  useEffect(() => {
-    const cv = cvRef.current; if (!cv) return;
-    const sh = createShelf(cv, { ...cfg, aspect: cfg.dual ? 4 / 3 : cfg.res[0] / cfg.res[1] }, reduceMotion());
-    shelfRef.current = sh;
-    return () => { sh.dispose(); shelfRef.current = null; };
-  }, [id]);
-  const coverKey = covers.join('|');
-  useEffect(() => {
-    shelfRef.current?.setGames(list.map((x, i) => ({ key: x.key, title: x.title, ghost: !x.installed, hue: hueOf(x.title), cover: covers[i] ?? x.coverUrl ?? null })));
-  }, [list, coverKey]);
-  useEffect(() => { shelfRef.current?.setSel(st.idx); }, [st.idx]);
 
   const byPlay = useMemo(() => [...data.lib].sort((a, b) => (b.installed?.playMs ?? 0) - (a.installed?.playMs ?? 0)), [data.lib]);
   const maxPlay = Math.max(1, ...byPlay.map(x => x.installed?.playMs ?? 0));
-  const rows: Row[] = tk === 'news' ? data.feed.map(f => ({ key: String(f.id), g: data.catalog.find(y => y.catalog?.id === f.gameId), t: f.title, s: `${FEED[f.kind]}${f.detail && !(self && f.kind === 'new') ? ` · ${f.detail}` : ''}`, v: ago(f.at).toUpperCase() }))
+  const rows: Row[] = tk === 'news' ? data.feed.map(f => ({ key: String(f.id), g: data.catalog.find(y => y.catalog?.id === f.gameId), t: f.title, s: `${FEED[f.kind]}${f.detail && !(self && f.kind === 'new') ? ` · ${f.detail}` : ''}`, v: ago(f.at) }))
     : tk === 'ach' ? data.lib.map(x => ({ key: x.key, g: x, t: x.title, v: x.installed?.achievements?.total ? `${x.installed.achievements.unlocked}/${x.installed.achievements.total}` : '—' }))
     : tk === 'time' ? byPlay.map(x => ({ key: x.key, g: x, t: x.title, v: fmtPlay(x.installed?.playMs ?? 0) || '0m', bar: (x.installed?.playMs ?? 0) / maxPlay }))
-    : tk === 'cfg' ? CFG_ROWS.map(r => ({ ...r, v: r.id === 'snd' ? (s.snd ? 'LIGADOS' : 'DESLIGADOS') : '' }))
+    : tk === 'cfg' ? CFG_ROWS.map(r => ({ ...r, v: r.id === 'snd' ? (s.snd ? 'Ligados' : 'Desligados') : '' }))
     : [];
   const row = rows[st.li];
   const achGame = tk === 'ach' ? row?.g ?? null : null;
   const ach = useQuery(trpc.achievements.forGame.queryOptions({ id: achGame?.installed?.id ?? '' }, { enabled: !!achGame?.installed?.adapter }));
   const achList = ach.data ? [...ach.data.list].sort((a, b) => (b.unlockedAt ?? -1) - (a.unlockedAt ?? -1)) : [];
-  const stats = useQuery(trpc.play.stats.queryOptions({ id: g?.installed?.id ?? '' }, { enabled: tk === 'games' && !!g?.installed }));
   const statsAll = useQueries({ queries: (tk === 'time' ? byPlay : []).map(x => trpc.play.stats.queryOptions({ id: x.installed!.id })) });
 
   const game = st.game ? lookup.get(st.game) ?? null : null;
-  const shots = useShots(game?.console, game?.title ?? '', game?.platformName);
-  const [view, setView] = useState<number | null>(null);
-  useEffect(() => {
-    const el = gScroll.current; if (!el || !game) return;
-    if (st.zone === 'gacts') el.scrollTo({ top: 0, behavior: 'smooth' });
-    else if (st.zone === 'gshots') el.querySelector('.rt-gshots')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    else el.querySelector('.rt-gtext')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [st.zone, !!game]);
 
-  const options = (x: HubGame, page = false): Opt[] => {
+  const options = (x: HubGame, page = false): DOpt[] => {
     const inst = x.installed;
-    const L: Opt[] = [];
+    const L: DOpt[] = [];
     if (inst?.missing) {
-      if (x.catalog?.repo && !self) L.push({ k: 'reinstall', l: 'INSTALAR DE NOVO' });
-      L.push({ k: 'relink', l: 'PROCURAR A PASTA' });
-      L.push({ k: 'remove', l: 'TIRAR DA BIBLIOTECA' });
+      if (x.catalog?.repo && !self) L.push({ k: 'reinstall', l: 'Instalar de novo' });
+      L.push({ k: 'relink', l: 'Procurar a pasta' });
+      L.push({ k: 'remove', l: 'Tirar da biblioteca' });
     } else if (inst) {
-      L.push(inst.running ? { k: 'quit', l: 'FECHAR O JOGO' } : inst.exe ? { k: 'play', l: 'JOGAR' } : { k: 'exe', l: 'ESCOLHER O .EXE' });
-      if (x.update?.updateAvailable && !self) L.push({ k: 'update', l: `ATUALIZAR P/ ${x.update.latest?.tag}` });
-      if (inst.adapter) L.push({ k: 'ach', l: 'CONQUISTAS' });
-      L.push({ k: 'folder', l: 'ABRIR PASTA' });
-      if (inst.exe) L.push({ k: 'exe', l: 'ESCOLHER O .EXE' });
+      L.push(inst.running ? { k: 'quit', l: 'Fechar o jogo' } : inst.exe ? { k: 'play', l: 'Jogar' } : { k: 'exe', l: 'Escolher o .exe' });
+      if (x.update?.updateAvailable && !self) L.push({ k: 'update', l: `Atualizar para ${x.update.latest?.tag}` });
+      if (inst.adapter) L.push({ k: 'ach', l: 'Conquistas' });
+      L.push({ k: 'folder', l: 'Abrir pasta' });
+      if (inst.exe) L.push({ k: 'exe', l: 'Trocar o .exe' });
     } else {
-      if (x.repo && !self) L.push({ k: 'install', l: 'INSTALAR' });
-      L.push({ k: 'add', l: self ? 'JÁ INSTALEI: ADICIONAR' : 'ESCOLHER PASTA' });
+      if (x.repo && !self) L.push({ k: 'install', l: 'Instalar' });
+      L.push({ k: 'add', l: self ? 'Já instalei: adicionar pasta' : 'Escolher pasta' });
     }
-    if (x.repo) L.push({ k: 'gh', l: 'VER NO GITHUB' });
-    if (!page) L.push({ k: 'info', l: 'PÁGINA DO JOGO' });
+    if (x.repo) L.push({ k: 'gh', l: 'Ver no GitHub' });
+    if (!page) L.push({ k: 'info', l: 'Página do jogo' });
     return L;
   };
-  const gameOpts = game ? options(game, true) : [];
-  const openGame = (x: HubGame) => { setView(null); up({ game: x.key, opt: false, zone: 'gacts', ai: 0, gs: 0 }); };
+  const openGame = (x: HubGame) => { sfx.play('ok'); up({ game: x.key }); };
 
   const run = (k: string, x: HubGame) => {
-    up({ opt: false });
     if (k === 'play' || k === 'quit' || k === 'install') {
       const r = act.primary(x);
       sfx.play(r === 'quit' ? 'back' : 'ok');
-      if (r === 'play') show(`${x.title.toUpperCase()} ABERTO`);
-      else if (r === 'install') show(`BAIXANDO ${x.repo}…`);
-      else if (r === 'quit') show('FECHANDO…');
+      if (r === 'play') show(`${x.title} aberto`);
+      else if (r === 'install') show(`Baixando ${x.repo}…`);
+      else if (r === 'quit') show('Fechando…');
       else if (r === 'pick') chooseExe.mutate({ id: x.installed!.id });
-      else if (r === 'relink') show('ESCOLHA ONDE O JOGO ESTÁ AGORA');
+      else if (r === 'relink') show('Escolha onde o jogo está agora');
       return;
     }
     sfx.play('ok');
-    if (k === 'add') { act.addFolder(x); return show('ESCOLHA A PASTA DO JOGO'); }
-    if (k === 'reinstall') { act.reinstall(x); return show(`BAIXANDO ${x.repo} DE NOVO…`); }
-    if (k === 'relink') { act.relink(x); return show('ESCOLHA ONDE O JOGO ESTÁ AGORA'); }
-    if (k === 'remove') { act.remove(x); up({ game: null }); return show('JOGO TIRADO DA BIBLIOTECA · NENHUM ARQUIVO APAGADO'); }
-    if (k === 'update') { act.update(x); return show(`ATUALIZANDO PARA ${x.update?.latest?.tag}…`); }
-    if (k === 'ach') return up({ game: null, tab: 2, li: Math.max(0, data.lib.indexOf(x)), achOpen: true, ai2: 0 });
+    if (k === 'add') { act.addFolder(x); return show('Escolha a pasta do jogo'); }
+    if (k === 'reinstall') { act.reinstall(x); return show(`Baixando ${x.repo} de novo…`); }
+    if (k === 'relink') { act.relink(x); return show('Escolha onde o jogo está agora'); }
+    if (k === 'remove') { act.remove(x); up({ game: null }); return show('Jogo tirado da biblioteca · nenhum arquivo apagado'); }
+    if (k === 'update') { act.update(x); return show(`Atualizando para ${x.update?.latest?.tag}…`); }
+    if (k === 'ach') return up({ game: null, tab: 3, li: Math.max(0, data.lib.indexOf(x)), achOpen: true, ai2: 0 });
     if (k === 'folder') return openFolder.mutate({ id: x.installed!.id });
     if (k === 'exe') return chooseExe.mutate({ id: x.installed!.id });
     if (k === 'gh') return act.github(x);
     if (k === 'info') return openGame(x);
   };
 
+  const goTab = (d: number) => { sfx.play('move'); set(x => ({ ...x, tab: (x.tab + d + TABS.length) % TABS.length, li: 0, achOpen: false })); };
+  const setTab = (i: number) => { if (i === st.tab) return; sfx.play('move'); up({ tab: i, li: 0, achOpen: false }); };
+
   const enter = () => {
-    if (game) {
-      if (st.zone === 'gacts') { const o = gameOpts[st.ai]; if (o) run(o.k, game); return; }
-      if (st.zone === 'gshots' && shots[st.gs]) { sfx.play('ok'); setView(st.gs); }
-      return;
+    if (tk === 'games') {
+      if (!g) { sfx.play('ok'); return up({ tab: 1 }); }
+      return run(options(g)[0]!.k, g);
     }
-    if (st.opt && g) { const o = options(g)[st.oi]; if (o) run(o.k, g); return; }
-    if (tk === 'games') { if (g) run(options(g)[0]!.k, g); return; }
     if (!row) return;
     if (tk === 'cfg') {
       sfx.play('ok');
       if (row.id === 'dir') return pickDir.mutate();
       if (row.id === 'snd') return setSettings({ snd: !getSettings().snd });
       if (row.id === 'off') return onBack();
-      return show('O RADAR CONFERE O CATÁLOGO TODA VEZ QUE O CARTUCHO ABRE');
+      return show('O radar confere o catálogo toda vez que o Cartucho abre');
     }
     if (tk === 'ach') { if (achList.length) { sfx.play('ok'); up({ achOpen: !st.achOpen, ai2: 0 }); } return; }
-    if (row.g) { sfx.play('ok'); openGame(row.g); }
+    if (row.g) openGame(row.g);
   };
   const back = () => {
     sfx.play('back');
-    if (view != null) return setView(null);
-    if (game) return up({ game: null });
-    if (st.opt) return up({ opt: false });
     if (st.achOpen) return up({ achOpen: false });
-    if (st.search || query) { setQuery(''); return up({ search: false }); }
     if (st.tab !== 0) return up({ tab: 0 });
     onBack();
   };
-  const goTab = (d: number) => { sfx.play('move'); set(x => ({ ...x, tab: (x.tab + d + TABS.length) % TABS.length, li: 0, opt: false, achOpen: false, search: false })); };
 
   useKeys((k: Key) => {
+    if (game || tk === 'disc') return;
     if (k === 'Escape') return back();
+    if (k === 'Enter') return enter();
+    if (k === 'LB' || k === 'RB' || k === 'Tab') return goTab(k === 'LB' ? -1 : 1);
     const R = k === 'ArrowRight', L = k === 'ArrowLeft', U = k === 'ArrowUp', D = k === 'ArrowDown';
     const mv = (p: Partial<St>) => { sfx.play('move'); up(p); };
-    if (view != null) {
-      if (k === 'Enter') return back();
-      if (R && view < shots.length - 1) { sfx.play('move'); setView(view + 1); } else if (L && view > 0) { sfx.play('move'); setView(view - 1); }
-      return;
-    }
-    if (k === 'Enter') return enter();
-    if (game) {
-      const el = gScroll.current, z = st.zone;
-      if (z === 'gacts') { if (R && st.ai < gameOpts.length - 1) mv({ ai: st.ai + 1 }); else if (L && st.ai > 0) mv({ ai: st.ai - 1 }); else if (D) mv({ zone: shots.length ? 'gshots' : 'gtext', gs: 0 }); return; }
-      if (z === 'gshots') { if (R && st.gs < shots.length - 1) mv({ gs: st.gs + 1 }); else if (L && st.gs > 0) mv({ gs: st.gs - 1 }); else if (U) mv({ zone: 'gacts' }); else if (D) mv({ zone: 'gtext' }); return; }
-      if (D) { sfx.play('move'); el?.scrollBy({ top: 120, behavior: 'smooth' }); }
-      else if (U) { if (!el || el.scrollTop <= 4) mv({ zone: shots.length ? 'gshots' : 'gacts' }); else { sfx.play('move'); el.scrollBy({ top: -120, behavior: 'smooth' }); } }
-      return;
-    }
-    if (st.opt && g) {
-      const n = options(g).length;
-      if (D && st.oi < n - 1) mv({ oi: st.oi + 1 }); else if (U && st.oi > 0) mv({ oi: st.oi - 1 });
-      return;
-    }
-    if (k === 'LB' || k === 'RB' || k === 'Tab') return goTab(k === 'LB' ? -1 : 1);
-    if (st.achOpen) { if (D && st.ai2 < achList.length - 1) mv({ ai2: st.ai2 + 1 }); else if (U && st.ai2 > 0) mv({ ai2: st.ai2 - 1 }); return; }
     if (tk === 'games') {
-      if (k === 'X') { if (g) { sfx.play('ok'); up({ opt: true, oi: 0 }); } return; }
-      if (k === 'Y') { sfx.play('ok'); up({ search: true }); return focusSearch(); }
-      if (R && st.idx < list.length - 1) mv({ idx: st.idx + 1 }); else if (L && st.idx > 0) mv({ idx: st.idx - 1 });
-      else if (U) goTab(-1); else if (D) goTab(1);
+      if (k === 'Y') { sfx.play('ok'); up({ tab: 1 }); setDst(d => ({ ...d, zone: 'search' })); setTimeout(focusSearch, 80); return; }
+      if (!g) return;
+      if (k === 'X') return openGame(g);
+      const n = mine.length, i = st.idx;
+      if (R && i % cols < cols - 1 && i + 1 < n) mv({ idx: i + 1 });
+      else if (L && i % cols > 0) mv({ idx: i - 1 });
+      else if (D && i + cols < n) mv({ idx: i + cols });
+      else if (D && Math.floor(i / cols) < Math.floor((n - 1) / cols)) mv({ idx: n - 1 });
+      else if (U && i >= cols) mv({ idx: i - cols });
+      else if (k === 'RT') mv({ idx: Math.min(n - 1, i + cols * 2) });
+      else if (k === 'LT') mv({ idx: Math.max(0, i - cols * 2) });
       return;
     }
+    if (st.achOpen) { if (D && st.ai2 < achList.length - 1) mv({ ai2: st.ai2 + 1 }); else if (U && st.ai2 > 0) mv({ ai2: st.ai2 - 1 }); return; }
     if (D && st.li < rows.length - 1) mv({ li: st.li + 1 }); else if (U && st.li > 0) mv({ li: st.li - 1 });
-    else if (L) goTab(-1); else if (R) goTab(1);
+    else if (k === 'RT') mv({ li: Math.min(rows.length - 1, st.li + VISIBLE) }); else if (k === 'LT') mv({ li: Math.max(0, st.li - VISIBLE) });
   });
 
-  const hints: Hint[] = view != null ? [['lr', 'IMAGEM'], ['back', 'FECHAR']]
-    : game ? (st.zone === 'gacts' ? [['ok', 'OK'], ['ud', 'ROLAR'], ['back', 'VOLTAR']] : st.zone === 'gshots' ? [['ok', 'AMPLIAR'], ['back', 'VOLTAR']] : [['ud', 'ROLAR'], ['back', 'VOLTAR']])
-    : st.opt ? [['ok', 'OK'], ['back', 'FECHAR']]
-    : tk === 'games' ? (g ? [['ok', options(g)[0]!.l], ['x', 'OPÇÕES'], ['y', 'BUSCAR'], ['rb', 'SEÇÃO']] : [['y', 'BUSCAR'], ['rb', 'SEÇÃO'], ['back', 'SAIR']])
-    : [['ok', tk === 'cfg' ? 'OK' : tk === 'ach' ? (st.achOpen ? 'FECHAR' : 'LISTA') : 'ABRIR'], ['rb', 'SEÇÃO'], ['back', 'VOLTAR']];
-  const H = ({ cls }: { cls: string }) => <div className={cls}>{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>;
-  const off = Math.max(0, Math.min(st.li - 2, rows.length - VISIBLE));
+  const hints: Hint[] = tk === 'games'
+    ? (g ? [['ok', options(g)[0]!.l], ['x', 'Página do jogo'], ['y', 'Buscar'], ['rb', 'Seção'], ['back', 'Sair']] : [['ok', 'Descobrir jogos'], ['rb', 'Seção'], ['back', 'Sair']])
+    : [['ok', tk === 'cfg' ? 'OK' : tk === 'ach' ? (st.achOpen ? 'Fechar' : 'Ver lista') : 'Abrir'], ['ud', 'Mover'], ['rb', 'Seção'], ['back', 'Voltar']];
+  const H = <div className="rh-ft">{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>;
+  const off = Math.max(0, Math.min(st.li - 3, rows.length - VISIBLE));
+  const line = (x: HubGame) => x.installed?.missing ? 'Pasta não encontrada' : x.installed?.running ? 'Jogando agora' : x.installed?.playMs ? `${fmtPlay(x.installed.playMs)} jogadas` : 'Ainda não jogado';
+
+  const header = (
+    <header className="rh-hd">
+      <b className="rh-name">{c.name}</b>
+      <nav className="rh-tabs">
+        <Glyph a="lb" />
+        {TABS.map(([k, l], j) => (
+          <button key={k} className={`${j === st.tab ? 'on' : ''}`} onClick={() => setTab(j)}>
+            {l}{k === 'news' && data.feed.length > 0 && <i className="nw">{data.feed.length}</i>}
+          </button>
+        ))}
+        <Glyph a="rb" />
+      </nav>
+      <span className="rh-clock">{clock}</span>
+    </header>
+  );
+
+  const item = (x: HubGame, i: number) => (
+    <button key={x.key} className={`rg-it ${i === st.idx ? 'on' : ''} ${x.installed?.missing ? 'miss' : ''} ${x.installed?.running ? 'run' : ''}`} aria-label={x.title}
+      onClick={() => { if (i === st.idx) enter(); else { sfx.play('move'); up({ idx: i }); } }}>
+      <Obj kind={kind}><GameArt title={x.title} console={x.console} platformName={x.platformName} fallback={x.coverUrl} variant="cover" /></Obj>
+      <span className="rg-t">{x.title}</span>
+      <span className="rg-s">{line(x)}</span>
+    </button>
+  );
+  const rowI = Math.floor(st.idx / cols);
+  const viewH = kind === 'nds' ? 790 : 796;
+  const shift = Math.max(0, (rowI + 1) * rh - viewH + 40);
+
+  const empty = (
+    <div className="rw rg-empty">
+      <b>Nenhum jogo de {c.name} instalado ainda</b>
+      <p>{data.catalog.length ? `O catálogo tem ${plural(data.catalog.length, 'jogo', 'jogos')} para este console. Procure um em Descobrir.` : `O radar avisa quando aparecer o primeiro recomp de ${c.name}.`}</p>
+      {data.catalog.length > 0 && <button className="on" onClick={() => { sfx.play('ok'); up({ tab: 1 }); }}><Glyph a="ok" />Descobrir jogos</button>}
+    </div>
+  );
 
   return (
     <section className={`view hub sk-rt t-${id}`} style={{ ['--cc' as string]: c.color }}>
-      <Fit w={cfg.res[0]} h={cfg.res[1]} className={`rt ${cfg.smooth ? '' : 'px'}`} style={{ ['--cc' as string]: c.color }}>
-        <canvas ref={cvRef} className="rt-cv" />
-        <div className={`rt-ui ${game ? 'gone' : tk !== 'games' ? 'dim' : ''}`}>
-          <div className="rt-head">
-            <div className="rt-tabs"><span className="ar">◀</span><b>{TABS[st.tab]![1]}</b><span className="ar">▶</span>
-              <span className="dots">{TABS.map((_, j) => <i key={j} className={j === st.tab ? 'on' : ''} />)}</span>
-              {data.feed.length > 0 && st.tab !== 1 && <span className="nw">{data.feed.length} NOVO{data.feed.length > 1 ? 'S' : ''}</span>}
+      <Fit w={1920} h={1080} className={`rt k-${kind}`} style={{ ['--cc' as string]: c.color }}>
+        {header}
+
+        {tk === 'games' && (kind === 'nds' ? (
+          <>
+            <div className="ds-top">
+              {g ? <DsTop g={g} line={line(g)} /> : empty}
             </div>
-            <span>{c.short} · {clock}</span>
+            <div className="ds-hinge" />
+            <div className="ds-bot">
+              <div className="rg-view"><div className="rg-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, gridAutoRows: rh, transform: `translateY(-${shift}px)` }}>{mine.map(item)}</div></div>
+            </div>
+          </>
+        ) : mine.length ? (
+          <div className="rg-view"><div className="rg-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, gridAutoRows: rh, transform: `translateY(-${shift}px)` }}>{mine.map(item)}</div></div>
+        ) : empty)}
+
+        {tk !== 'games' && tk !== 'disc' && (
+          <div className="rw rl">
+            {tk === 'time' && <div className="rl-sum">{fmtPlay(data.playMs) || '0m'} neste console · {statsAll.reduce((a, q) => a + (q.data?.sessions ?? 0), 0)} sessões</div>}
+            {st.achOpen && achGame ? (
+              <>
+                <div className="rl-sum">{achGame.title} · {achList.filter(a => a.unlockedAt != null).length}/{achList.length}</div>
+                <AchList list={achList} sel={st.ai2} />
+              </>
+            ) : rows.length ? (
+              <div className="rl-rows">{rows.slice(off, off + VISIBLE).map((r, j) => (
+                <button key={r.key} className={`rl-r ${off + j === st.li ? 'on' : ''} ${r.g ? 'thumb' : ''}`} onClick={() => { if (st.li === off + j) enter(); else { sfx.play('move'); up({ li: off + j }); } }}>
+                  {r.g && <span className="th"><GameArt title={r.g.title} console={r.g.console} platformName={r.g.platformName} fallback={r.g.coverUrl} variant="cover" /></span>}
+                  <span className="t">{r.t}</span>{r.v && <span className="v">{r.v}</span>}
+                  {r.s && <span className="s">{r.s}</span>}
+                  {r.bar != null && <span className="bar"><i style={{ width: `${r.bar * 100}%` }} /></span>}
+                </button>
+              ))}</div>
+            ) : <div className="rl-empty">{tk === 'news' ? 'Nada novo por aqui.' : 'Nenhum jogo instalado.'}</div>}
+            {tk === 'cfg' && row && <div className="rl-note">{row.id === 'dir' ? <PortsDir /> : row.id === 'snd' ? 'Sons de navegação da interface.' : row.id === 'radar' ? 'Confere o catálogo toda vez que o Cartucho abre.' : 'Desliga este console e volta ao palco.'}</div>}
+            {tk === 'ach' && !st.achOpen && achGame && !achGame.installed?.adapter && <div className="rl-note">O Cartucho ainda não lê as conquistas deste port.</div>}
           </div>
-
-          {tk === 'games' && !game && (
-            <>
-              {list.length > 0 && <div className="rt-count">{st.idx + 1}/{list.length}</div>}
-              {st.search && (
-                <div className="rt-win rt-q">
-                  <span>BUSCAR:</span>
-                  <SearchBox ref={searchRef} value={query} onChange={v => { setQuery(v); up({ idx: 0 }); }} nav={false} className="rt-qi" placeholder="NOME DO JOGO"
-                    onDone={() => { sfx.play('ok'); up({ search: !!query.trim() }); }} />
-                </div>
-              )}
-              {g ? <Card g={g} stats={stats.data} self={self} hints={<H cls="rt-ga" />} />
-                : <div className="rt-win rt-card"><div className="rt-gt">{query.trim() ? `NADA PARA “${query.trim().toUpperCase()}”` : data.catalog.length ? 'NADA AQUI' : 'NENHUM RECOMP AINDA'}</div>
-                  <div className="rt-gs">{query.trim() ? 'ESC LIMPA A BUSCA' : `O RADAR AVISA QUANDO APARECER UM RECOMP DE ${c.name.toUpperCase()}`}</div><H cls="rt-ga" /></div>}
-              {st.opt && g && (
-                <div className="rt-win rt-opt">{options(g).map((o, j) => (
-                  <button key={o.k + j} className={j === st.oi ? 'on' : ''} onClick={() => { if (st.oi === j) enter(); else { sfx.play('move'); up({ oi: j }); } }}>{j === st.oi ? '▶ ' : '  '}{o.l}</button>
-                ))}</div>
-              )}
-            </>
-          )}
-
-          {tk !== 'games' && !game && (
-            <div className="rt-win rt-list">
-              {tk === 'time' && <div className="rt-sum">{fmtPlay(data.playMs) || '0m'} NESTE CONSOLE · {statsAll.reduce((a, q) => a + (q.data?.sessions ?? 0), 0)} SESSÕES</div>}
-              {st.achOpen && achGame ? (
-                <>
-                  <div className="rt-sum">{achGame.title.toUpperCase()} · {achList.filter(a => a.unlockedAt != null).length}/{achList.length}</div>
-                  <AchList list={achList} sel={st.ai2} />
-                </>
-              ) : rows.length ? (
-                <div className="rt-rows">{rows.slice(off, off + VISIBLE).map((r, j) => (
-                  <button key={r.key} className={`rt-r ${off + j === st.li ? 'on' : ''}`} onClick={() => { if (st.li === off + j) enter(); else { sfx.play('move'); up({ li: off + j }); } }}>
-                    <span className="t">{off + j === st.li ? '▶ ' : ''}{r.t}</span>{r.v && <span className="v">{r.v}</span>}
-                    {r.s && <span className="s">{r.s}</span>}
-                    {r.bar != null && <span className="bar"><i style={{ width: `${r.bar * 100}%` }} /></span>}
-                  </button>
-                ))}</div>
-              ) : <div className="rt-empty">{tk === 'news' ? 'NADA NOVO POR AQUI.' : 'NENHUM JOGO INSTALADO.'}</div>}
-              {tk === 'cfg' && row && <div className="rt-note">{row.id === 'dir' ? <PortsDir /> : row.id === 'snd' ? 'SONS DE NAVEGAÇÃO DA INTERFACE.' : row.id === 'radar' ? 'CONFERE O CATÁLOGO TODA VEZ QUE O CARTUCHO ABRE.' : 'DESLIGA ESTE CONSOLE.'}</div>}
-              {tk === 'ach' && !st.achOpen && achGame && !achGame.installed?.adapter && <div className="rt-note">O CARTUCHO AINDA NÃO LÊ AS CONQUISTAS DESTE PORT.</div>}
-              <H cls="rt-ga" />
-            </div>
-          )}
-        </div>
-
-        {game && <GamePage g={game} st={st} opts={gameOpts} shots={shots} self={self} scrollRef={gScroll} hints={<H cls="rt-ga" />}
-          onAct={j => { if (st.zone === 'gacts' && st.ai === j) enter(); else { sfx.play('move'); up({ zone: 'gacts', ai: j }); } }}
-          onShot={j => { sfx.play('ok'); up({ zone: 'gshots', gs: j }); setView(j); }} />}
-        {view != null && shots[view] && (
-          <div className="rt-view" onClick={() => setView(null)}><img src={shots[view]} alt="" /><span>{view + 1}/{shots.length}</span></div>
         )}
+
+        {tk !== 'disc' && H}
+
+        {tk === 'disc' && !game && header}
+        {tk === 'disc' && !game && (
+          <Discover theme="d-retro" shape={kind === 'snes' || kind === 'n64' ? 'wide' : kind === 'mc1' || kind === 'gb' || kind === 'nds' ? 'square' : 'tall'} cname={c.name} games={data.catalog} extra={data.lib.filter(x => !x.catalog)} self={self} st={dst} set={setDst}
+            options={x => options(x).filter(o => o.k !== 'info')} run={run} onOpen={openGame} onBack={() => { sfx.play('back'); up({ tab: 0 }); }} onTab={goTab} />
+        )}
+        {game && <GameView theme="d-retro" g={game} opts={options(game, true)} run={run} self={self} onBack={() => up({ game: null })} />}
         {toast}
       </Fit>
       <BootOverlay kind={cfg.boot} label={c.short} />
@@ -315,71 +292,29 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
   );
 }
 
-function Card({ g, stats, self, hints }: { g: HubGame; stats: PlayStats | undefined; self: boolean; hints: React.ReactNode }) {
-  const p = useGameProgress(g);
-  const i = g.installed, d = stats?.days ?? [], m = Math.max(...d, 0.01);
+function DsTop({ g, line }: { g: HubGame; line: string }) {
   return (
-    <div className="rt-win rt-card">
-      <div className="rt-gt">{g.title}</div>
-      <div className="rt-gs">
-        {g.status && <span>{STATUS_LABEL[g.status].toUpperCase()}</span>}
-        {i ? (i.missing ? <span className="ghost">PASTA NÃO ENCONTRADA</span> : <span>{fmtPlay(i.playMs) || '0m'}{i.lastPlayed ? ` · ${ago(i.lastPlayed).toUpperCase()}` : ''}</span>)
-          : <span className="ghost">{g.isNew ? 'NOVO NO CATÁLOGO' : self ? 'VOCÊ INSTALA' : 'NÃO INSTALADO'}</span>}
-        {g.update?.updateAvailable && !self && <span className="ghost">UPDATE {g.update.latest?.tag}</span>}
-        {p && <span className="ghost">{(p.error ?? p.stage).toUpperCase()}{p.pct > 0 && p.pct < 1 ? ` ${Math.round(p.pct * 100)}%` : ''}</span>}
+    <div className="ds-sel" key={g.key}>
+      <span className="ds-cv"><GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant="cover" /></span>
+      <div>
+        <h2>{g.title}</h2>
+        <p>{[g.catalog?.developer, g.catalog?.year].filter(Boolean).join(' · ')}</p>
+        <p className="hi">{line}</p>
+        {g.installed?.achievements?.total ? <p>{g.installed.achievements.unlocked}/{g.installed.achievements.total} conquistas</p> : null}
       </div>
-      {i && d.length ? <div className="rt-mini">{d.map((v, j) => <i key={j} className={v ? '' : 'z'} style={{ height: `${v ? Math.max(8, (v / m) * 100) : 8}%` }} />)}</div> : <div />}
-      {hints}
     </div>
   );
 }
 
 function AchList({ list, sel }: { list: AchievementView[]; sel: number }) {
-  const off = Math.max(0, Math.min(sel - 2, list.length - 5));
+  const off = Math.max(0, Math.min(sel - 2, list.length - 6));
   return (
-    <div className="rt-rows">{list.slice(off, off + 5).map((a, j) => (
-      <div key={a.id} className={`rt-r ach ${off + j === sel ? 'on' : ''} ${a.unlockedAt != null ? '' : 'lock'}`}>
-        <span className="t">{a.unlockedAt != null ? '★ ' : '· '}{a.name}</span><span className="v">{a.unlockedAt != null ? fmtDate(a.unlockedAt).split(',')[0] : 'BLOQ.'}</span>
+    <div className="rl-rows">{list.slice(off, off + 6).map((a, j) => (
+      <div key={a.id} className={`rl-r ach ${off + j === sel ? 'on' : ''} ${a.unlockedAt != null ? '' : 'lock'}`}>
+        <span className="t">{a.unlockedAt != null ? '★ ' : '· '}{a.name}</span><span className="v">{a.unlockedAt != null ? fmtDate(a.unlockedAt).split(',')[0] : 'Bloqueada'}</span>
         {a.description && <span className="s">{a.description}</span>}
       </div>
     ))}</div>
-  );
-}
-
-function GamePage({ g, st, opts, shots, self, scrollRef, hints, onAct, onShot }: { g: HubGame; st: St; opts: Opt[]; shots: string[]; self: boolean; scrollRef: RefObject<HTMLDivElement | null>; hints: React.ReactNode; onAct: (j: number) => void; onShot: (j: number) => void }) {
-  const about = useTranslated(g.catalog?.description);
-  const needs = useTranslated(g.catalog?.needs);
-  const p = useGameProgress(g);
-  const i = g.installed;
-  return (
-    <div className="rt-win rt-page">
-      <div className="rt-pscroll" ref={scrollRef}>
-        <div className="rt-gt">{g.title}</div>
-        <div className="rt-gs">
-          {[g.status && STATUS_LABEL[g.status], g.catalog?.developer, g.catalog?.year].filter(Boolean).join(' · ').toUpperCase()}
-        </div>
-        <div className="rt-gs">
-          {(i ? `${fmtPlay(i.playMs) || '0m'} JOGADAS${i.achievements?.total ? ` · ${i.achievements.unlocked}/${i.achievements.total} CONQUISTAS` : ''}` : 'NÃO INSTALADO')}
-        </div>
-        {i?.missing && <div className="rt-gs ghost">PASTA NÃO ENCONTRADA: {i.installDir}</div>}
-        {p && <div className="rt-gs ghost">{(p.error ?? p.stage).toUpperCase()}</div>}
-        <div className="rt-acts">{opts.map((o, j) => (
-          <button key={o.k + j} className={st.zone === 'gacts' && st.ai === j ? 'on' : ''} onClick={() => onAct(j)}>{o.l}</button>
-        ))}</div>
-        <div className="rt-h">IMAGENS</div>
-        {shots.length ? <div className="rt-gshots">{shots.map((u, j) => (
-          <button key={u} className={st.zone === 'gshots' && st.gs === j ? 'on' : ''} onClick={() => onShot(j)}><img src={u} alt="" /></button>
-        ))}</div> : <div className="rt-p dim">SEM CAPTURAS NO LAUNCHBOX.</div>}
-        <div className={`rt-gtext ${st.zone === 'gtext' ? 'on' : ''}`}>
-          {about.text && <><div className="rt-h">SOBRE</div><div className="rt-p">{about.text}</div></>}
-          {needs.text && <><div className="rt-h">O QUE VOCÊ PRECISA</div><div className="rt-p">{needs.text}</div></>}
-          {self && !i && <div className="rt-p">{SELF_INSTALL_NOTE}</div>}
-          {!about.text && !needs.text && <div className="rt-p dim">O CATÁLOGO NÃO TRAZ DESCRIÇÃO DESTE JOGO.</div>}
-          {(about.auto || needs.auto) && <div className="rt-p dim small">TRADUZIDO AUTOMATICAMENTE DO INGLÊS</div>}
-        </div>
-      </div>
-      {hints}
-    </div>
   );
 }
 
