@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConsoleId, PlayStats, RadarEvent } from '@shared/types';
 import { isSelfInstall, SELF_INSTALL_NOTE, STATUS_LABEL } from '@shared/consoles';
@@ -7,15 +7,16 @@ import { Glyph, useKeys, type Key } from '../lib/input';
 import { getSettings, setSettings, useSettings } from '../lib/settings';
 import { setSfxProfile, sfx } from '../lib/sfx';
 import { ago, fmtDate, fmtPlay, plural } from '../lib/format';
-import { matchesQuery } from '../lib/search';
-import { useArt, useShots } from '../lib/art';
+import { focusSearch as focusAny, matchesQuery } from '../lib/search';
+import { GameView } from '../components/GameView';
+import { Discover, initialDiscover } from '../components/Discover';
+import { useArt } from '../lib/art';
 import { useTranslated } from '../lib/translate';
 import { GameArt } from '../components/GameArt';
-import { SearchBox } from '../components/SearchBox';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
-import { useGameProgress, useHubActions, useHubData, type HubGame } from './data';
+import { useHubActions, useHubData, type HubGame } from './data';
 
 type Tab = 'home' | 'games' | 'cat' | 'news' | 'ach' | 'time' | 'cfg';
 type Zone = 'tabs' | 'tiles' | 'list' | 'gacts' | 'gshots' | 'gtext';
@@ -64,8 +65,6 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
   const [st, set] = useState<St>(() => ({ tab: tab === 'cat' ? 2 : tab === 'lib' ? 1 : 0, zone: 'tiles', fi: tab ? 0 : 2, li: 0, mi: 0, dir: 1, menu: false, game: null, ai: 0, gs: 0 }));
   const up = (p: Partial<St>) => set(x => ({ ...x, ...p }));
   const [query, setQuery] = useState('');
-  const searchRef = useRef<HTMLInputElement>(null);
-  const gScroll = useRef<HTMLDivElement>(null);
   const clock = useClock();
   const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show('Pasta dos jogos alterada'); } }));
   const chooseExe = useMutation(trpc.games.chooseExe.mutationOptions({ onSuccess: () => void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }) }));
@@ -73,7 +72,8 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
 
   useEffect(() => { setSfxProfile('click'); const t = setTimeout(() => sfx.play('boot'), 150); return () => clearTimeout(t); }, []);
   useEffect(() => { if (act.error) { show(act.error); act.reset(); } }, [act.error]);
-  const focusSearch = () => setTimeout(() => searchRef.current?.focus(), 60);
+  const [dst, setDst] = useState(initialDiscover);
+  const focusSearch = () => { setDst(d => ({ ...d, zone: 'search' })); setTimeout(focusAny, 80); };
   useEffect(() => {
     const go = () => { sfx.play('ok'); set(x => ({ ...x, game: null, menu: false, dir: x.tab > 2 ? -1 : 1, tab: 2, zone: 'tiles', fi: 0 })); focusSearch(); };
     addEventListener('cartucho:search', go);
@@ -140,14 +140,6 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
   const stats = new Map(byPlay.map((x, i) => [x.key, statQ[i]?.data] as const));
 
   const game = st.game ? all.get(st.game) ?? null : null;
-  const shots = useShots(game?.console, game?.title ?? '', game?.platformName);
-  const [view, setView] = useState<number | null>(null);
-  useEffect(() => {
-    const el = gScroll.current; if (!el || !game) return;
-    if (st.zone === 'gacts') el.scrollTo({ top: 0, behavior: 'smooth' });
-    else if (st.zone === 'gshots') el.querySelector('.x3-gshots')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    else if (st.zone === 'gtext') el.querySelector('.x3-gsec.text')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [st.zone, !!game]);
 
   const options = (x: HubGame): Opt[] => {
     const inst = x.installed;
@@ -178,7 +170,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
     const k = TABS[n]![0];
     set(x => ({ ...x, tab: n, dir: n > x.tab ? 1 : -1, fi: k === 'home' ? 2 : 0, li: 0, menu: false, zone: x.zone === 'tabs' && !extra.zone ? 'tabs' : k === 'ach' || k === 'time' || k === 'cfg' ? 'list' : 'tiles', ...extra }));
   };
-  const openGame = (x: HubGame) => { setView(null); up({ game: x.key, menu: false, zone: 'gacts', ai: 0, gs: 0 }); };
+  const openGame = (x: HubGame) => { up({ game: x.key, menu: false, zone: 'gacts', ai: 0, gs: 0 }); };
 
   const run = (k: string, x: HubGame) => {
     up({ menu: false });
@@ -207,11 +199,6 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
   };
 
   const enter = () => {
-    if (game) {
-      if (st.zone === 'gacts') { const o = gameOpts[st.ai]; if (o) run(o.k, game); return; }
-      if (st.zone === 'gshots' && shots[st.gs]) { sfx.play('ok'); setView(st.gs); }
-      return;
-    }
     if (st.menu && cur?.g) { const o = options(cur.g)[st.mi]; if (o) run(o.k, cur.g); return; }
     if (st.zone === 'tabs') { sfx.play('ok'); return up({ zone: tiles ? 'tiles' : 'list' }); }
     if (tiles) {
@@ -233,7 +220,6 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
   };
   const back = () => {
     sfx.play('back');
-    if (view != null) return setView(null);
     if (game) return up({ game: null });
     if (st.menu) return up({ menu: false });
     if (tk === 'cat' && query) return setQuery('');
@@ -242,24 +228,11 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
   };
 
   useKeys((k: Key) => {
+    if ((tk === 'cat' && !game && !st.menu) || game) return;
     if (k === 'Escape') return back();
     const R = k === 'ArrowRight', L = k === 'ArrowLeft', U = k === 'ArrowUp', D = k === 'ArrowDown';
     const mv = (p: Partial<St>) => { sfx.play('move'); up(p); };
-    if (view != null) {
-      if (k === 'Enter') { sfx.play('back'); return setView(null); }
-      if (R && view < shots.length - 1) { sfx.play('move'); setView(view + 1); } else if (L && view > 0) { sfx.play('move'); setView(view - 1); }
-      return;
-    }
     if (k === 'Enter') return enter();
-    if (game) {
-      const el = gScroll.current, z = st.zone;
-      if (z === 'gacts') { if (D && st.ai < gameOpts.length - 1) mv({ ai: st.ai + 1 }); else if (U && st.ai > 0) mv({ ai: st.ai - 1 }); else if (R) mv({ zone: shots.length ? 'gshots' : 'gtext', gs: 0 }); return; }
-      if (z === 'gshots') { if (R && st.gs < shots.length - 1) mv({ gs: st.gs + 1 }); else if (L) { if (st.gs > 0) mv({ gs: st.gs - 1 }); else mv({ zone: 'gacts' }); } else if (D) mv({ zone: 'gtext' }); return; }
-      if (D) { sfx.play('move'); el?.scrollBy({ top: 260, behavior: 'smooth' }); }
-      else if (U) { if (!el || el.scrollTop <= 4) mv({ zone: shots.length ? 'gshots' : 'gacts' }); else { sfx.play('move'); el.scrollBy({ top: -260, behavior: 'smooth' }); } }
-      else if (L) mv({ zone: 'gacts' });
-      return;
-    }
     if (st.menu && cur?.g) {
       const n = options(cur.g).length;
       if (D && st.mi < n - 1) mv({ mi: st.mi + 1 }); else if (U && st.mi > 0) mv({ mi: st.mi - 1 });
@@ -295,9 +268,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
     if (L) { sfx.play('move'); return goTab(st.tab - 1, { zone: 'tiles' }); }
   });
 
-  const hints: Hint[] = game
-    ? (st.zone === 'gshots' ? [['ok', 'Ampliar'], ['ud', 'Rolar'], ['back', 'Voltar']] : st.zone === 'gtext' ? [['ud', 'Rolar'], ['back', 'Voltar']] : [['ok', 'Selecionar'], ['lr', 'Imagens e texto'], ['back', 'Voltar']])
-    : st.menu ? [['ok', 'Selecionar'], ['back', 'Fechar']]
+  const hints: Hint[] = st.menu ? [['ok', 'Selecionar'], ['back', 'Fechar']]
     : !tiles ? [['ok', 'Selecionar'], ['back', 'Voltar'], ['rb', 'Abas']]
     : cur?.g ? [['ok', tk === 'cat' || cur.feed ? 'Ver jogo' : primaryOf(cur.g).l], ['x', 'Opções'], ['y', 'Buscar'], ['back', st.tab ? 'Voltar' : 'Sair']]
     : [['ok', 'Selecionar'], ['y', 'Buscar'], ['back', st.tab ? 'Voltar' : 'Sair']];
@@ -313,9 +284,12 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
         <Backdrop g={artG} />
         <div className="x3-floor" />
         {game ? (
-          <GamePage g={game} st={st} opts={gameOpts} shots={shots} self={self} scrollRef={gScroll}
-            onAct={j => { if (st.zone === 'gacts' && st.ai === j) enter(); else { sfx.play('move'); up({ zone: 'gacts', ai: j }); } }}
-            onShot={j => { sfx.play('ok'); up({ zone: 'gshots', gs: j }); setView(j); }} />
+          <GameView theme={`d-x3 ${og ? 'og' : ''}`} g={game} self={self} run={run} onBack={() => up({ game: null })}
+            opts={gameOpts.map(o => ({ k: o.k, l: o.l, icon: <Ic n={o.ic} /> }))} />
+        ) : tk === 'cat' ? (
+          <Discover theme={`d-x3 ${og ? 'og' : ''}`} cname={c.name} games={data.catalog} extra={data.lib.filter(x => !x.catalog)} self={self} st={dst} set={setDst}
+            options={x => options(x).filter(o => o.k !== 'info').map(o => ({ k: o.k, l: o.l, icon: <Ic n={o.ic} /> }))}
+            run={run} onOpen={openGame} onBack={() => { sfx.play('back'); set(x => ({ ...x, tab: 0, fi: 2, zone: 'tiles', dir: -1 })); }} />
         ) : (
           <>
             <div className="x3-me"><span>Cartucho<small>{fmtPlay(data.playMs) || '0m'} · {clock}</small></span><i><Ic n="pad" /></i></div>
@@ -340,18 +314,12 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
                     </button>
                   )) : (
                     <div className="xt grey empty" style={{ left: 0, top: 0, width: 630, height: 230 }}>
-                      <div className="cap">{tk === 'cat' && query.trim() ? `nada encontrado para “${query.trim()}”` : tk === 'games' ? 'nenhum jogo instalado' : 'nada por aqui ainda'}</div>
+                      <div className="cap">{tk === 'games' ? 'nenhum jogo instalado' : 'nada por aqui ainda'}</div>
                     </div>
                   )}
                 </div>
                 <div className="x3-peek"><div>{TABS[(st.tab + 1) % TABS.length]![1]}</div><div /><div /></div>
                 {pages > 1 && <div className="x3-pages">{Math.floor(st.fi / per) + 1} / {pages}</div>}
-                {tk === 'cat' && (
-                  <div className="x3-q"><Ic n="search" />
-                    <SearchBox ref={searchRef} value={query} onChange={v => { setQuery(v); up({ fi: 0 }); }} nav={false} className="x3-qi" placeholder="buscar um jogo"
-                      onDone={() => { up({ zone: 'tiles', fi: 0 }); }} />
-                  </div>
-                )}
               </>
             ) : (
               <div className={`x3-lw ${st.dir < 0 ? 'back' : ''}`} key={tk}>
@@ -384,13 +352,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
             </div>
           </div>
         )}
-        <div className={`x3-ft ${game ? 'top' : ''}`}>{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>
-        {view != null && shots[view] && (
-          <div className="x3-view" onClick={() => setView(null)}>
-            <img src={shots[view]} alt="" />
-            <span className="cnt">{view + 1} / {shots.length}</span>
-          </div>
-        )}
+        {tk !== 'cat' && !game && <div className="x3-ft">{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>}
         {toast}
       </Fit>
       <BootOverlay kind={og ? 'soft' : 'sweep'} label={c.name.toUpperCase()} />
@@ -465,52 +427,6 @@ function Detail({ tk, row, achList, achLoading, stats, lib, statsAll, playMs, cn
     return <><h3>{row.l}</h3><p className="sm">Desliga este console e volta para o palco do Cartucho.</p></>;
   }
   return null;
-}
-
-function GamePage({ g, st, opts, shots, self, scrollRef, onAct, onShot }: { g: HubGame; st: St; opts: Opt[]; shots: string[]; self: boolean; scrollRef: RefObject<HTMLDivElement | null>; onAct: (j: number) => void; onShot: (j: number) => void }) {
-  const about = useTranslated(g.catalog?.description);
-  const needs = useTranslated(g.catalog?.needs);
-  const p = useGameProgress(g);
-  const inst = g.installed;
-  const [more, setMore] = useState(false);
-  const check = () => { const el = scrollRef.current; if (el) setMore(el.scrollTop + el.clientHeight < el.scrollHeight - 8); };
-  useEffect(() => { check(); const el = scrollRef.current; if (!el) return; const ro = new ResizeObserver(check); ro.observe(el); if (el.lastElementChild) ro.observe(el.lastElementChild); return () => ro.disconnect(); });
-  return (
-    <div className="x3-gpage">
-      <div className="x3-gside">
-        <div className="x3-gcv"><Art g={g} v="cover" /></div>
-        <div className="x3-lst">{opts.map((o, j) => (
-          <button key={o.k + j} className={st.zone === 'gacts' && st.ai === j ? 'on' : ''} onClick={() => onAct(j)}><Ic n={o.ic} /><span className="l">{o.l}</span></button>
-        ))}</div>
-      </div>
-      <div className="x3-gscroll" ref={scrollRef} onScroll={check}>
-        <div className="x3-ghead">
-          <h1>{g.title}</h1>
-          <p className="meta">{[g.status && STATUS_LABEL[g.status], g.catalog?.developer, g.catalog?.year, g.platformName].filter(Boolean).join(' · ')}</p>
-          <p className="meta soft">
-            {[inst ? (inst.running ? 'jogando agora' : inst.playMs ? `${fmtPlay(inst.playMs)} jogadas` : 'ainda não jogado') : 'não instalado',
-              inst?.achievements?.total ? `${inst.achievements.unlocked}/${inst.achievements.total} conquistas` : null].filter(Boolean).join(' · ')}
-          </p>
-          {inst?.missing && <p className="warn">A pasta do jogo não foi encontrada em {inst.installDir}. {g.catalog?.repo && !self ? 'Instale de novo ou mostre onde ele está agora.' : 'Mostre onde ele está agora.'}</p>}
-          {p && <p className="prog">{p.error ?? `${p.stage}${p.pct > 0 && p.pct < 1 ? ` · ${Math.round(p.pct * 100)}%` : ''}`}</p>}
-        </div>
-        <section className="x3-gsec">
-          <h4>imagens</h4>
-          {shots.length ? <div className="x3-gshots">{shots.map((u, j) => (
-            <button key={u} className={st.zone === 'gshots' && st.gs === j ? 'on' : ''} onClick={() => onShot(j)}><img src={u} alt="" /></button>
-          ))}</div> : <p className="soft">Sem capturas de tela no LaunchBox para este jogo.</p>}
-        </section>
-        <section className={`x3-gsec text ${st.zone === 'gtext' ? 'on' : ''}`}>
-          {about.text && <><h4>sobre</h4><p>{about.text}</p></>}
-          {needs.text && <><h4>o que você precisa</h4><p>{needs.text}</p></>}
-          {self && !inst && <p>{SELF_INSTALL_NOTE}</p>}
-          {!about.text && !needs.text && <p>O catálogo não traz descrição deste jogo.</p>}
-          {(about.auto || needs.auto) && <small>Traduzido automaticamente do inglês</small>}
-        </section>
-      </div>
-      <div className={`x3-gmore ${more ? 'on' : ''}`}><Ic n="down" /></div>
-    </div>
-  );
 }
 
 function PortsDir() {

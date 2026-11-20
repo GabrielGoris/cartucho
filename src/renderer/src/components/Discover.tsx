@@ -1,0 +1,240 @@
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { STATUS_LABEL, SELF_INSTALL_NOTE } from '@shared/consoles';
+import { Glyph, useKeys, type Key } from '../lib/input';
+import { sfx } from '../lib/sfx';
+import { fmtPlay, plural } from '../lib/format';
+import { matchesQuery, similarity } from '../lib/search';
+import { useTranslated } from '../lib/translate';
+import { GameArt } from './GameArt';
+import { SearchBox } from './SearchBox';
+import type { HubGame } from '../hubs/data';
+
+export type DFilter = 'top' | 'all' | 'new' | 'play' | 'wip' | 'inst';
+export type DSort = 'pop' | 'az' | 'year' | 'recent';
+export interface DState { q: string; filter: DFilter; sort: DSort; zone: 'search' | 'chips' | 'body'; row: number; col: number; chip: number; menu: boolean; mi: number }
+export const initialDiscover = (): DState => ({ q: '', filter: 'top', sort: 'pop', zone: 'body', row: 0, col: 0, chip: 0, menu: false, mi: 0 });
+export interface DOpt { k: string; l: string; icon?: ReactNode }
+
+const FILTERS: [DFilter, string][] = [['top', 'Destaques'], ['all', 'Todos'], ['new', 'Novos'], ['play', 'Jogáveis'], ['wip', 'Em progresso'], ['inst', 'Instalados']];
+const SORTS: [DSort, string][] = [['pop', 'Populares'], ['az', 'A–Z'], ['year', 'Ano'], ['recent', 'Recentes']];
+const GAP = 26;
+const SHAPES = { tall: { COLS: 5, CARD_W: 220, ROW_H: 430, GRID_ROW: 400 }, wide: { COLS: 4, CARD_W: 290, ROW_H: 340, GRID_ROW: 310 }, square: { COLS: 5, CARD_W: 220, ROW_H: 330, GRID_ROW: 300 } };
+
+interface Row { key: string; title: string; items: HubGame[] }
+
+function sorter(s: DSort) {
+  return (a: HubGame, b: HubGame) => {
+    const ca = a.catalog, cb = b.catalog;
+    if (s === 'az') return a.title.localeCompare(b.title, 'pt', { sensitivity: 'base' });
+    if (s === 'year') return (cb?.year ?? 0) - (ca?.year ?? 0) || a.title.localeCompare(b.title);
+    if (s === 'recent') return (cb?.firstSeenAt ?? 0) - (ca?.firstSeenAt ?? 0);
+    return (cb?.stars ?? 0) - (ca?.stars ?? 0) || a.title.localeCompare(b.title);
+  };
+}
+
+export function Discover({ theme, cname, games, extra = [], self, st, set, options, run, onOpen, onBack, hints, shape = 'tall', onTab }: {
+  theme: string; cname: string; games: HubGame[]; extra?: HubGame[]; self: boolean;
+  st: DState; set: (f: (s: DState) => DState) => void;
+  options: (g: HubGame) => DOpt[]; run: (k: string, g: HubGame) => void; onOpen: (g: HubGame) => void; onBack: () => void;
+  hints?: boolean; shape?: 'tall' | 'wide' | 'square'; onTab?: (d: 1 | -1) => void;
+}) {
+  const { COLS, CARD_W, ROW_H, GRID_ROW } = SHAPES[shape];
+  const up = (p: Partial<DState>) => set(s => ({ ...s, ...p }));
+  const searchRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const q = st.q.trim();
+
+  const { rows, grid, suggest } = useMemo(() => {
+    const base = q ? [...games, ...extra] : games;
+    if (q) {
+      const hit = base.filter(g => matchesQuery(q, g.title, g.platformName, g.catalog?.developer, g.catalog?.year ? String(g.catalog.year) : null)).sort(sorter(st.sort));
+      const sug = hit.length ? [] : [...base].map(g => [g, similarity(q, g.title)] as const).filter(x => x[1] > 0.2).sort((a, b) => b[1] - a[1]).slice(0, 5).map(x => x[0]);
+      return { rows: [] as Row[], grid: hit, suggest: sug };
+    }
+    if (st.filter === 'top') {
+      const by = sorter('pop');
+      const R: Row[] = [
+        { key: 'new', title: 'Novos no catálogo', items: games.filter(g => g.isNew).sort(sorter('recent')) },
+        { key: 'pop', title: 'Mais populares', items: [...games].sort(by).slice(0, 20) },
+        { key: 'full', title: 'Totalmente jogáveis', items: games.filter(g => g.status === 'full').sort(by) },
+        { key: 'play', title: 'Jogáveis', items: games.filter(g => g.status === 'play').sort(by) },
+        { key: 'wip', title: 'Em progresso', items: games.filter(g => g.status === 'wip').sort(by) },
+      ];
+      const dec = new Map<number, HubGame[]>();
+      for (const g of games) { const y = g.catalog?.year; if (y) { const d = Math.floor(y / 10) * 10; dec.set(d, [...(dec.get(d) ?? []), g]); } }
+      for (const [d, L] of [...dec].sort((a, b) => a[0] - b[0])) if (L.length >= 2) R.push({ key: `d${d}`, title: `Lançados nos anos ${String(d).slice(2)}`, items: L.sort(by) });
+      const out = R.filter(r => r.items.length);
+      return { rows: out.length > 1 ? out : [], grid: out.length > 1 ? [] : [...games].sort(by), suggest: [] };
+    }
+    const f = st.filter;
+    const L = games.filter(g => f === 'all' || (f === 'new' && g.isNew) || (f === 'play' && (g.status === 'full' || g.status === 'play')) || (f === 'wip' && g.status === 'wip') || (f === 'inst' && !!g.installed));
+    return { rows: [], grid: L.sort(sorter(st.sort)), suggest: [] };
+  }, [games, extra, q, st.filter, st.sort]);
+
+  const shelves = rows.length > 0;
+  const list = shelves ? rows[Math.min(st.row, rows.length - 1)]?.items ?? [] : grid.length ? grid : suggest;
+  const gridMode = !shelves;
+  const idx = gridMode ? st.row * COLS + st.col : st.col;
+  const g: HubGame | null = shelves ? list[Math.min(st.col, list.length - 1)] ?? null : list[Math.min(idx, list.length - 1)] ?? null;
+  const total = shelves ? rows.reduce((a, r) => a + r.items.length, 0) : list.length;
+
+  useEffect(() => {
+    if (shelves && st.row >= rows.length) up({ row: 0, col: 0 });
+    if (!shelves && idx >= list.length && list.length) up({ row: Math.floor((list.length - 1) / COLS), col: (list.length - 1) % COLS });
+  }, [rows.length, list.length]);
+
+  const chips = [...FILTERS.map(f => f[0]), 'sort'] as const;
+  const opts = g ? options(g) : [];
+  const mv = (p: Partial<DState>) => { sfx.play('move'); up(p); };
+  const focusSearch = () => { up({ zone: 'search' }); setTimeout(() => searchRef.current?.focus(), 30); };
+  const pickChip = (i: number) => {
+    const c = chips[i]!;
+    if (c === 'sort') { const j = SORTS.findIndex(s => s[0] === st.sort); sfx.play('ok'); up({ sort: SORTS[(j + 1) % SORTS.length]![0], filter: st.filter === 'top' ? 'all' : st.filter, row: 0, col: 0 }); return; }
+    sfx.play('ok'); up({ filter: c, q: '', row: 0, col: 0, chip: i });
+  };
+
+  useKeys((k: Key) => {
+    if (st.menu) {
+      if (k === 'ArrowDown' && st.mi < opts.length - 1) mv({ mi: st.mi + 1 });
+      else if (k === 'ArrowUp' && st.mi > 0) mv({ mi: st.mi - 1 });
+      else if (k === 'Enter' && g && opts[st.mi]) { up({ menu: false }); run(opts[st.mi]!.k, g); }
+      else if (k === 'Escape' || k === 'X') { sfx.play('back'); up({ menu: false }); }
+      return;
+    }
+    if (k === 'Y') return focusSearch();
+    if ((k === 'LB' || k === 'RB') && onTab) return onTab(k === 'RB' ? 1 : -1);
+    if (k === 'LB' || k === 'RB') { const i = FILTERS.findIndex(f => f[0] === st.filter); const n = (i + (k === 'RB' ? 1 : -1) + FILTERS.length) % FILTERS.length; sfx.play('move'); up({ filter: FILTERS[n]![0], chip: n, q: '', row: 0, col: 0 }); return; }
+    if (st.zone === 'search') {
+      if (k === 'Enter') { sfx.play('ok'); searchRef.current?.focus(); }
+      else if (k === 'ArrowDown') mv({ zone: 'chips' });
+      else if (k === 'Escape') { if (st.q) { sfx.play('back'); up({ q: '' }); } else mv({ zone: 'body' }); }
+      return;
+    }
+    if (st.zone === 'chips') {
+      if (k === 'ArrowLeft' && st.chip > 0) mv({ chip: st.chip - 1 });
+      else if (k === 'ArrowRight' && st.chip < chips.length - 1) mv({ chip: st.chip + 1 });
+      else if (k === 'Enter') pickChip(st.chip);
+      else if (k === 'ArrowUp') mv({ zone: 'search' });
+      else if (k === 'ArrowDown' && total) mv({ zone: 'body' });
+      else if (k === 'Escape') { sfx.play('back'); onBack(); }
+      return;
+    }
+    if (k === 'Escape') { if (st.q) { sfx.play('back'); up({ q: '', row: 0, col: 0 }); } else { sfx.play('back'); onBack(); } return; }
+    if (!g) { if (k === 'ArrowUp') mv({ zone: 'chips' }); return; }
+    if (k === 'Enter') { sfx.play('ok'); onOpen(g); return; }
+    if (k === 'X') { sfx.play('ok'); up({ menu: true, mi: 0 }); return; }
+    if (shelves) {
+      const n = list.length;
+      if (k === 'ArrowRight' && st.col < n - 1) mv({ col: st.col + 1 });
+      else if (k === 'ArrowLeft' && st.col > 0) mv({ col: st.col - 1 });
+      else if (k === 'ArrowDown' && st.row < rows.length - 1) mv({ row: st.row + 1, col: Math.min(st.col, rows[st.row + 1]!.items.length - 1) });
+      else if (k === 'ArrowUp') { if (st.row > 0) mv({ row: st.row - 1, col: Math.min(st.col, rows[st.row - 1]!.items.length - 1) }); else mv({ zone: 'chips', chip: FILTERS.findIndex(f => f[0] === st.filter) }); }
+      else if (k === 'RT') mv({ row: Math.min(rows.length - 1, st.row + 2), col: 0 });
+      else if (k === 'LT') mv({ row: Math.max(0, st.row - 2), col: 0 });
+      return;
+    }
+    const n = list.length, i = idx;
+    if (k === 'ArrowRight' && st.col < COLS - 1 && i + 1 < n) mv({ col: st.col + 1 });
+    else if (k === 'ArrowLeft' && st.col > 0) mv({ col: st.col - 1 });
+    else if (k === 'ArrowDown' && i + COLS < n) mv({ row: st.row + 1 });
+    else if (k === 'ArrowDown' && st.row < Math.floor((n - 1) / COLS)) mv({ row: st.row + 1, col: (n - 1) % COLS });
+    else if (k === 'ArrowUp') { if (st.row > 0) mv({ row: st.row - 1 }); else mv({ zone: 'chips', chip: FILTERS.findIndex(f => f[0] === st.filter) }); }
+    else if (k === 'RT') { const r = Math.min(Math.floor((n - 1) / COLS), st.row + 2); mv({ row: r, col: Math.min(st.col, n - 1 - r * COLS) }); }
+    else if (k === 'LT') mv({ row: Math.max(0, st.row - 2) });
+  });
+
+  const focusBody = st.zone === 'body' && !st.menu;
+  const card = (x: HubGame, on: boolean, click: () => void) => (
+    <button key={x.key} className={`dsc-c ${on ? 'on' : ''} ${x.installed ? 'inst' : ''}`} onClick={click}>
+      <span className="cv-w"><GameArt title={x.title} console={x.console} platformName={x.platformName} fallback={x.coverUrl} variant="cover" />
+        {x.isNew && <span className="b new">NOVO</span>}{x.installed && <span className="b inst">INSTALADO</span>}</span>
+      <span className="t">{x.title}</span>
+    </button>
+  );
+  const visRows = 2, rowTop = shelves ? Math.max(0, Math.min(st.row, rows.length - visRows)) : Math.max(0, st.row - 1);
+
+  return (
+    <div className={`dsc ${theme} ${shape} ${onTab ? 'in-tabs' : ''}`}>
+      <div className="dsc-hd">
+        <h2>Descobrir<small>{cname}</small></h2>
+        <div className={`dsc-q ${st.zone === 'search' ? 'f' : ''}`} onClick={focusSearch}>
+          <span className="ic">⌕</span>
+          <SearchBox ref={searchRef} value={st.q} nav={false} className="dsc-qi" placeholder={`Buscar em ${cname} por nome, estúdio ou ano`}
+            onChange={v => up({ q: v, row: 0, col: 0 })} onDone={() => up({ zone: st.q.trim() ? 'body' : 'chips' })} />
+          {st.q && <span className="cnt">{plural(grid.length, 'resultado', 'resultados')}</span>}
+        </div>
+      </div>
+      <div className="dsc-chips">
+        {FILTERS.map(([k, l], i) => (
+          <button key={k} className={`${st.filter === k && !q ? 'cur' : ''} ${st.zone === 'chips' && st.chip === i ? 'on' : ''}`} onClick={() => pickChip(i)}>{l}</button>
+        ))}
+        <span className="sp" />
+        <button className={`sort ${st.zone === 'chips' && st.chip === FILTERS.length ? 'on' : ''}`} onClick={() => pickChip(FILTERS.length)}>Ordenar: {SORTS.find(s => s[0] === st.sort)![1]}</button>
+      </div>
+
+      <div className="dsc-body" ref={bodyRef}>
+        {shelves ? (
+          <div className="dsc-in" style={{ transform: `translateY(-${rowTop * ROW_H}px)` }}>
+            {rows.map((r, ri) => {
+              const cur = ri === Math.min(st.row, rows.length - 1);
+              const off = cur ? Math.max(0, Math.min(st.col - 2, r.items.length - COLS)) : 0;
+              return (
+                <section key={r.key} className={`dsc-row ${cur ? 'cur' : ''}`}>
+                  <h3>{r.title}<small>{r.items.length}</small></h3>
+                  <div className="dsc-strip" style={{ transform: `translateX(-${off * (CARD_W + GAP)}px)` }}>
+                    {r.items.map((x, ci) => card(x, focusBody && cur && ci === st.col, () => { if (focusBody && cur && ci === st.col) onOpen(x); else mv({ zone: 'body', row: ri, col: ci }); }))}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        ) : list.length ? (
+          <>
+            {!grid.length && suggest.length > 0 && <div className="dsc-msg">Nada encontrado para “{q}”. Você quis dizer:</div>}
+            <div className="dsc-grid" style={{ transform: `translateY(-${rowTop * GRID_ROW}px)` }}>
+              {list.map((x, i) => card(x, focusBody && i === idx, () => { if (focusBody && i === idx) onOpen(x); else mv({ zone: 'body', row: Math.floor(i / COLS), col: i % COLS }); }))}
+            </div>
+          </>
+        ) : (
+          <div className="dsc-msg">{q ? `Nada encontrado para “${q}”.` : games.length ? 'Nada com esse filtro.' : `O catálogo ainda não tem jogos de ${cname}. O radar avisa quando aparecer o primeiro.`}</div>
+        )}
+      </div>
+
+      <aside className="dsc-det">{g ? <Detail g={g} self={self} /> : <div className="dsc-none">{plural(total, 'jogo', 'jogos')}</div>}</aside>
+
+      {st.menu && g && (
+        <div className="dsc-menu">
+          <h4>{g.title}</h4>
+          {opts.map((o, j) => <button key={o.k + j} className={j === st.mi ? 'on' : ''} onClick={() => { up({ menu: false }); run(o.k, g); }}>{o.icon}{o.l}</button>)}
+        </div>
+      )}
+      {hints !== false && (
+        <div className="dsc-ft">
+          {st.menu ? <><span><Glyph a="ok" />Confirmar</span><span><Glyph a="back" />Fechar</span></>
+            : st.zone === 'search' ? <><span><Glyph a="ok" />Digitar</span><span><Glyph a="ud" />Filtros</span><span><Glyph a="back" />{st.q ? 'Limpar' : 'Voltar'}</span></>
+            : st.zone === 'chips' ? <><span><Glyph a="lr" />Filtro</span>{onTab && <span><Glyph a="lb" /><Glyph a="rb" />Seção</span>}<span><Glyph a="ok" />Escolher</span><span><Glyph a="back" />Voltar</span></>
+            : <><span><Glyph a="ok" />Ver jogo</span><span><Glyph a="x" />Ações</span><span><Glyph a="y" />Buscar</span><span><Glyph a="lb" /><Glyph a="rb" />{onTab ? 'Seção' : 'Filtro'}</span><span><Glyph a="back" />{st.q ? 'Limpar busca' : 'Voltar'}</span></>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Detail({ g, self }: { g: HubGame; self: boolean }) {
+  const needs = useTranslated(g.catalog?.needs);
+  const i = g.installed;
+  return (
+    <div className="dsc-d" key={g.key}>
+      <span className="cv-w"><GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant="cover" /></span>
+      <h3>{g.title}</h3>
+      <p className="meta">{[g.catalog?.year, g.catalog?.developer].filter(Boolean).join(' · ') || g.platformName}</p>
+      <div className="pills">
+        {g.status && <span className={`pill ${g.status}`}>{STATUS_LABEL[g.status]}</span>}
+        {g.isNew && <span className="pill new">Novo</span>}
+        {i && <span className="pill inst">{i.missing ? 'Pasta não encontrada' : i.playMs ? `${fmtPlay(i.playMs)} jogadas` : 'Instalado'}</span>}
+      </div>
+      {needs.text && <p className="needs"><b>Precisa:</b> {needs.text}</p>}
+      {self && !i && <p className="needs">{SELF_INSTALL_NOTE}</p>}
+    </div>
+  );
+}

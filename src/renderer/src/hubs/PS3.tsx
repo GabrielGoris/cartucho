@@ -7,8 +7,9 @@ import { Glyph, useKeys, type Key } from '../lib/input';
 import { getSettings, reduceMotion, setSettings, useSettings } from '../lib/settings';
 import { setSfxProfile, sfx } from '../lib/sfx';
 import { ago, fmtDate, fmtPlay, plural } from '../lib/format';
-import { matchesQuery } from '../lib/search';
-import { useArt, useShots } from '../lib/art';
+import { focusSearch as focusAny, matchesQuery } from '../lib/search';
+import { GameView } from '../components/GameView';
+import { Discover, initialDiscover } from '../components/Discover';
 import { useTranslated } from '../lib/translate';
 import { GameArt } from '../components/GameArt';
 import { SearchBox } from '../components/SearchBox';
@@ -18,7 +19,7 @@ import { Ic, type IconName } from './icons';
 import { useGameProgress, useHubActions, useHubData, type HubGame } from './data';
 
 type Cat = 'games' | 'cat' | 'news' | 'ach' | 'time' | 'cfg';
-type Kind = 'game' | 'search' | 'empty' | 'ach' | 'sum' | 'time' | 'theme' | 'dir' | 'snd' | 'radar' | 'off';
+type Kind = 'game' | 'search' | 'disc' | 'empty' | 'ach' | 'sum' | 'time' | 'theme' | 'dir' | 'snd' | 'radar' | 'off';
 type Tag = 'new' | 'upd' | 'up';
 interface It { key: string; kind: Kind; g?: HubGame; ic?: IconName; t: string; s: string; tag?: Tag }
 type Zone = 'gacts' | 'gshots' | 'gtext';
@@ -124,7 +125,6 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   const up = (p: Partial<St>) => set(x => ({ ...x, ...p }));
   const [query, setQuery] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
-  const gScroll = useRef<HTMLDivElement>(null);
   const clock = useClock();
   const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show('Pasta dos jogos alterada'); } }));
   const chooseExe = useMutation(trpc.games.chooseExe.mutationOptions({ onSuccess: () => void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }) }));
@@ -132,7 +132,9 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
 
   useEffect(() => { setSfxProfile('soft'); const t = setTimeout(() => sfx.play('boot'), 150); return () => clearTimeout(t); }, []);
   useEffect(() => { if (act.error) { show(act.error); act.reset(); } }, [act.error]);
-  const focusSearch = () => setTimeout(() => searchRef.current?.focus(), 60);
+  const [dst, setDst] = useState(initialDiscover);
+  const [disc, setDisc] = useState(tab === 'cat');
+  const focusSearch = () => { setDisc(true); setDst(d => ({ ...d, zone: 'search' })); setTimeout(focusAny, 80); };
   useEffect(() => {
     const go = () => { sfx.play('ok'); set(x => ({ ...x, game: null, opt: false, list: false, dir: x.ci > 1 ? 'up' : 'down', ci: 1, ii: x.ii.map((v, i) => (i === 1 ? 0 : v)) })); focusSearch(); };
     addEventListener('cartucho:search', go);
@@ -164,8 +166,9 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       if (!L.length) L = [{ key: 'empty', kind: 'empty', ic: 'compass', t: 'Nenhum jogo instalado', s: data.catalog.length ? `${plural(data.catalog.length, 'recomp', 'recomps')} de ${c.name} em Descobrir` : `Ainda não há recomps de ${c.name} no catálogo` }];
     }
     if (k === 'cat') {
-      L = [{ key: 'search', kind: 'search', ic: 'search', t: 'Buscar', s: query.trim() ? `“${query.trim()}” · ${plural(found.length, 'resultado', 'resultados')}` : 'Procure um jogo pelo nome' },
-        ...found.map(g => ({ key: g.key, kind: 'game' as Kind, g, t: g.title, s: `${g.status ? STATUS_LABEL[g.status] : ''}${g.installed ? ' · Instalado' : self ? ' · Você instala' : ''}`, tag: g.isNew ? 'new' as Tag : undefined }))];
+      L = [{ key: 'disc', kind: 'disc', ic: 'compass', t: 'Explorar o catálogo', s: `${plural(data.catalog.length, 'jogo', 'jogos')} · destaques, filtros e busca` },
+        { key: 'search', kind: 'disc', ic: 'search', t: 'Buscar', s: 'Procure um jogo pelo nome, estúdio ou ano' },
+        ...data.catalog.filter(x => x.isNew).slice(0, 8).map(g => ({ key: g.key, kind: 'game' as Kind, g, t: g.title, s: `Novo no catálogo${g.status ? ` · ${STATUS_LABEL[g.status]}` : ''}`, tag: 'new' as Tag }))];
     }
     if (k === 'news') {
       L = data.feed.map(f => { const g = feedGame(f); return { key: String(f.id), kind: 'game' as Kind, g: g ?? undefined, ic: 'bell' as IconName, t: f.title, s: `${FEED[f.kind]}${f.detail && !(self && f.kind === 'new') ? ` · ${f.detail}` : ''} · ${ago(f.at)}`, tag: f.kind }; });
@@ -203,14 +206,6 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   const stats = new Map(lib.map((x, i) => [x.key, statQ[i]?.data] as const));
 
   const game = st.game ? all.get(st.game) ?? null : null;
-  const shots = useShots(game?.console, game?.title ?? '', game?.platformName);
-  const [view, setView] = useState<number | null>(null);
-  useEffect(() => {
-    const el = gScroll.current; if (!el || !game) return;
-    if (st.zone === 'gacts') el.scrollTo({ top: 0, behavior: 'smooth' });
-    else if (st.zone === 'gshots') el.querySelector('.p3-gshots')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    else el.querySelector('.p3-gsec.text')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [st.zone, !!game]);
 
   const options = (x: HubGame): Opt[] => {
     const inst = x.installed;
@@ -240,7 +235,7 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     sfx.play('move');
     set(x => ({ ...x, dir: ci > x.ci ? 'down' : 'up', ci, opt: false, list: false, li: 0, ii: ii == null ? x.ii : x.ii.map((v, j) => (j === ci ? ii : v)) }));
   };
-  const openGame = (x: HubGame) => { setView(null); up({ game: x.key, opt: false, zone: 'gacts', ai: 0, gs: 0 }); };
+  const openGame = (x: HubGame) => { up({ game: x.key, opt: false, zone: 'gacts', ai: 0, gs: 0 }); };
 
   const run = (k: string, x: HubGame) => {
     up({ opt: false });
@@ -268,15 +263,11 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   };
 
   const enter = () => {
-    if (game) {
-      if (st.zone === 'gacts') { const o = gameOpts[st.ai]; if (o) run(o.k, game); return; }
-      if (st.zone === 'gshots' && shots[st.gs]) { sfx.play('ok'); setView(st.gs); }
-      return;
-    }
     if (st.opt && g) { const o = options(g)[st.oi]; if (o) run(o.k, g); return; }
     switch (it.kind) {
       case 'game': if (g) run(primaryOf(g).k, g); return;
       case 'search': sfx.play('ok'); searchRef.current?.focus(); return;
+      case 'disc': sfx.play('ok'); if (it.key === 'search') focusSearch(); else setDisc(true); return;
       case 'empty': if (cat === 'games' && data.catalog.length) goCat(1); return;
       case 'ach': if (achList.length) { sfx.play('ok'); up({ list: !st.list, li: 0 }); } return;
       case 'time': if (g) { sfx.play('ok'); openGame(g); } return;
@@ -289,7 +280,6 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   };
   const back = () => {
     sfx.play('back');
-    if (view != null) return setView(null);
     if (game) return up({ game: null });
     if (st.opt) return up({ opt: false });
     if (st.list) return up({ list: false });
@@ -298,23 +288,11 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   };
 
   useKeys((k: Key) => {
+    if (disc || game) return;
     if (k === 'Escape') return back();
     const R = k === 'ArrowRight', L = k === 'ArrowLeft', U = k === 'ArrowUp', D = k === 'ArrowDown';
     const mv = (p: Partial<St>) => { sfx.play('move'); up(p); };
-    if (view != null) {
-      if (k === 'Enter') { sfx.play('back'); return setView(null); }
-      if (R && view < shots.length - 1) { sfx.play('move'); setView(view + 1); } else if (L && view > 0) { sfx.play('move'); setView(view - 1); }
-      return;
-    }
     if (k === 'Enter') return enter();
-    if (game) {
-      const el = gScroll.current, z = st.zone;
-      if (z === 'gacts') { if (R && st.ai < gameOpts.length - 1) mv({ ai: st.ai + 1 }); else if (L && st.ai > 0) mv({ ai: st.ai - 1 }); else if (D) mv({ zone: shots.length ? 'gshots' : 'gtext', gs: 0 }); return; }
-      if (z === 'gshots') { if (R && st.gs < shots.length - 1) mv({ gs: st.gs + 1 }); else if (L && st.gs > 0) mv({ gs: st.gs - 1 }); else if (U) mv({ zone: 'gacts' }); else if (D) mv({ zone: 'gtext' }); return; }
-      if (D) { sfx.play('move'); el?.scrollBy({ top: 260, behavior: 'smooth' }); }
-      else if (U) { if (!el || el.scrollTop <= 4 || (shots.length && el.scrollTop <= 400)) mv({ zone: shots.length ? 'gshots' : 'gacts' }); else { sfx.play('move'); el.scrollBy({ top: -260, behavior: 'smooth' }); } }
-      return;
-    }
     if (st.opt && g) {
       const n = options(g).length;
       if (D && st.oi < n - 1) mv({ oi: st.oi + 1 }); else if (U && st.oi > 0) mv({ oi: st.oi - 1 });
@@ -331,9 +309,7 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     if ((U || k === 'LB') && st.ci > 0) return goCat(st.ci - 1);
   });
 
-  const hints: Hint[] = game
-    ? (st.zone === 'gshots' ? [['ok', 'Ampliar'], ['ud', 'Rolar'], ['back', 'Voltar']] : st.zone === 'gtext' ? [['ud', 'Rolar'], ['back', 'Voltar']] : [['ok', 'Confirmar'], ['ud', 'Rolar'], ['back', 'Voltar']])
-    : st.opt || st.list ? [['ud', 'Escolher'], ['ok', st.list ? 'Fechar lista' : 'Confirmar'], ['back', 'Fechar']]
+  const hints: Hint[] = st.opt || st.list ? [['ud', 'Escolher'], ['ok', st.list ? 'Fechar lista' : 'Confirmar'], ['back', 'Fechar']]
     : [['lr', 'Item'], ['ud', 'Categoria'], ['back', 'Sair']];
   const theme = THEMES[themeIdx]!;
   const date = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'numeric' });
@@ -342,10 +318,14 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     <section className="view hub sk-p3" style={{ ['--cc' as string]: c.color }}>
       <Fit w={1920} h={1080} className={`p3 ${psp ? 'psp' : ''}`} style={{ ['--cc' as string]: c.color, ['--h' as string]: theme[1], filter: theme[2] ? 'saturate(.15)' : undefined }}>
         <div className={`p3-wv ${game ? 'dim' : ''}`}><Waves psp={psp} /></div>
-        {game ? (
-          <GamePage g={game} st={st} opts={gameOpts} shots={shots} self={self} scrollRef={gScroll}
-            onAct={j => { if (st.zone === 'gacts' && st.ai === j) enter(); else { sfx.play('move'); up({ zone: 'gacts', ai: j }); } }}
-            onShot={j => { sfx.play('ok'); up({ zone: 'gshots', gs: j }); setView(j); }} />
+        {disc && !game && (
+          <Discover theme={`d-p3 ${psp ? 'psp' : ''}`} cname={c.name} games={data.catalog} extra={data.lib.filter(x => !x.catalog)} self={self} st={dst} set={setDst}
+            options={x => options(x).filter(o => o.k !== 'info').map(o => ({ k: o.k, l: o.l, icon: <Ic n={o.ic} /> }))}
+            run={run} onOpen={openGame} onBack={() => setDisc(false)} />
+        )}
+        {disc && !game ? null : game ? (
+          <GameView theme={`d-p3 ${psp ? 'psp' : ''}`} g={game} self={self} run={run} onBack={() => up({ game: null })}
+            opts={gameOpts.map(o => ({ k: o.k, l: o.l, icon: <Ic n={o.ic} /> }))} />
         ) : (
           <>
             <nav className="p3-cats">{CATS.map(([k, l, ic], i) => (
@@ -393,13 +373,7 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
             </div>
           </>
         )}
-        <div className={`p3-hn ${game ? 'top' : ''}`}>{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>
-        {view != null && shots[view] && (
-          <div className="p3-view" onClick={() => setView(null)}>
-            <img src={shots[view]} alt="" />
-            <span className="cnt">{view + 1} / {shots.length}</span>
-          </div>
-        )}
+        {!disc && !game && <div className="p3-hn">{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>}
         {toast}
       </Fit>
       <BootOverlay kind="soft" label={c.name.toUpperCase()} />
@@ -493,57 +467,6 @@ function Detail({ it, cat, st, self, opts, primary, stats, lib, achList, achLoad
   if (it.kind === 'off') return <div className="hint"><span><Glyph a="ok" />Desligar</span></div>;
   if (it.kind === 'empty' && cat === 'games') return <div className="hint"><span><Glyph a="ok" />Abrir Descobrir</span></div>;
   return null;
-}
-
-function GamePage({ g, st, opts, shots, self, scrollRef, onAct, onShot }: { g: HubGame; st: St; opts: Opt[]; shots: string[]; self: boolean; scrollRef: RefObject<HTMLDivElement | null>; onAct: (j: number) => void; onShot: (j: number) => void }) {
-  const art = useArt(g.console, g.title, g.platformName);
-  const about = useTranslated(g.catalog?.description);
-  const needs = useTranslated(g.catalog?.needs);
-  const p = useGameProgress(g);
-  const inst = g.installed;
-  const bg = art.fanart ?? art.cover ?? g.coverUrl;
-  const [more, setMore] = useState(false);
-  const check = () => { const el = scrollRef.current; if (el) setMore(el.scrollTop + el.clientHeight < el.scrollHeight - 8); };
-  useEffect(() => { check(); const el = scrollRef.current; if (!el) return; const ro = new ResizeObserver(check); ro.observe(el); if (el.lastElementChild) ro.observe(el.lastElementChild); return () => ro.disconnect(); });
-  return (
-    <div className="p3-gpage">
-      <div className="p3-gscroll" ref={scrollRef} onScroll={check}>
-        <div className="p3-ghero">
-          {bg && <div className="p3-gbg"><img src={bg} alt="" /></div>}
-          <div className="p3-gcv"><div className="p3-gl"><Art g={g} v="square" /></div></div>
-          <div className="p3-ghead">
-            <h1>{g.title}</h1>
-            <p className="meta">{[g.status && STATUS_LABEL[g.status], g.catalog?.developer, g.catalog?.year, g.platformName].filter(Boolean).join(' · ')}</p>
-            <p className="meta soft">
-              {[inst ? (inst.running ? 'jogando agora' : inst.playMs ? `${fmtPlay(inst.playMs)} jogadas` : 'ainda não jogado') : 'não instalado',
-                inst?.achievements?.total ? `${inst.achievements.unlocked}/${inst.achievements.total} conquistas` : null].filter(Boolean).join(' · ')}
-            </p>
-            {inst?.missing && <p className="warn">A pasta do jogo não foi encontrada em {inst.installDir}. {g.catalog?.repo && !self ? 'Instale de novo ou mostre onde ele está agora.' : 'Mostre onde ele está agora.'}</p>}
-            {p && <p className="prog">{p.error ?? `${p.stage}${p.pct > 0 && p.pct < 1 ? ` · ${Math.round(p.pct * 100)}%` : ''}`}</p>}
-            <div className="p3-acts">{opts.map((o, j) => (
-              <button key={o.k + j} className={`p3-b ${st.zone === 'gacts' && st.ai === j ? 'on' : ''}`} onClick={() => onAct(j)}><Ic n={o.ic} />{o.l}</button>
-            ))}</div>
-          </div>
-        </div>
-        <div className="p3-gbody">
-          <section className="p3-gsec">
-            <h4>Imagens</h4>
-            {shots.length ? <div className="p3-gshots">{shots.map((u, j) => (
-              <button key={u} className={st.zone === 'gshots' && st.gs === j ? 'on' : ''} onClick={() => onShot(j)}><img src={u} alt="" /></button>
-            ))}</div> : <p className="soft">Sem capturas de tela no LaunchBox para este jogo.</p>}
-          </section>
-          <section className={`p3-gsec text ${st.zone === 'gtext' ? 'on' : ''}`}>
-            {about.text && <><h4>Sobre</h4><p>{about.text}</p></>}
-            {needs.text && <><h4>O que você precisa</h4><p>{needs.text}</p></>}
-            {self && !inst && <p className="soft">{SELF_INSTALL_NOTE}</p>}
-            {!about.text && !needs.text && <p className="soft">O catálogo não traz descrição deste jogo.</p>}
-            {(about.auto || needs.auto) && <small>Traduzido automaticamente do inglês</small>}
-          </section>
-        </div>
-      </div>
-      <div className={`p3-gmore ${more ? 'on' : ''}`}><Ic n="down" /></div>
-    </div>
-  );
 }
 
 function PortsDir() {

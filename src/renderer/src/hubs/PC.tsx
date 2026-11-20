@@ -1,21 +1,22 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AchievementView, ConsoleId, PlayStats } from '@shared/types';
-import { isSelfInstall, SELF_INSTALL_NOTE, STATUS_LABEL } from '@shared/consoles';
+import { isSelfInstall, STATUS_LABEL } from '@shared/consoles';
 import { useTRPC } from '../trpc';
 import { Glyph, useKeys, type Key } from '../lib/input';
 import { getSettings, setSettings, useSettings } from '../lib/settings';
 import { setSfxProfile, sfx } from '../lib/sfx';
 import { ago, fmtDate, fmtPlay, plural } from '../lib/format';
-import { matchesQuery } from '../lib/search';
-import { useArt, useShots } from '../lib/art';
-import { useTranslated } from '../lib/translate';
+import { focusSearch as focusAny, matchesQuery } from '../lib/search';
+import { GameView } from '../components/GameView';
+import { Discover, initialDiscover } from '../components/Discover';
+import { useArt } from '../lib/art';
 import { GameArt } from '../components/GameArt';
 import { SearchBox } from '../components/SearchBox';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
-import { useGameProgress, useHubActions, useHubData, type HubGame } from './data';
+import { useHubActions, useHubData, type HubGame } from './data';
 
 type Sec = 'lib' | 'cat' | 'news' | 'ach' | 'time' | 'cfg';
 type Zone = 'side' | 'search' | 'main' | 'gacts' | 'gshots' | 'gtext';
@@ -48,7 +49,6 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
   const [query, setQuery] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
   const mainRef = useRef<HTMLDivElement>(null);
-  const gScroll = useRef<HTMLDivElement>(null);
   const clock = useClock();
   const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show('Pasta dos jogos alterada'); } }));
   const chooseExe = useMutation(trpc.games.chooseExe.mutationOptions({ onSuccess: () => void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }) }));
@@ -56,7 +56,8 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
 
   useEffect(() => { setSfxProfile('click'); const t = setTimeout(() => sfx.play('boot'), 150); return () => clearTimeout(t); }, []);
   useEffect(() => { if (act.error) { show(act.error); act.reset(); } }, [act.error]);
-  const focusSearch = () => setTimeout(() => searchRef.current?.focus(), 60);
+  const [dst, setDst] = useState(initialDiscover);
+  const focusSearch = () => { setDst(d => ({ ...d, zone: 'search' })); setTimeout(focusAny, 80); };
   useEffect(() => {
     const go = () => { sfx.play('ok'); set(x => ({ ...x, si: 1, zone: 'search', game: null, menu: false, fi: 0 })); focusSearch(); };
     addEventListener('cartucho:search', go);
@@ -89,14 +90,6 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
   const stats = new Map(byPlay.map((x, i) => [x.key, statQ[i]?.data] as const));
 
   const game = st.game ? all.get(st.game) ?? null : null;
-  const shots = useShots(game?.console, game?.title ?? '', game?.platformName);
-  const [view, setView] = useState<number | null>(null);
-  useEffect(() => {
-    const el = gScroll.current; if (!el || !game) return;
-    if (st.zone === 'gacts') el.scrollTo({ top: 0, behavior: 'smooth' });
-    else if (st.zone === 'gshots') el.querySelector('.pc-gshots')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    else if (st.zone === 'gtext') el.querySelector('.pc-gtext')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [st.zone, !!game]);
   useEffect(() => {
     if (st.zone !== 'main' || game) return;
     mainRef.current?.querySelector('.pc-cap.on, .pc-r.on')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -124,7 +117,7 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
     return L;
   };
   const gameOpts = game ? options(game) : [];
-  const openGame = (x: HubGame) => { setView(null); up({ game: x.key, menu: false, zone: 'gacts', ai: 0, gs: 0 }); };
+  const openGame = (x: HubGame) => { up({ game: x.key, menu: false, zone: 'gacts', ai: 0, gs: 0 }); };
   const goSec = (i: number, extra: Partial<St> = {}) => { sfx.play('move'); set(x => ({ ...x, si: i, fi: 0, li: 0, menu: false, game: null, ...extra })); };
 
   const run = (k: string, x: HubGame) => {
@@ -153,11 +146,6 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
   };
 
   const enter = () => {
-    if (game) {
-      if (st.zone === 'gacts') { const o = gameOpts[st.ai]; if (o) run(o.k, game); return; }
-      if (st.zone === 'gshots' && shots[st.gs]) { sfx.play('ok'); setView(st.gs); }
-      return;
-    }
     if (st.menu && cur) { const o = options(cur)[st.mi]; if (o) run(o.k, cur); return; }
     if (st.zone === 'side') { sfx.play('ok'); return up({ zone: 'main' }); }
     if (sec === 'lib' || sec === 'cat') { if (cur) { sfx.play('ok'); openGame(cur); } return; }
@@ -173,7 +161,6 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
   };
   const back = () => {
     sfx.play('back');
-    if (view != null) return setView(null);
     if (game) return up({ game: null });
     if (st.menu) return up({ menu: false });
     if (query) { setQuery(''); return up({ fi: 0 }); }
@@ -182,23 +169,11 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
   };
 
   useKeys((k: Key) => {
+    if ((sec === 'cat' && !game && !st.menu) || game) return;
     if (k === 'Escape') return back();
     const R = k === 'ArrowRight', L = k === 'ArrowLeft', U = k === 'ArrowUp', D = k === 'ArrowDown';
     const mv = (p: Partial<St>) => { sfx.play('move'); up(p); };
-    if (view != null) {
-      if (k === 'Enter') { sfx.play('back'); return setView(null); }
-      if (R && view < shots.length - 1) { sfx.play('move'); setView(view + 1); } else if (L && view > 0) { sfx.play('move'); setView(view - 1); }
-      return;
-    }
     if (k === 'Enter') return enter();
-    if (game) {
-      const el = gScroll.current, z = st.zone;
-      if (z === 'gacts') { if (R && st.ai < gameOpts.length - 1) mv({ ai: st.ai + 1 }); else if (L && st.ai > 0) mv({ ai: st.ai - 1 }); else if (D) mv({ zone: shots.length ? 'gshots' : 'gtext', gs: 0 }); return; }
-      if (z === 'gshots') { if (R && st.gs < shots.length - 1) mv({ gs: st.gs + 1 }); else if (L && st.gs > 0) mv({ gs: st.gs - 1 }); else if (U) mv({ zone: 'gacts' }); else if (D) mv({ zone: 'gtext' }); return; }
-      if (D) { sfx.play('move'); el?.scrollBy({ top: 260, behavior: 'smooth' }); }
-      else if (U) { if (!el || el.scrollTop <= 4 || (shots.length && el.scrollTop <= 500)) mv({ zone: shots.length ? 'gshots' : 'gacts' }); else { sfx.play('move'); el.scrollBy({ top: -260, behavior: 'smooth' }); } }
-      return;
-    }
     if (st.menu && cur) {
       const n = options(cur).length;
       if (D && st.mi < n - 1) mv({ mi: st.mi + 1 }); else if (U && st.mi > 0) mv({ mi: st.mi - 1 });
@@ -225,9 +200,7 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
     if (D && st.li < rows.length - 1) mv({ li: st.li + 1 }); else if (U && st.li > 0) mv({ li: st.li - 1 }); else if (L) mv({ zone: 'side' });
   });
 
-  const hints: Hint[] = view != null ? [['lr', 'Imagens'], ['back', 'Fechar']]
-    : game ? (st.zone === 'gshots' ? [['ok', 'Ampliar'], ['ud', 'Rolar'], ['back', 'Voltar']] : st.zone === 'gtext' ? [['ud', 'Rolar'], ['back', 'Voltar']] : [['ok', 'Confirmar'], ['ud', 'Rolar'], ['back', 'Voltar']])
-    : st.menu ? [['ok', 'Confirmar'], ['back', 'Fechar']]
+  const hints: Hint[] = st.menu ? [['ok', 'Confirmar'], ['back', 'Fechar']]
     : st.zone === 'side' ? [['ud', 'Seção'], ['ok', 'Abrir'], ['back', 'Sair']]
     : (sec === 'lib' || sec === 'cat') ? [['ok', 'Ver jogo'], ['x', 'Opções'], ['y', 'Buscar'], ['rb', 'Seção'], ['back', 'Voltar']]
     : [['ok', sec === 'cfg' ? 'Confirmar' : 'Abrir'], ['rb', 'Seção'], ['back', 'Voltar']];
@@ -236,6 +209,11 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
   return (
     <section className="view hub sk-pc" style={{ ['--cc' as string]: c.color }}>
       <Fit w={1920} h={1080} className="pc" style={{ ['--cc' as string]: c.color }}>
+        {sec === 'cat' && !game && (
+          <Discover theme="d-pc" cname={c.name} games={data.catalog} extra={data.lib.filter(x => !x.catalog)} self={self} st={dst} set={setDst}
+            options={x => options(x).filter(o => o.k !== 'info').map(o => ({ k: o.k, l: o.l, icon: <Ic n={o.ic} /> }))}
+            run={run} onOpen={openGame} onBack={() => goSec(0, { zone: 'side' })} />
+        )}
         <aside className="pc-side">
           <div className="brand"><i><Ic n="pad" /></i>{c.name}</div>
           {SIDE.map(([k, l, ic], i) => {
@@ -251,11 +229,7 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
           <div className="me"><i><Ic n="clock" /></i><span>{fmtPlay(data.playMs) || '0m'} jogados<br />{clock}</span></div>
         </aside>
         <main className="pc-main" ref={mainRef}>
-          {game ? (
-            <GamePage g={game} st={st} opts={gameOpts} shots={shots} self={self} scrollRef={gScroll}
-              onAct={j => { if (st.zone === 'gacts' && st.ai === j) enter(); else { sfx.play('move'); up({ zone: 'gacts', ai: j }); } }}
-              onShot={j => { sfx.play('ok'); up({ zone: 'gshots', gs: j }); setView(j); }} />
-          ) : (
+          {game ? null : (
             <div className="pc-pg" key={sec}>
               {(sec === 'lib' || sec === 'cat') && (
                 <>
@@ -303,10 +277,9 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
             </div>
           </div>
         )}
-        <div className="pc-ft">{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>
-        {view != null && shots[view] && (
-          <div className="pc-view" onClick={() => setView(null)}><img src={shots[view]} alt="" /><span className="cnt">{view + 1} / {shots.length}</span></div>
-        )}
+        {game && <GameView theme="d-pc" g={game} self={self} run={run} onBack={() => up({ game: null })}
+          opts={gameOpts.map(o => ({ k: o.k, l: o.l, icon: <Ic n={o.ic} /> }))} />}
+        {sec !== 'cat' && !game && <div className="pc-ft">{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>}
         {toast}
       </Fit>
       <BootOverlay kind="sweep" label={c.name.toUpperCase()} />
@@ -384,60 +357,6 @@ function Detail({ sec, row, achList, achLoading, stats, statsAll, lib, playMs, s
     return <><h3>{row.t}</h3><p>Volta para o palco do Cartucho.</p></>;
   }
   return null;
-}
-
-function GamePage({ g, st, opts, shots, self, scrollRef, onAct, onShot }: { g: HubGame; st: St; opts: Opt[]; shots: string[]; self: boolean; scrollRef: RefObject<HTMLDivElement | null>; onAct: (j: number) => void; onShot: (j: number) => void }) {
-  const art = useArt(g.console, g.title, g.platformName);
-  const about = useTranslated(g.catalog?.description);
-  const needs = useTranslated(g.catalog?.needs);
-  const p = useGameProgress(g);
-  const i = g.installed;
-  const bg = art.fanart ?? art.cover ?? g.coverUrl;
-  return (
-    <div className="pc-gpage" ref={scrollRef}>
-      <div className="pc-ghero">
-        <div className="art">{bg && <img src={bg} alt="" />}</div>
-        <div className="in">
-          {art.logo ? <img className="logo" src={art.logo} alt={g.title} /> : <h1>{g.title}</h1>}
-        </div>
-      </div>
-      <div className="pc-gbar">
-        <div className="acts">{opts.map((o, j) => (
-          <button key={o.k + j} className={`${j === 0 ? 'pri' : ''} ${st.zone === 'gacts' && st.ai === j ? 'on' : ''}`} onClick={() => onAct(j)}><Ic n={o.ic} />{o.l}</button>
-        ))}</div>
-        <div className="kv">
-          <span>Tempo<b>{i ? fmtPlay(i.playMs) || '0m' : '—'}</b></span>
-          <span>Última vez<b>{i?.lastPlayed ? ago(i.lastPlayed) : '—'}</b></span>
-          <span>Conquistas<b>{i?.achievements?.total ? `${i.achievements.unlocked}/${i.achievements.total}` : '—'}</b></span>
-        </div>
-      </div>
-      <div className="pc-gbody">
-        <div className="main">
-          {i?.missing && <p className="warn">A pasta do jogo não foi encontrada em {i.installDir}.</p>}
-          {p && <p className="prog">{p.error ?? `${p.stage}${p.pct > 0 && p.pct < 1 ? ` · ${Math.round(p.pct * 100)}%` : ''}`}</p>}
-          <h4>Imagens</h4>
-          {shots.length ? <div className="pc-gshots">{shots.map((u, j) => (
-            <button key={u} className={st.zone === 'gshots' && st.gs === j ? 'on' : ''} onClick={() => onShot(j)}><img src={u} alt="" /></button>
-          ))}</div> : <p className="mut">Sem capturas de tela no LaunchBox para este jogo.</p>}
-          <div className={`pc-gtext ${st.zone === 'gtext' ? 'on' : ''}`}>
-            {about.text && <><h4>Sobre</h4><p>{about.text}</p></>}
-            {needs.text && <><h4>O que você precisa</h4><p>{needs.text}</p></>}
-            {self && !i && <p>{SELF_INSTALL_NOTE}</p>}
-            {!about.text && !needs.text && <p className="mut">O catálogo não traz descrição deste jogo.</p>}
-            {(about.auto || needs.auto) && <small>Traduzido automaticamente do inglês</small>}
-          </div>
-        </div>
-        <aside className="info">
-          <div><span>Status</span><b>{g.status ? STATUS_LABEL[g.status] : '—'}</b></div>
-          {g.catalog?.developer && <div><span>Estúdio</span><b>{g.catalog.developer}</b></div>}
-          {g.catalog?.year && <div><span>Ano</span><b>{g.catalog.year}</b></div>}
-          {g.platformName && <div><span>Plataforma</span><b>{g.platformName}</b></div>}
-          {(g.update?.installed ?? i?.version) && <div><span>Versão</span><b>{g.update?.installed ?? i?.version}</b></div>}
-          {g.repo && !self && <div><span>Projeto</span><b>{g.repo}</b></div>}
-        </aside>
-      </div>
-    </div>
-  );
 }
 
 function PortsDir() {

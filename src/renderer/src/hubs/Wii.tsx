@@ -1,21 +1,21 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AchievementView, ConsoleId, PlayStats, RadarEvent } from '@shared/types';
-import { isSelfInstall, SELF_INSTALL_NOTE, STATUS_LABEL } from '@shared/consoles';
+import { isSelfInstall, STATUS_LABEL } from '@shared/consoles';
 import { useTRPC } from '../trpc';
 import { Glyph, useKeys, type Key } from '../lib/input';
 import { getSettings, setSettings, useSettings } from '../lib/settings';
 import { setSfxProfile, sfx } from '../lib/sfx';
 import { ago, fmtDate, fmtPlay, plural } from '../lib/format';
-import { matchesQuery } from '../lib/search';
-import { useArt, useShots } from '../lib/art';
-import { useTranslated } from '../lib/translate';
+import { focusSearch as focusAny, matchesQuery } from '../lib/search';
+import { GameView } from '../components/GameView';
+import { Discover, initialDiscover } from '../components/Discover';
 import { GameArt } from '../components/GameArt';
 import { SearchBox } from '../components/SearchBox';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
-import { useGameProgress, useHubActions, useHubData, type HubGame } from './data';
+import { useHubActions, useHubData, type HubGame } from './data';
 
 type Sp = 'cat' | 'news' | 'ach' | 'time' | 'cfg';
 type View = { kind: 'game'; key: string } | { kind: Sp };
@@ -60,7 +60,8 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
 
   useEffect(() => { setSfxProfile('bubble'); const t = setTimeout(() => sfx.play('boot'), 150); return () => clearTimeout(t); }, []);
   useEffect(() => { if (act.error) { show(act.error); act.reset(); } }, [act.error]);
-  const focusSearch = () => setTimeout(() => searchRef.current?.focus(), 60);
+  const [dst, setDst] = useState(initialDiscover);
+  const focusSearch = () => { setDst(d => ({ ...d, zone: 'search' })); setTimeout(focusAny, 80); };
   useEffect(() => {
     const go = () => { sfx.play('ok'); set(x => ({ ...x, view: { kind: 'cat' }, stack: [], pz: 'list', mi: 0, opt: false })); focusSearch(); };
     addEventListener('cartucho:search', go);
@@ -88,8 +89,6 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   const view = st.view;
   const game = view?.kind === 'game' ? all.get(view.key) ?? null : null;
   const sp = view && view.kind !== 'game' ? view.kind : null;
-  const shots = useShots(game?.console, game?.title ?? '', game?.platformName);
-  const [zoom, setZoom] = useState<number | null>(null);
 
   const rows: Row[] = sp === 'cat' ? found.map(g => ({ key: g.key, g, t: g.title, s: [g.status && STATUS_LABEL[g.status], g.catalog?.developer, g.catalog?.year].filter(Boolean).join(' · '), v: g.installed ? 'Instalado' : g.isNew ? 'Novo' : '' }))
     : sp === 'news' ? data.feed.map(f => { const g = data.catalog.find(y => y.catalog?.id === f.gameId); return { key: String(f.id), g, feed: f, t: f.title, s: `${FEED[f.kind]}${f.detail && !(self && f.kind === 'new') ? ` · ${f.detail}` : ''}`, v: ago(f.at) }; })
@@ -130,15 +129,15 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     return L;
   };
   const gameOpts = game ? options(game) : [];
-  const btns: { k: string; l: string }[] = game ? [{ k: 'menu', l: 'Menu' }, ...(gameOpts.length > 1 ? [{ k: 'opts', l: 'Opções' }] : []), { k: 'start', l: gameOpts[0]?.l ?? 'Iniciar' }] : [{ k: 'menu', l: 'Menu' }];
+  const btns: { k: string; l: string }[] = [{ k: 'menu', l: 'Menu' }];
 
   const open = (v: View, extra: Partial<St> = {}) => {
     sfx.play('ok');
     set(x => ({ ...x, stack: x.view ? [...x.stack, { view: x.view, mi: x.mi }] : x.stack, view: v, pz: v.kind === 'game' ? 'btns' : 'list', pb: v.kind === 'game' ? 99 : 0, ps: 0, mi: 0, opt: false, oi: 0, ...extra }));
     bodyRef.current?.scrollTo({ top: 0 });
   };
-  const closeView = () => {
-    sfx.play('back');
+  const closeView = (silent = false) => {
+    if (!silent) sfx.play('back');
     set(x => {
       const prev = x.stack[x.stack.length - 1];
       if (!prev) return { ...x, view: null, stack: [], opt: false };
@@ -170,22 +169,12 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     if (k === 'exe') return chooseExe.mutate({ id: x.installed!.id });
     if (k === 'gh') return act.github(x);
   };
-  const openChan = (ch: Chan) => { if (ch.g) open({ kind: 'game', key: ch.g.key }); else if (ch.sp) { open({ kind: ch.sp }); if (ch.sp === 'cat') focusSearch(); } };
+  const openChan = (ch: Chan) => { if (ch.g) open({ kind: 'game', key: ch.g.key }); else if (ch.sp) { open({ kind: ch.sp }); } };
 
   const enter = () => {
-    if (zoom != null) { sfx.play('back'); return setZoom(null); }
     if (!view) {
       if (st.zone === 'bar') { if (st.bi === 0) { sfx.play('back'); return onBack(); } return open({ kind: 'news' }); }
       if (curChan) openChan(curChan);
-      return;
-    }
-    if (st.opt && game) { const o = gameOpts[st.oi]; if (o) run(o.k, game); return; }
-    if (game) {
-      if (st.pz === 'shots') { if (shots[st.ps]) { sfx.play('ok'); setZoom(st.ps); } return; }
-      const b = btns[Math.min(st.pb, btns.length - 1)]!;
-      if (b.k === 'menu') return closeView();
-      if (b.k === 'opts') { sfx.play('ok'); return up({ opt: true, oi: 0 }); }
-      const o = gameOpts[0]; if (o) run(o.k, game);
       return;
     }
     if (st.pz === 'btns') return closeView();
@@ -200,25 +189,20 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     if (row.g) return open({ kind: 'game', key: row.g.key });
   };
   const back = () => {
-    if (zoom != null) { sfx.play('back'); return setZoom(null); }
     if (st.opt) { sfx.play('back'); return up({ opt: false }); }
     if (view) { if (sp === 'cat' && query) { sfx.play('back'); return setQuery(''); } return closeView(); }
     sfx.play('back'); onBack();
   };
 
   useKeys((k: Key) => {
+    if (view?.kind === 'cat' || game) return;
     setPtr(null);
     if (k === 'Escape') return back();
     const R = k === 'ArrowRight', L = k === 'ArrowLeft', U = k === 'ArrowUp', D = k === 'ArrowDown';
     const mv = (p: Partial<St>) => { sfx.play('move'); up(p); };
-    if (zoom != null) {
-      if (k === 'Enter') return back();
-      if (R && zoom < shots.length - 1) { sfx.play('move'); setZoom(zoom + 1); } else if (L && zoom > 0) { sfx.play('move'); setZoom(zoom - 1); }
-      return;
-    }
     if (k === 'Enter') return enter();
     if (!view) {
-      if (k === 'X' && curChan?.g) { open({ kind: 'game', key: curChan.g.key }); return up({ opt: true, oi: 0 }); }
+      if (k === 'X' && curChan?.g) return open({ kind: 'game', key: curChan.g.key });
       if (k === 'LB' && st.page > 0) return mv({ page: st.page - 1, ci: 0 });
       if ((k === 'RB' || k === 'Tab') && st.page < pages - 1) return mv({ page: st.page + 1, ci: 0 });
       if (st.zone === 'bar') {
@@ -232,24 +216,6 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       if (D) { if (st.ci + COLS < pageChans.length) mv({ ci: st.ci + COLS }); else mv({ zone: 'bar', bi: col < 2 ? 0 : 1 }); }
       return;
     }
-    if (st.opt && game) {
-      if (D && st.oi < gameOpts.length - 1) mv({ oi: st.oi + 1 }); else if (U && st.oi > 0) mv({ oi: st.oi - 1 });
-      return;
-    }
-    const el = bodyRef.current;
-    if (k === 'X' && game && gameOpts.length > 1) { sfx.play('ok'); return up({ opt: true, oi: 0 }); }
-    if (game) {
-      const pb = Math.min(st.pb, btns.length - 1);
-      if (st.pz === 'btns') {
-        if (L && pb > 0) mv({ pb: pb - 1 }); else if (R && pb < btns.length - 1) mv({ pb: pb + 1 });
-        else if (U) { if (shots.length) mv({ pz: 'shots', ps: 0 }); else { sfx.play('move'); el?.scrollBy({ top: -260, behavior: 'smooth' }); } }
-        else if (D) { sfx.play('move'); el?.scrollBy({ top: 260, behavior: 'smooth' }); }
-        return;
-      }
-      if (L && st.ps > 0) mv({ ps: st.ps - 1 }); else if (R && st.ps < shots.length - 1) mv({ ps: st.ps + 1 });
-      else if (D) mv({ pz: 'btns' }); else if (U) { sfx.play('move'); el?.scrollBy({ top: -260, behavior: 'smooth' }); }
-      return;
-    }
     if (st.pz === 'btns') { if (U && rows.length) mv({ pz: 'list' }); return; }
     if (D) { if (st.mi < rows.length - 1) mv({ mi: st.mi + 1 }); else mv({ pz: 'btns' }); }
     else if (U) { if (st.mi > 0) mv({ mi: st.mi - 1 }); else if (sp === 'cat') { sfx.play('ok'); searchRef.current?.focus(); } }
@@ -260,10 +226,7 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     setPtr(p => ({ x: ((e.clientX - r.left) / r.width) * 1920, y: ((e.clientY - r.top) / r.height) * 1080, down: p?.down ?? false }));
   };
 
-  const hints: Hint[] = zoom != null ? [['lr', 'Imagens'], ['back', 'Fechar']]
-    : st.opt ? [['ok', 'Confirmar'], ['back', 'Fechar']]
-    : game ? [['ok', 'Escolher'], ['ud', st.pz === 'btns' && shots.length ? 'Imagens e rolar' : 'Rolar'], ['back', 'Menu']]
-    : view ? [['ok', sp === 'cfg' ? 'Confirmar' : 'Abrir'], ['ud', 'Escolher'], ['back', 'Menu']]
+  const hints: Hint[] = view ? [['ok', sp === 'cfg' ? 'Confirmar' : 'Abrir'], ['ud', 'Escolher'], ['back', 'Menu']]
     : [['ok', 'Abrir'], ...(curChan?.g ? [['x', 'Opções'] as Hint] : []), ...(pages > 1 ? [['rb', 'Página'] as Hint] : []), ['back', 'Cartucho']];
   const date = new Date().toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'numeric' });
 
@@ -300,17 +263,20 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
             </button>
             {pages > 1 && <div className="wi-dots">{Array.from({ length: pages }, (_, j) => <i key={j} className={j === st.page ? 'on' : ''} />)}</div>}
           </div>
-          {view && (
-            <div className="wi-prev" key={game ? `g-${game.key}` : sp!}>
+          {view?.kind === 'cat' && (
+            <Discover theme="d-wii" cname={c.name} games={data.catalog} extra={data.lib.filter(x => !x.catalog)} self={self} st={dst} set={setDst}
+              options={x => options(x).map(o => ({ k: o.k, l: o.l, icon: <Ic n={o.ic} /> }))}
+              run={run} onOpen={x => open({ kind: 'game', key: x.key })} onBack={closeView} />
+          )}
+          {game && <GameView theme="d-wii" g={game} self={self} run={run} onBack={() => closeView(true)}
+            opts={gameOpts.map(o => ({ k: o.k, l: o.l, icon: <Ic n={o.ic} /> }))} />}
+          {view && view.kind !== 'cat' && !game && (
+            <div className="wi-prev" key={sp!}>
               <div className="wi-body" ref={bodyRef}>
-                {game ? (
-                  <GameBody g={game} shots={shots} st={st} self={self} onShot={j => { sfx.play('ok'); up({ pz: 'shots', ps: j }); setZoom(j); }} />
-                ) : (
-                  <SpecialBody sp={sp!} rows={rows} st={st} row={row} cname={c.name} catCount={data.catalog.length} query={query}
+                <SpecialBody sp={sp!} rows={rows} st={st} row={row} cname={c.name} catCount={data.catalog.length} query={query}
                     setQuery={v => { setQuery(v); up({ mi: 0 }); }} searchRef={searchRef} onSearchDone={() => { if (rows.length) up({ pz: 'list', mi: 0 }); }}
                     achList={ach.data?.list ?? []} achLoading={ach.isLoading} stats={row?.g ? stats.get(row.g.key) : undefined} statsAll={stats} lib={byPlay} playMs={data.playMs} sndOn={s.snd}
                     onRow={j => { if (st.pz === 'list' && st.mi === j) enter(); else { sfx.play('move'); up({ pz: 'list', mi: j }); } }} />
-                )}
               </div>
               <div className="wi-btns">{btns.map((b, j) => {
                 const on = st.pz === 'btns' && !st.opt && Math.min(st.pb, btns.length - 1) === j;
@@ -319,64 +285,15 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
                     onClick={() => { if (on) enter(); else { sfx.play('move'); up({ pz: 'btns', pb: j }); } }}>{b.l}</button>
                 );
               })}</div>
-              {st.opt && game && (
-                <div className="wi-opt">{gameOpts.map((o, j) => (
-                  <button key={o.k + j} className={j === st.oi ? 'on' : ''} onClick={() => { if (st.oi === j) enter(); else { sfx.play('move'); up({ oi: j }); } }}><Ic n={o.ic} />{o.l}</button>
-                ))}</div>
-              )}
             </div>
           )}
-          <div className={`wi-hn ${view ? 'top' : ''}`}>{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>
-          {zoom != null && shots[zoom] && (
-            <div className="wi-zoom" onClick={() => setZoom(null)}><img src={shots[zoom]} alt="" /><span className="cnt">{zoom + 1} / {shots.length}</span></div>
-          )}
+          {view?.kind !== 'cat' && !game && <div className={`wi-hn ${view ? 'top' : ''}`}>{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>}
           {ptr && <div className={`wi-ir ${ptr.down ? 'press' : ''}`} style={{ left: ptr.x, top: ptr.y }} />}
           {toast}
         </div>
       </Fit>
       <BootOverlay kind="white" label={c.name.toUpperCase()} />
     </section>
-  );
-}
-
-function GameBody({ g, shots, st, self, onShot }: { g: HubGame; shots: string[]; st: St; self: boolean; onShot: (j: number) => void }) {
-  const art = useArt(g.console, g.title, g.platformName);
-  const about = useTranslated(g.catalog?.description);
-  const needs = useTranslated(g.catalog?.needs);
-  const p = useGameProgress(g);
-  const inst = g.installed;
-  const bg = art.fanart ?? art.cover ?? g.coverUrl;
-  return (
-    <>
-      <div className="wi-banner">
-        <div className="art">{bg ? <img src={bg} alt="" /> : <Art g={g} v="wide" />}{art.logo && <img className="logo" src={art.logo} alt="" />}</div>
-        <div className="det">
-          <h2>{g.title}</h2>
-          <p className="meta">{[g.catalog?.developer, g.catalog?.year, g.platformName].filter(Boolean).join(' · ')}</p>
-          {g.status && <span className={`wi-tag ${g.status}`}>{STATUS_LABEL[g.status]}</span>}
-          <div className="wi-stats">
-            <div><b>{inst ? fmtPlay(inst.playMs) || '0m' : '—'}</b><span>tempo jogado</span></div>
-            <div><b>{inst?.lastPlayed ? ago(inst.lastPlayed) : '—'}</b><span>última vez</span></div>
-            <div><b>{inst?.achievements?.total ? `${inst.achievements.unlocked}/${inst.achievements.total}` : '—'}</b><span>conquistas</span></div>
-          </div>
-          {inst?.missing && <p className="warn">A pasta do jogo não foi encontrada em {inst.installDir}.</p>}
-          {p && <p className="prog">{p.error ?? `${p.stage}${p.pct > 0 && p.pct < 1 ? ` · ${Math.round(p.pct * 100)}%` : ''}`}</p>}
-        </div>
-      </div>
-      <section className="wi-sec">
-        <h4>Imagens</h4>
-        {shots.length ? <div className="wi-shots">{shots.map((u, j) => (
-          <button key={u} className={st.pz === 'shots' && st.ps === j ? 'on' : ''} onClick={() => onShot(j)}><img src={u} alt="" /></button>
-        ))}</div> : <p className="mut">Sem capturas de tela no LaunchBox para este jogo.</p>}
-      </section>
-      <section className="wi-sec">
-        {about.text && <><h4>Sobre</h4><p>{about.text}</p></>}
-        {needs.text && <><h4>O que você precisa</h4><p>{needs.text}</p></>}
-        {self && !inst && <p>{SELF_INSTALL_NOTE}</p>}
-        {!about.text && !needs.text && <p className="mut">O catálogo não traz descrição deste jogo.</p>}
-        {(about.auto || needs.auto) && <small>Traduzido automaticamente do inglês</small>}
-      </section>
-    </>
   );
 }
 

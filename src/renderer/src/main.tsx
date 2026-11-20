@@ -19,6 +19,7 @@ import './hubs/ps4.css';
 import './hubs/ps3.css';
 import './hubs/x360.css';
 import './hubs/wii.css';
+import './components/discover.css';
 import './hubs/retro.css';
 import './hubs/pc.css';
 import { queryClient, trpcClient, TRPCProvider } from './trpc';

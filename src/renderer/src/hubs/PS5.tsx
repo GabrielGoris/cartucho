@@ -1,17 +1,17 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConsoleId } from '@shared/types';
-import { isSelfInstall, SELF_INSTALL_NOTE, STATUS_LABEL } from '@shared/consoles';
+import { isSelfInstall, STATUS_LABEL } from '@shared/consoles';
 import { useTRPC } from '../trpc';
 import { Glyph, useKeys, type Key } from '../lib/input';
 import { getSettings, setSettings, useSettings } from '../lib/settings';
 import { setSfxProfile, sfx } from '../lib/sfx';
 import { ago, fmtDate, fmtPlay, plural } from '../lib/format';
-import { matchesQuery } from '../lib/search';
-import { useArt, useShots } from '../lib/art';
-import { useTranslated } from '../lib/translate';
+import { focusSearch } from '../lib/search';
+import { GameView } from '../components/GameView';
+import { Discover, initialDiscover } from '../components/Discover';
+import { useArt } from '../lib/art';
 import { GameArt } from '../components/GameArt';
-import { SearchBox } from '../components/SearchBox';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
@@ -24,8 +24,6 @@ type Opt = { k: string; l: string; ic: IconName };
 type Hint = [Parameters<typeof Glyph>[0]['a'], string];
 
 const TOP: [string, string | IconName][] = [['games', 'Jogos'], ['cat', 'Descobrir'], ['search', 'search'], ['news', 'bell'], ['cfg', 'gear'], ['ach', 'medal']];
-const TABS = ['Todos', 'Novos', 'Em progresso', 'Instalados', 'Buscar'];
-const TAB_TITLE = ['Tudo o que existe para este console', 'Novos no catálogo', 'Em progresso', 'Já instalados', 'Buscar'];
 const TAGS = { new: 'Novo no catálogo', upd: 'Versão nova', up: 'Mudou de status' } as const;
 const SHORT = { new: 'Novo', upd: 'Versão nova', up: 'Status' } as const;
 const CFG: Opt[] = [{ k: 'dir', l: 'Pasta dos jogos', ic: 'folder' }, { k: 'snd', l: 'Sons da interface', ic: 'sound' }, { k: 'radar', l: 'Radar de novidades', ic: 'bell' }, { k: 'off', l: 'Voltar ao Cartucho', ic: 'power' }];
@@ -44,8 +42,8 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   const [st, set] = useState<St>(() => ({ page: tab === 'cat' ? 'cat' : 'home', zone: tab === 'cat' ? 'shelf' : 'row', di: 0, idx: 0, ai: 0, ci: 0, ti: 0, si: 0, gi: 0, game: null, from: null }));
   const up = (p: Partial<St>) => set(x => ({ ...x, ...p }));
   const [menu, setMenu] = useState<{ g: HubGame; mi: number } | null>(null);
-  const [query, setQuery] = useState('');
-  const searchRef = useRef<HTMLInputElement>(null);
+  const [dst, setDst] = useState(initialDiscover);
+  const toSearch = () => { setDst(d => ({ ...d, zone: 'search' })); setTimeout(focusSearch, 80); };
   const clock = useClock();
   const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show('Pasta dos jogos alterada'); } }));
   const chooseExe = useMutation(trpc.games.chooseExe.mutationOptions({ onSuccess: () => void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }) }));
@@ -54,7 +52,7 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   useEffect(() => { setSfxProfile('soft'); const t = setTimeout(() => sfx.play('boot'), 150); return () => clearTimeout(t); }, []);
   useEffect(() => { if (act.error) { show(act.error); act.reset(); } }, [act.error]);
   useEffect(() => {
-    const go = () => { sfx.play('ok'); setMenu(null); set(x => ({ ...x, page: 'cat', zone: 'tabs', ti: 4, si: 0 })); setTimeout(() => searchRef.current?.focus(), 50); };
+    const go = () => { sfx.play('ok'); setMenu(null); set(x => ({ ...x, page: 'cat' })); toSearch(); };
     addEventListener('cartucho:search', go);
     return () => removeEventListener('cartucho:search', go);
   }, []);
@@ -68,24 +66,7 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   const g = st.page === 'home' ? row[st.idx] ?? null : null;
   const all = useMemo(() => new Map([...data.lib, ...data.catalog].flatMap(x => [[x.key, x] as const, ...(x.installed && x.catalog ? [[x.catalog.id, x] as const] : [])])), [data.lib, data.catalog]);
   const game = st.page === 'game' && st.game ? all.get(st.game) ?? null : null;
-  const shots = useShots(game?.console, game?.title ?? '', game?.platformName);
-  const [view, setView] = useState<number | null>(null);
-  const gScroll = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = gScroll.current; if (!el || st.page !== 'game') return;
-    if (st.zone === 'gacts') el.scrollTo({ top: 0, behavior: 'smooth' });
-    else if (st.zone === 'gshots') el.querySelector('.p5-gshots')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    else if (st.zone === 'gtext') el.querySelector('.p5-gsec.text')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [st.zone, st.page]);
 
-  const catList = useMemo(() => {
-    const L = data.catalog;
-    if (st.ti === 1) return L.filter(x => x.isNew);
-    if (st.ti === 2) return L.filter(x => x.status === 'wip');
-    if (st.ti === 3) return L.filter(x => x.installed);
-    if (st.ti === 4) return query.trim() ? [...L, ...data.lib.filter(x => !x.catalog)].filter(x => matchesQuery(query, x.title, x.platformName, x.catalog?.developer)) : [];
-    return L;
-  }, [data.catalog, data.lib, st.ti, query]);
   const achGames = data.lib;
   const achGame = achGames[st.gi] ?? null;
   const ach = useQuery(trpc.achievements.forGame.queryOptions({ id: achGame?.installed?.id ?? '' }, { enabled: st.page === 'ach' && !!achGame?.installed?.adapter }));
@@ -139,14 +120,14 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     if (k === 'off') return onBack();
   };
   const primaryOf = (x: HubGame) => options(x, false)[0]!;
-  const openGame = (x: HubGame) => { setMenu(null); setView(null); up({ page: 'game', game: x.key, from: { page: st.page, zone: st.zone, si: st.si }, zone: 'gacts', ai: 0, si: 0 }); };
+  const openGame = (x: HubGame) => { setMenu(null); up({ page: 'game', game: x.key, from: { page: st.page, zone: st.zone, si: st.si }, zone: 'gacts', ai: 0, si: 0 }); };
   const gameOpts = game ? options(game, false) : [];
 
   const open = (page: Page, extra: Partial<St> = {}) => { sfx.play('ok'); setMenu(null); up({ page, zone: page === 'cat' ? 'tabs' : page === 'ach' ? 'side' : 'main', si: 0, ti: 0, ...extra }); };
   const top = (j: number) => {
     const k = TOP[j]![0];
     if (k === 'games') { sfx.play('move'); return up({ zone: 'row' }); }
-    if (k === 'search') { open('cat', { ti: 4 }); setTimeout(() => searchRef.current?.focus(), 50); return; }
+    if (k === 'search') { open('cat'); toSearch(); return; }
     open(k as Page, k === 'ach' ? { gi: 0 } : {});
   };
   const enter = () => {
@@ -164,20 +145,6 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       }
       return run(primaryOf(g).k, g);
     }
-    if (p === 'cat') {
-      if (z === 'tabs') {
-        if (st.ti === 4) { sfx.play('ok'); searchRef.current?.focus(); return; }
-        if (catList.length) { sfx.play('move'); return up({ zone: 'shelf', si: 0 }); }
-        return sfx.play('move');
-      }
-      const x = catList[st.si]; if (x) { sfx.play('ok'); openGame(x); }
-      return;
-    }
-    if (p === 'game' && game) {
-      if (z === 'gacts') { const o = gameOpts[st.ai]; if (o) run(o.k, game); return; }
-      if (shots[st.si]) { sfx.play('ok'); setView(st.si); }
-      return;
-    }
     if (p === 'ach') { if (z === 'side' && achList.length) { sfx.play('move'); up({ zone: 'main', si: 0 }); } return; }
     if (p === 'cfg') {
       const k = CFG[st.si]!.k; sfx.play('ok');
@@ -188,35 +155,23 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     }
     if (p === 'news') { const f = data.feed[st.si]; const x = f && data.catalog.find(y => y.catalog?.id === f.gameId); if (x) { sfx.play('ok'); setMenu({ g: x, mi: 0 }); } }
   };
+  const closeGame = () => { const f = st.from; up({ page: f?.page ?? 'home', zone: f?.zone ?? 'row', si: f?.si ?? 0, game: null, from: null }); };
   const back = () => {
-    if (view != null) { sfx.play('back'); return setView(null); }
     if (menu) { sfx.play('back'); return setMenu(null); }
-    if (st.page === 'game') { sfx.play('back'); const f = st.from; return up({ page: f?.page ?? 'home', zone: f?.zone ?? 'row', si: f?.si ?? 0, game: null, from: null }); }
+    if (st.page === 'game') { sfx.play('back'); return closeGame(); }
     const p = st.page, z = st.zone;
     if (p === 'home') { if (z !== 'row') { sfx.play('back'); return up({ zone: 'row' }); } sfx.play('back'); return onBack(); }
     sfx.play('back');
-    if ((p === 'cat' && z === 'shelf') || (p === 'ach' && z === 'main')) return up({ zone: p === 'cat' ? 'tabs' : 'side' });
+    if (p === 'ach' && z === 'main') return up({ zone: 'side' });
     up({ page: 'home', zone: 'row' });
   };
 
   useKeys((k: Key) => {
+    if (st.page === 'cat' || st.page === 'game') return;
     if (k === 'Escape') return back();
     const R = k === 'ArrowRight', L = k === 'ArrowLeft', U = k === 'ArrowUp', D = k === 'ArrowDown';
     const mv = (p: Partial<St>) => { sfx.play('move'); up(p); };
-    if (view != null) {
-      if (k === 'Enter') return back();
-      if (R && view < shots.length - 1) { sfx.play('move'); setView(view + 1); } else if (L && view > 0) { sfx.play('move'); setView(view - 1); }
-      return;
-    }
     if (k === 'Enter') return enter();
-    if (st.page === 'game' && !menu) {
-      const el = gScroll.current;
-      if (st.zone === 'gacts') { if (R && st.ai < gameOpts.length - 1) mv({ ai: st.ai + 1 }); else if (L && st.ai > 0) mv({ ai: st.ai - 1 }); else if (D) mv({ zone: shots.length ? 'gshots' : 'gtext', si: 0 }); return; }
-      if (st.zone === 'gshots') { if (R && st.si < shots.length - 1) mv({ si: st.si + 1 }); else if (L && st.si > 0) mv({ si: st.si - 1 }); else if (U) mv({ zone: 'gacts' }); else if (D) mv({ zone: 'gtext' }); return; }
-      if (D) { sfx.play('move'); el?.scrollBy({ top: 260, behavior: 'smooth' }); }
-      else if (U) { if (!el || el.scrollTop <= 4 || (shots.length && el.scrollTop <= 400)) mv({ zone: shots.length ? 'gshots' : 'gacts' }); else { sfx.play('move'); el.scrollBy({ top: -260, behavior: 'smooth' }); } }
-      return;
-    }
     if (menu) {
       const n = options(menu.g, st.page === 'home').length;
       if (D && menu.mi < n - 1) { sfx.play('move'); setMenu({ ...menu, mi: menu.mi + 1 }); }
@@ -225,21 +180,14 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     }
     if (k === 'X' || k === 'Y') {
       if (st.page === 'home' && g) { sfx.play('ok'); setMenu({ g, mi: 0 }); }
-      else if (st.page === 'cat' && st.zone === 'shelf' && catList[st.si]) { sfx.play('ok'); setMenu({ g: catList[st.si]!, mi: 0 }); }
       return;
     }
-    if ((k === 'LB' || k === 'RB' || k === 'Tab') && st.page === 'cat') return mv({ ti: (st.ti + (k === 'LB' ? TABS.length - 1 : 1)) % TABS.length, si: 0, zone: 'tabs' });
     const p = st.page, z = st.zone, n = row.length + 1;
     if (p === 'home') {
       if (z === 'top') { if (R && st.di < TOP.length - 1) mv({ di: st.di + 1 }); else if (L && st.di > 0) mv({ di: st.di - 1 }); else if (D) mv({ zone: 'row' }); return; }
       if (z === 'row') { if (R && st.idx < n - 1) mv({ idx: st.idx + 1 }); else if (L && st.idx > 0) mv({ idx: st.idx - 1 }); else if (U) mv({ zone: 'top', di: 0 }); else if (D) mv({ zone: 'acts', ai: 0 }); return; }
       if (z === 'acts') { if (R && g) mv({ ai: 1 }); else if (L) mv({ ai: 0 }); else if (U) mv({ zone: 'row' }); else if (D && g) mv({ zone: 'cards', ci: 0 }); return; }
       if (z === 'cards') { if (R && st.ci < 3) mv({ ci: st.ci + 1 }); else if (L && st.ci > 0) mv({ ci: st.ci - 1 }); else if (U) mv({ zone: 'acts' }); return; }
-    }
-    if (p === 'cat') {
-      if (z === 'tabs') { if (R && st.ti < TABS.length - 1) mv({ ti: st.ti + 1, si: 0 }); else if (L && st.ti > 0) mv({ ti: st.ti - 1, si: 0 }); else if (D && catList.length) mv({ zone: 'shelf', si: 0 }); return; }
-      if (R && st.si < catList.length - 1) mv({ si: st.si + 1 }); else if (L && st.si > 0) mv({ si: st.si - 1 }); else if (U) mv({ zone: 'tabs' });
-      return;
     }
     if (p === 'ach') {
       if (z === 'side') { if (D && st.gi < achGames.length - 1) mv({ gi: st.gi + 1, si: 0 }); else if (U && st.gi > 0) mv({ gi: st.gi - 1, si: 0 }); else if (R && achList.length) mv({ zone: 'main', si: 0 }); return; }
@@ -252,11 +200,6 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
 
   const hints: Hint[] = menu ? [['ok', 'Confirmar'], ['back', 'Fechar']]
     : st.page === 'home' && st.zone === 'row' && g ? [['ok', primaryOf(g).l], ['x', 'Opções']]
-    : st.page === 'cat' && st.zone === 'tabs' ? [['lb', 'Categoria'], ['ok', st.ti === 4 ? 'Digitar' : 'Confirmar'], ['back', 'Voltar']]
-    : st.page === 'cat' ? [['ok', 'Ver jogo'], ['x', 'Opções'], ['back', 'Voltar']]
-    : st.page === 'game' && st.zone === 'gshots' ? [['ok', 'Ampliar'], ['ud', 'Rolar'], ['back', 'Voltar']]
-    : st.page === 'game' && st.zone === 'gtext' ? [['ud', 'Rolar'], ['back', 'Voltar']]
-    : st.page === 'game' ? [['ok', 'Confirmar'], ['ud', 'Rolar'], ['back', 'Voltar']]
     : [['ok', 'Confirmar'], ['back', 'Voltar']];
   const H = ({ className }: { className: string }) => <div className={className}>{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>;
 
@@ -281,32 +224,12 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
             hints={<H className="p5-hint" />} menu={menuNode} />
         ) : (
           <div className={`p5-pg ${st.page === 'game' ? 'p5-gpage' : ''}`} key={st.page}>
-            {st.page === 'game' && game && <GamePage g={game} st={st} opts={gameOpts} shots={shots} self={self} scrollRef={gScroll}
-              onAct={j => { if (st.zone === 'gacts' && st.ai === j) enter(); else { sfx.play('move'); up({ zone: 'gacts', ai: j }); } }}
-              onShot={j => { sfx.play('ok'); up({ zone: 'gshots', si: j }); setView(j); }} />}
+            {st.page === 'game' && game && <GameView theme="d-p5" g={game} self={self} run={run} onBack={closeGame}
+              opts={gameOpts.map(o => ({ k: o.k, l: o.l, icon: <Ic n={o.ic} /> }))} />}
             {st.page === 'cat' && (
-              <>
-                <div className="p5-ph"><span className="ic"><Ic n="compass" /></span>Descobrir</div>
-                <div className="p5-ptabs">{TABS.map((t, j) => (
-                  <button key={t} className={j === st.ti ? `on ${st.zone === 'tabs' ? 'f' : ''}` : ''} onClick={() => { sfx.play('move'); up({ zone: 'tabs', ti: j, si: 0 }); if (j === 4) setTimeout(() => searchRef.current?.focus(), 30); }}>
-                    {j === 4 ? <><Ic n="search" /> {t}</> : t}
-                  </button>
-                ))}</div>
-                {st.ti === 4
-                  ? <SearchBox ref={searchRef} value={query} onChange={setQuery} nav={false} className="p5-search" placeholder="Nome do jogo…"
-                      onDone={() => { if (catList.length) up({ zone: 'shelf', si: 0 }); }} />
-                  : <div className="p5-sec" style={{ top: 290 }}>{TAB_TITLE[st.ti]} · {plural(catList.length, 'jogo', 'jogos')}</div>}
-                <div className="p5-shelf" style={{ top: 345, transform: `translateX(-${Math.max(0, st.si - 2) * 426}px)` }}>
-                  {catList.length ? catList.map((x, j) => (
-                    <button key={x.key} className={`p5-big ${st.zone === 'shelf' && j === st.si ? 'on' : ''}`}
-                      onClick={() => { if (st.zone === 'shelf' && st.si === j) enter(); else { sfx.play('move'); up({ zone: 'shelf', si: j }); } }}>
-                      <Art g={x} v="square" />
-                      <div className="cap">{x.title}<small>{x.isNew ? 'NOVO · ' : ''}{x.installed ? 'Instalado' : x.status ? STATUS_LABEL[x.status] : ''}</small></div>
-                    </button>
-                  )) : <div className="p5-none">{st.ti === 4 ? (query.trim() ? `Nada encontrado para “${query.trim()}”.` : `Digite o nome de um jogo de ${c.name}.`) : data.catalog.length ? 'Nada nesta categoria.' : `O catálogo ainda não tem recomps para ${c.name}.`}</div>}
-                </div>
-                {catList[st.si] && <Focus g={catList[st.si]!} self={self} />}
-              </>
+              <Discover theme="d-p5" cname={c.name} games={data.catalog} extra={data.lib.filter(x => !x.catalog)} self={self} st={dst} set={setDst}
+                options={x => options(x, false).filter(o => o.k !== 'info' && o.k !== 'off').map(o => ({ k: o.k, l: o.l, icon: <Ic n={o.ic} /> }))}
+                run={run} onOpen={openGame} onBack={() => { setMenu(null); up({ page: 'home', zone: 'row' }); }} />
             )}
             {st.page === 'ach' && (
               <>
@@ -355,14 +278,8 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
                 ))}</div>
               </>
             )}
-            <H className="p5-ft" />
+            {st.page !== 'cat' && st.page !== 'game' && <H className="p5-ft" />}
             {menuNode}
-          </div>
-        )}
-        {view != null && shots[view] && (
-          <div className="p5-view" onClick={() => setView(null)}>
-            <img src={shots[view]} alt="" />
-            <span className="cnt">{view + 1} / {shots.length}</span>
           </div>
         )}
         {toast}
@@ -376,74 +293,6 @@ function PortsDir() {
   const trpc = useTRPC();
   const q = useQuery(trpc.settings.portsDir.queryOptions());
   return <>{q.data ?? '…'}</>;
-}
-
-function GamePage({ g, st, opts, shots, self, scrollRef, onAct, onShot }: { g: HubGame; st: St; opts: Opt[]; shots: string[]; self: boolean; scrollRef: RefObject<HTMLDivElement | null>; onAct: (j: number) => void; onShot: (j: number) => void }) {
-  const art = useArt(g.console, g.title, g.platformName);
-  const about = useTranslated(g.catalog?.description);
-  const needs = useTranslated(g.catalog?.needs);
-  const p = useGameProgress(g);
-  const inst = g.installed;
-  const bg = art.fanart ?? art.cover ?? g.coverUrl;
-  const [more, setMore] = useState(false);
-  const check = () => { const el = scrollRef.current; if (el) setMore(el.scrollTop + el.clientHeight < el.scrollHeight - 8); };
-  useEffect(() => { check(); const el = scrollRef.current; if (!el) return; const ro = new ResizeObserver(check); ro.observe(el); if (el.lastElementChild) ro.observe(el.lastElementChild); return () => ro.disconnect(); });
-  return (
-    <>
-    <div className="p5-gscroll" ref={scrollRef} onScroll={check}>
-      <div className="p5-ghero">
-        <div className="p5-gp-art">{bg ? <img src={bg} alt="" /> : <div className="p5-glow" />}</div>
-        <div className="p5-gp-head">
-          {art.logo ? <img className="logo" src={art.logo} alt={g.title} /> : <h1>{g.title}</h1>}
-          {inst?.missing && <p className="warn">A pasta do jogo não foi encontrada em {inst.installDir}. {g.catalog?.repo && !self ? 'Instale de novo ou mostre onde ele está agora.' : 'Mostre onde ele está agora.'}</p>}
-          <p className="meta">
-            {[g.status && STATUS_LABEL[g.status], g.catalog?.developer, g.catalog?.year, g.platformName,
-              inst ? (inst.running ? 'jogando agora' : inst.playMs ? `${fmtPlay(inst.playMs)} jogadas` : 'ainda não jogado') : null,
-              inst?.achievements?.total ? `${inst.achievements.unlocked}/${inst.achievements.total} conquistas` : null].filter(Boolean).join(' · ')}
-          </p>
-          {p && <p className="prog">{p.error ?? `${p.stage}${p.pct > 0 && p.pct < 1 ? ` · ${Math.round(p.pct * 100)}%` : ''}`}</p>}
-          <div className="p5-acts">{opts.map((o, j) => (
-            <button key={o.k + j} className={`p5-b ${j === 0 ? 'pri' : ''} ${st.zone === 'gacts' && st.ai === j ? 'on' : ''}`} onClick={() => onAct(j)}>
-              {j === 0 ? o.l : <><Ic n={o.ic} />{o.l}</>}
-            </button>
-          ))}</div>
-        </div>
-      </div>
-      <div className="p5-gbody">
-        <section className="p5-gsec">
-          <h4>Imagens</h4>
-          {shots.length ? <div className="p5-gshots">{shots.map((u, j) => (
-            <button key={u} className={st.zone === 'gshots' && st.si === j ? 'on' : ''} onClick={() => onShot(j)}><img src={u} alt="" /></button>
-          ))}</div> : <p className="dim">Sem capturas de tela no LaunchBox para este jogo.</p>}
-        </section>
-        <section className={`p5-gsec text ${st.zone === 'gtext' ? 'on' : ''}`}>
-          {about.text && <><h4>Sobre</h4><p>{about.text}</p></>}
-          {needs.text && <><h4>O que você precisa</h4><p>{needs.text}</p></>}
-          {self && !inst && <p className="dim">{SELF_INSTALL_NOTE}</p>}
-          {!about.text && !needs.text && <p className="dim">O catálogo não traz descrição deste jogo.</p>}
-          {(about.auto || needs.auto) && <small>Traduzido automaticamente do inglês</small>}
-        </section>
-      </div>
-    </div>
-    <div className={`p5-gmore ${more ? 'on' : ''}`}><Ic n="down" /></div>
-    </>
-  );
-}
-
-function Focus({ g, self }: { g: HubGame; self: boolean }) {
-  const p = useGameProgress(g);
-  const needs = useTranslated(g.catalog?.needs);
-  return (
-    <div className="p5-focus">
-      <h3>{g.title}</h3>
-      <p>
-        {g.status ? STATUS_LABEL[g.status] : ''}{g.catalog?.developer ? ` · ${g.catalog.developer}` : ''}{g.catalog?.year ? ` · ${g.catalog.year}` : ''}
-        {p ? ` · ${p.error ?? p.stage}` : ''}
-      </p>
-      {needs.text && <p className="dim">Precisa: {needs.text}</p>}
-      {self && !g.installed && <p className="dim">{SELF_INSTALL_NOTE}</p>}
-    </div>
-  );
 }
 
 function Home({ c, g, row, st, self, clock, feedCount, catCount, primary, feed, onTile, onTop, onAct, onCard, hints, menu }: {
