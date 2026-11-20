@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { join, normalize, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, net, protocol, shell } from 'electron';
@@ -14,6 +15,7 @@ import { Artwork } from './artwork/service';
 import { Translator } from './translate';
 import { WinCtl } from './window';
 import { Background, playArg, startHidden } from './background';
+import { Updater } from './updater';
 
 if (process.env.CARTUCHO_USER_DATA) app.setPath('userData', process.env.CARTUCHO_USER_DATA);
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -29,13 +31,19 @@ const isOurPage = (url: string) => (DEV_URL ? url.startsWith(DEV_URL) : url.star
 let win: BrowserWindow | null = null;
 let ctl: WinCtl | null = null;
 let bg: Background | null = null;
+let upd: Updater | null = null;
+
+function appIcon() {
+  const ext = process.platform === 'win32' ? 'ico' : 'png';
+  return [join(app.getAppPath(), 'build', `icon.${ext}`), join(process.resourcesPath, `icon.${ext}`), join(__dirname, '../renderer/icon.png')].find(p => existsSync(p));
+}
 
 function createWindow(show = true) {
   ctl ??= new WinCtl(app.getPath('userData'));
   win = new BrowserWindow({
     ...ctl.options(), minWidth: 1024, minHeight: 640,
     backgroundColor: '#07020f', show: false, autoHideMenuBar: true, title: 'Cartucho',
-    icon: join(__dirname, '../renderer/icon.png'),
+    icon: appIcon(),
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true },
   });
   ctl.attach(win, show);
@@ -49,7 +57,7 @@ function createWindow(show = true) {
 
 app.on('second-instance', (_e, argv) => { void bg?.handleArgs(argv).then(played => { if (!played) bg?.show(); }); });
 
-if (process.platform === 'win32') app.setAppUserModelId('app.cartucho');
+if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'app.cartucho' : process.execPath);
 
 void app.whenReady().then(async () => {
   const root = join(__dirname, '../renderer');
@@ -81,11 +89,12 @@ void app.whenReady().then(async () => {
   });
   const ports = new Ports(db, ach, gh, () => portsDirOf({ db, defaultPortsDir }), player.isRunning);
   createIPCHandler({
-    router: createRouter({ db, ach, ports, player, art, win: () => ctl, bg: () => bg, tr: new Translator(db, ((url, init) => net.fetch(url, init as RequestInit)) as ConstructorParameters<typeof Translator>[1]), defaultPortsDir }),
+    router: createRouter({ db, ach, ports, player, art, win: () => ctl, bg: () => bg, upd: () => upd, tr: new Translator(db, ((url, init) => net.fetch(url, init as RequestInit)) as ConstructorParameters<typeof Translator>[1]), defaultPortsDir }),
     preload: false,
     allow: e => isOurPage(e.senderFrame?.url ?? ''),
   });
-  bg = new Background(db, () => ctl, player, ach, join(__dirname, '../renderer/icon.png'));
+  bg = new Background(db, () => ctl, player, ach, appIcon() ?? '');
+  upd = new Updater(() => { if (bg) bg.quitting = true; });
   bg.apply();
   createWindow(!startHidden(process.argv) && !playArg(process.argv));
   void bg.handleArgs(process.argv);

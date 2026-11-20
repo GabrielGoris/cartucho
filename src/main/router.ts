@@ -19,8 +19,9 @@ import type { Artwork } from './artwork/service';
 import type { Translator } from './translate';
 import type { WinCtl, WinState } from './window';
 import type { Background } from './background';
+import type { Updater, UpdState } from './updater';
 
-export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; tr: Translator; defaultPortsDir: string; win?: () => WinCtl | null; bg?: () => Background | null }
+export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; tr: Translator; defaultPortsDir: string; win?: () => WinCtl | null; bg?: () => Background | null; upd?: () => Updater | null }
 export const portsDirOf = (d: Pick<RouterDeps, 'db' | 'defaultPortsDir'>) => kvGet(d.db, 'portsDir') || d.defaultPortsDir;
 
 export interface PickRequest { id: number; title: string; kind: 'dir' | 'exe'; start: string }
@@ -94,6 +95,16 @@ export function createRouter(deps: RouterDeps) {
       setFullScreen: t.procedure.input(z.object({ on: z.boolean() })).mutation(({ input }) => { deps.win?.()?.setFullScreen(input.on); }),
       toggleFullScreen: t.procedure.mutation(() => { deps.win?.()?.toggle(); }),
       overlay: t.procedure.input(z.object({ color: z.string().regex(/^#[0-9a-f]{6}$/i), symbol: z.string().regex(/^#[0-9a-f]{6}$/i) })).mutation(({ input }) => { deps.win?.()?.setOverlay(input.color, input.symbol); }),
+    }),
+
+    updates: t.router({
+      state: t.procedure.query(() => deps.upd?.()?.state() ?? null),
+      onState: t.procedure.subscription(async function* ({ signal }) {
+        const u = deps.upd?.(); if (!u) return;
+        for await (const [s] of on(u.events, 'state', { signal })) yield s as UpdState;
+      }),
+      check: t.procedure.mutation(async () => (await deps.upd?.()?.check()) ?? null),
+      install: t.procedure.mutation(() => deps.upd?.()?.install() ?? false),
     }),
 
     system: t.router({

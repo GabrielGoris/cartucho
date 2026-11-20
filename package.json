@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "postinstall": "install-electron",
-    "dist": "electron-vite build && electron-builder --win"
+    "dist": "electron-vite build && electron-builder --win",
+    "release": "electron-vite build && electron-builder --win --publish always"
   },
   "dependencies": {
     "@fontsource/nunito": "^5.3.0",
@@ -30,6 +31,8 @@
     "@trpc/server": "^11.29.5",
     "@trpc/tanstack-react-query": "^11.29.5",
     "electron-trpc": "^1.0.0",
+    "electron-updater": "^6.8.11",
+    "qrcode": "^1.5.4",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "superjson": "^2.2.6",
@@ -38,6 +41,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.19.0",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.187.0",
@@ -63,7 +67,39 @@
       "target": [
         "nsis",
         "zip"
-      ]
-    }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Cartucho-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Cartucho",
+      "artifactName": "Cartucho-Setup-${version}.${ext}"
+    },
+    "extraResources": [
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "GabrielGoris",
+        "repo": "cartucho",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GabrielGoris/cartucho.git"
   }
 }

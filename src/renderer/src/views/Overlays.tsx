@@ -1,5 +1,7 @@
 import { useProfile } from '../lib/profile';
-import { useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import QRCode from 'qrcode';
+import { REPO_URL, SUPPORT_URL } from '@shared/links';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CONSOLE_NAME } from '@shared/consoles';
 import type { ConsoleId } from '@shared/types';
@@ -69,6 +71,39 @@ export function MeOverlay({ onClose }: { onClose: () => void }) {
         {recent.data?.map(u => (
           <div key={`${u.gameId}:${u.achId}`}><i /><span>{u.name}<br /><small>{u.gameTitle}</small></span><small>{ago(u.at)}</small></div>
         ))}
+      </div>
+    </Shell>
+  );
+}
+
+export function SupportOverlay({ onClose }: { onClose: () => void }) {
+  const [qr, setQr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!SUPPORT_URL) return;
+    void QRCode.toString(SUPPORT_URL, { type: 'svg', margin: 1, color: { dark: '#14081f', light: '#ffffff' } }).then(setQr).catch(() => setQr(null));
+  }, []);
+  const open = (u: string) => { sfx.play('ok'); window.open(u, '_blank'); };
+  return (
+    <Shell title="APOIE O CARTUCHO" onClose={onClose} initial="[data-main]">
+      <div className="sup">
+        <p>O Cartucho é de graça e vai continuar sendo. Se ele te ajudou a achar ou organizar seus jogos, um café ajuda a manter o catálogo, as capas e os hubs em dia.</p>
+        {SUPPORT_URL ? (
+          <div className="sup-qr">
+            {qr && <span className="qr" dangerouslySetInnerHTML={{ __html: qr }} />}
+            <div>
+              <b>Aponte a câmera do celular</b>
+              <small>{SUPPORT_URL.replace(/^https?:\/\//, '')}</small>
+              <button className="hm-go" data-hf data-main onClick={() => open(SUPPORT_URL)}>☕ ABRIR NO NAVEGADOR</button>
+            </div>
+          </div>
+        ) : <p className="dim">O link de apoio ainda não foi configurado nesta versão.</p>}
+        <div className="hm-sub">OUTRAS FORMAS DE AJUDAR</div>
+        <button className="it" data-hf data-main={SUPPORT_URL ? undefined : true} onClick={() => open(REPO_URL)}>
+          <span className="tag">★</span><span className="t">Dar uma estrela no GitHub</span><span className="s">Ajuda mais gente a encontrar o Cartucho.</span>
+        </button>
+        <button className="it" data-hf onClick={() => open(`${REPO_URL}/issues/new`)}>
+          <span className="tag">!</span><span className="t">Avisar de um problema ou sugerir algo</span><span className="s">Jogo faltando, capa errada, conquista que não contou.</span>
+        </button>
       </div>
     </Shell>
   );

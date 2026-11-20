@@ -93,8 +93,8 @@ export function PickerHost() {
   );
 }
 
-export function CartuchoMenu({ inside, onSettings, onRadar, onProfile, onPickConsoles, onLeave, onClose }: {
-  inside: string | null; onSettings: () => void; onRadar: () => void; onProfile: () => void; onPickConsoles: () => void; onLeave: () => void; onClose: () => void;
+export function CartuchoMenu({ inside, onSettings, onRadar, onProfile, onPickConsoles, onLeave, onClose, onAll, onSupport }: {
+  inside: string | null; onSettings: () => void; onRadar: () => void; onProfile: () => void; onPickConsoles: () => void; onLeave: () => void; onClose: () => void; onAll: () => void; onSupport: () => void;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const s = useSettings();
@@ -109,11 +109,13 @@ export function CartuchoMenu({ inside, onSettings, onRadar, onProfile, onPickCon
         <h3><i />CARTUCHO{inside ? <small>{inside}</small> : null}</h3>
         {inside && <button data-hf data-main onClick={go(onLeave)}>◀ Voltar ao palco</button>}
         <button data-hf data-main={inside ? undefined : true} onClick={go(onSettings)}>⚙ Configurações</button>
+        {inside !== 'Todos os jogos' && <button data-hf onClick={go(onAll)}>▤ Todos os jogos</button>}
         <button data-hf onClick={go(onRadar)}>● Novidades do radar</button>
         <button data-hf onClick={go(onProfile)}>◉ Perfil e conta</button>
         <button data-hf onClick={go(onPickConsoles)}>▦ Consoles no palco</button>
         <button data-hf onClick={() => { sfx.play('move'); cyclePad(); }}>🎮 Botões: {s.pad === 'auto' ? `Auto (${PAD_NAMES[pad]})` : PAD_NAMES[s.pad]}</button>
         <button data-hf onClick={() => { setSettings({ snd: !s.snd }); sfx.play('move'); }}>♪ Sons: {s.snd ? 'ligados' : 'desligados'}</button>
+        <button data-hf onClick={go(onSupport)}>♥ Apoiar o Cartucho</button>
         <div className="gl-h"><span><Glyph a="ok" />Escolher</span><span><Glyph a="back" />Fechar</span></div>
       </div>
     </div>
