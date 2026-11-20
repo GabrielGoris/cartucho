@@ -14,3 +14,10 @@ export const focusSearch = () => {
   el.focus(); el.select();
   return true;
 };
+
+function grams(s: string) { const t = ` ${norm(s)} `, g = new Set<string>(); for (let i = 0; i < t.length - 1; i++) g.add(t.slice(i, i + 2)); return g; }
+export function similarity(a: string, b: string) {
+  const A = grams(a), B = grams(b); let n = 0;
+  for (const x of A) if (B.has(x)) n++;
+  return (2 * n) / (A.size + B.size || 1);
+}

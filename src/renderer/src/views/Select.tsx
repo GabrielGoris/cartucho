@@ -36,6 +36,8 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
   }));
   const play = useMutation(trpc.play.start.mutationOptions({ onSuccess: () => void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }) }));
   const [ov, setOv] = useState<null | 'radar' | 'me'>(null);
+  const [zone, setZone] = useState<'car' | 'top' | 'grp'>('car');
+  useEffect(() => { if (page !== 'stage') setZone('car'); }, [page]);
   const root = useRef<HTMLElement>(null);
   const pad = usePadKind();
   const s = useSettings();
@@ -44,17 +46,36 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
   const move = (d: number) => { initAudio(); sfx.play('move'); setSel(prev => prev + d); };
   const openGame = (g: InstalledGame) => onEnterConsole(g.console, { game: g.id });
 
+  const makers = MAKERS.filter(m => list.some(x => x.maker === m));
   useKeys(k => {
+    initAudio();
+    if (zone === 'grp') {
+      const mi = Math.max(0, makers.indexOf(list[sel]!.maker));
+      if (k === 'ArrowLeft' || k === 'ArrowRight') { const m = makers[(mi + (k === 'ArrowRight' ? 1 : -1) + makers.length) % makers.length]!; sfx.play('move'); setSel(list.findIndex(x => x.maker === m)); }
+      else if (k === 'ArrowUp' || k === 'Escape') { sfx.play('move'); setZone('car'); }
+      else if (k === 'Enter') onEnterConsole(list[sel]!.id);
+      return;
+    }
     if (k === 'ArrowLeft' || k === 'LB') move(-1);
     else if (k === 'ArrowRight' || k === 'RB') move(1);
-    else if (k === 'Enter') { initAudio(); onEnterConsole(list[sel]!.id); }
-    else if (k === 'Escape' || k === 'Tab') go('act');
-  }, active && page === 'stage' && !ov);
+    else if (k === 'ArrowUp') { sfx.play('move'); setZone('top'); }
+    else if (k === 'ArrowDown') { sfx.play('move'); setZone('grp'); }
+    else if (k === 'Enter') onEnterConsole(list[sel]!.id);
+    else if (k === 'Escape' || k === 'Tab' || k === 'Select') go('act');
+  }, active && page === 'stage' && !ov && zone !== 'top');
+
+  useSpatialNav(root, {
+    active: active && page === 'stage' && !ov && zone === 'top', initial: '.seg .on',
+    onKey: k => {
+      if (k === 'ArrowDown' || k === 'Escape') { sfx.play('move'); setZone('car'); return true; }
+      if (k === 'Select' || k === 'Tab') { go('act'); return true; }
+    },
+  });
 
   useSpatialNav(root, {
     active: active && page === 'act' && !ov, initial: '[data-main]',
     onFocus: setCaption,
-    onKey: k => { if (k === 'Tab' || k === 'LB' || k === 'RB') { go('stage'); return true; } if (k === 'Escape') return true; },
+    onKey: k => { if (k === 'Tab' || k === 'LB' || k === 'RB' || k === 'Select') { go('stage'); return true; } if (k === 'Escape') return true; },
   });
 
   const c = list[sel]!, group = c.id === 'other' ? otherConsoles(s.hidden) : [c.id];
@@ -67,8 +88,8 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
       <header className="topbar">
         <div className="logo glow"><i />CARTUCHO</div>
         <div className="seg" role="tablist">
-          <button role="tab" className={page === 'act' ? 'on' : ''} aria-selected={page === 'act'} onClick={() => go('act')}>INÍCIO</button>
-          <button role="tab" className={page === 'stage' ? 'on' : ''} aria-selected={page === 'stage'} onClick={() => go('stage')}>CONSOLES</button>
+          <button role="tab" data-hf className={page === 'act' ? 'on' : ''} aria-selected={page === 'act'} onClick={() => go('act')}>INÍCIO</button>
+          <button role="tab" data-hf className={page === 'stage' ? 'on' : ''} aria-selected={page === 'stage'} onClick={() => { go('stage'); setZone('car'); }}>CONSOLES</button>
         </div>
         <div className="top-right">
           <button className={`hm-pill ${unseen ? 'has' : ''}`} data-hf data-cap="Radar" onClick={() => { sfx.play('ok'); setOv('radar'); }}><i />{unseen ? plural(unseen, 'novidade', 'novidades') : 'radar'}</button>
@@ -97,7 +118,7 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
           </div>
           <div className="groups">
             {MAKERS.filter(m => list.some(x => x.maker === m)).map(m => (
-              <div key={m} className={`grp ${c.maker === m ? 'on' : ''}`}>
+              <div key={m} className={`grp ${c.maker === m ? 'on' : ''} ${zone === 'grp' && c.maker === m ? 'f' : ''}`}>
                 <button onClick={() => setSel(list.findIndex(x => x.maker === m))}>{MAKER_LABEL[m]}</button>
                 <div className="d">{list.map((x, i) => x.maker === m && <button key={x.id} className={i === sel ? 'on' : ''} aria-label={x.name} title={x.name} onClick={() => setSel(i)} />)}</div>
               </div>
@@ -108,9 +129,9 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
 
       {add.error && <div className="toasts"><div className="toast"><div className="toast-k">NÃO DEU PARA ADICIONAR</div><div className="toast-g">{add.error.message}</div></div></div>}
 
-      <Hints items={page === 'act' ? [['ok', 'Abrir'], ['menu', 'Consoles']] : [['lr', 'Console'], ['ok', 'Ligar'], ['back', 'Início']]} />
+      <Hints items={page === 'act' ? [['ok', 'Abrir'], ['sel', 'Consoles'], ['menu', 'Menu']] : zone === 'top' ? [['lr', 'Mover'], ['ok', 'Abrir'], ['ud', 'Voltar ao palco']] : zone === 'grp' ? [['lr', 'Fabricante'], ['ok', 'Ligar'], ['ud', 'Palco']] : [['lr', 'Console'], ['ok', 'Ligar'], ['ud', 'Menu e fabricantes'], ['menu', 'Menu']]} />
       <div className="sel-tools">
-        <button className="icon-btn" title="Trocar botões mostrados (C)" onClick={() => {
+        <button className="icon-btn" data-hf title="Trocar botões mostrados (C)" onClick={() => {
           const o = ['auto', 'kb', 'xbox', 'ps', 'nin'] as const; setSettings({ pad: o[(o.indexOf(s.pad) + 1) % o.length]! });
         }}>🎮 {s.pad === 'auto' ? `Auto: ${PAD_NAMES[pad]}` : PAD_NAMES[s.pad]}</button>
       </div>

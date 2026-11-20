@@ -1,7 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { getSettings, useSettings } from './settings';
 
-export type Key = 'Enter' | 'Escape' | 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown' | 'Tab' | 'LB' | 'RB' | 'X' | 'Y';
+export type Key = 'Enter' | 'Escape' | 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown' | 'Tab' | 'LB' | 'RB' | 'LT' | 'RT' | 'X' | 'Y' | 'Start' | 'Select' | 'Home';
 type Handler = (k: Key) => void;
 
 const stack: { current: Handler }[] = [];
@@ -14,12 +14,21 @@ export function useKeys(fn: Handler, active = true) {
     return () => { const i = stack.indexOf(entry); if (i >= 0) stack.splice(i, 1); };
   }, [active]);
 }
-const send = (k: Key) => stack.at(-1)?.current(k);
+let global: ((k: Key) => boolean) | null = null;
+export const setGlobalKeys = (fn: (k: Key) => boolean) => { global = fn; };
+export const sendKey = (k: Key) => { if (global?.(k)) return; stack.at(-1)?.current(k); };
+const send = sendKey;
+let last: 'pad' | 'kb' = 'kb';
+const lastSubs = new Set<() => void>();
+const setLast = (v: 'pad' | 'kb') => { if (last !== v) { last = v; lastSubs.forEach(f => f()); } };
+export const lastInput = () => last;
+export const useLastInput = () => useSyncExternalStore(f => { lastSubs.add(f); return () => lastSubs.delete(f); }, lastInput);
 
 const KEYMAP: Record<string, Key> = {
   Enter: 'Enter', ' ': 'Enter', Escape: 'Escape', Backspace: 'Escape', Tab: 'Tab',
   ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight', ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown',
   q: 'LB', Q: 'LB', e: 'RB', E: 'RB', x: 'X', X: 'X', y: 'Y', Y: 'Y',
+  PageUp: 'LT', PageDown: 'RT', F1: 'Start', F2: 'Select', Home: 'Home',
 };
 const isTyping = (t: EventTarget | null) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
 
@@ -27,7 +36,9 @@ let shortcut: ((key: string) => boolean) | null = null;
 export const setShortcutHandler = (fn: (key: string) => boolean) => { shortcut = fn; };
 
 if (typeof window !== 'undefined') {
+  addEventListener('mousemove', () => setLast('kb'), { passive: true });
   addEventListener('keydown', e => {
+    setLast('kb');
     if (e.repeat && (e.key === 'Enter' || e.key === 'Escape')) return;
     if (isTyping(e.target)) { if (e.key === 'Escape') (e.target as HTMLElement).blur(); return; }
     if (!e.ctrlKey && !e.altKey && !e.metaKey && shortcut?.(e.key)) { e.preventDefault(); return; }
@@ -47,6 +58,7 @@ if (typeof window !== 'undefined') { addEventListener('gamepadconnected', refres
 function detectKind(): PadKind {
   if (!connected) return 'kb';
   const id = connected.id.toLowerCase();
+  if (/xbox|045e|xinput/.test(id)) return 'xbox';
   if (/054c|dualsense|dualshock|playstation|wireless controller/.test(id)) return 'ps';
   if (/057e|nintendo|pro controller|joy-con/.test(id)) return 'nin';
   return 'xbox';
@@ -58,25 +70,38 @@ export function usePadKind(): PadKind {
   return useSyncExternalStore(f => { padSubs.add(f); return () => padSubs.delete(f); }, padKind);
 }
 
-let prev: boolean[] = [], axisAt = 0;
-function poll() {
-  const p = navigator.getGamepads?.()[connected?.index ?? 0];
-  if (p) {
-    const b = p.buttons.map(x => x.pressed), hit = (i: number) => b[i] && !prev[i]; prev = b;
-    const nin = padKind() === 'nin';
-    const map: Record<number, Key> = { 12: 'ArrowUp', 13: 'ArrowDown', 14: 'ArrowLeft', 15: 'ArrowRight', [nin ? 1 : 0]: 'Enter', [nin ? 0 : 1]: 'Escape', 2: 'X', 3: 'Y', 4: 'LB', 5: 'RB', 9: 'Tab' };
-    for (const i in map) if (hit(+i)) send(map[i]!);
-    const now = performance.now(), [ax = 0, ay = 0] = p.axes;
-    if (now - axisAt > 180 && (Math.abs(ax) > 0.6 || Math.abs(ay) > 0.6)) {
-      axisAt = now;
-      send(Math.abs(ax) > Math.abs(ay) ? (ax > 0 ? 'ArrowRight' : 'ArrowLeft') : (ay > 0 ? 'ArrowDown' : 'ArrowUp'));
-    }
-  }
-  requestAnimationFrame(poll);
+let prev: boolean[] = [], axisAt = 0, held: Key | null = null, heldAt = 0;
+const DIRS = new Set<Key>(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+function activePad() {
+  const all = [...(navigator.getGamepads?.() ?? [])].filter((x): x is Gamepad => !!x);
+  if (!all.length) return null;
+  const p = all.find(x => x.index === connected?.index) ?? all.find(x => x.buttons.some(b => b.pressed)) ?? all[0]!;
+  if (p.id !== connected?.id) { connected = p; padSubs.forEach(f => f()); }
+  return p;
 }
-if (typeof window !== 'undefined') requestAnimationFrame(poll);
+function poll() {
+  const p = activePad();
+  if (p) {
+    const now = performance.now();
+    const b = p.buttons.map(x => x.pressed || x.value > 0.5), old = prev; prev = b;
+    const hit = (i: number) => !!b[i] && !old[i];
+    const nin = padKind() === 'nin';
+    const map: Record<number, Key> = { 12: 'ArrowUp', 13: 'ArrowDown', 14: 'ArrowLeft', 15: 'ArrowRight', [nin ? 1 : 0]: 'Enter', [nin ? 0 : 1]: 'Escape', 2: 'X', 3: 'Y', 4: 'LB', 5: 'RB', 6: 'LT', 7: 'RT', 8: 'Select', 9: 'Start', 16: 'Home' };
+    if (b.some((v, i) => v && !old[i])) setLast('pad');
+    for (const i in map) if (hit(+i)) { send(map[i]!); if (DIRS.has(map[i]!)) { held = map[i]!; heldAt = now + 250; } }
+    const dpad = [12, 13, 14, 15].find(i => b[i]);
+    if (dpad == null) held = null;
+    else if (held && now > heldAt) { send(held); heldAt = now + 110; }
+    const [ax = 0, ay = 0] = p.axes;
+    if (Math.abs(ax) > 0.6 || Math.abs(ay) > 0.6) {
+      setLast('pad');
+      if (now - axisAt > 180) { axisAt = now; send(Math.abs(ax) > Math.abs(ay) ? (ax > 0 ? 'ArrowRight' : 'ArrowLeft') : (ay > 0 ? 'ArrowDown' : 'ArrowUp')); }
+    } else axisAt = 0;
+  }
+}
+if (typeof window !== 'undefined') setInterval(poll, 16);
 
-type Act = 'ok' | 'back' | 'x' | 'y' | 'lb' | 'rb' | 'menu' | 'ud' | 'lr';
+type Act = 'ok' | 'back' | 'x' | 'y' | 'lb' | 'rb' | 'lt' | 'rt' | 'menu' | 'sel' | 'ud' | 'lr';
 const PS: Record<string, ReactNode> = {
   ok: <svg viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15" stroke="#8fb0ff" strokeWidth="2.6" strokeLinecap="round" /></svg>,
   back: <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="5.2" fill="none" stroke="#ff6f6f" strokeWidth="2.4" /></svg>,
@@ -84,10 +109,10 @@ const PS: Record<string, ReactNode> = {
   y: <svg viewBox="0 0 20 20"><path d="M10 4.5l5.8 10H4.2z" fill="none" stroke="#4fd6a8" strokeWidth="2.3" strokeLinejoin="round" /></svg>,
 };
 const GL: Record<PadKind, Record<Act, string | [string, string] | ReactNode>> = {
-  kb: { ok: 'Enter', back: 'Esc', x: 'X', y: 'Y', lb: 'Q', rb: 'E', menu: 'Tab', ud: '↑↓', lr: '←→' },
-  xbox: { ok: ['A', '#6ad13a'], back: ['B', '#ff5a4f'], x: ['X', '#4a95ff'], y: ['Y', '#ffc928'], lb: 'LB', rb: 'RB', menu: '☰', ud: '✚', lr: '✚' },
-  ps: { ok: PS.ok, back: PS.back, x: PS.x, y: PS.y, lb: 'L1', rb: 'R1', menu: 'OPTIONS', ud: '✚', lr: '✚' },
-  nin: { ok: ['A', '#fff'], back: ['B', '#fff'], x: ['Y', '#fff'], y: ['X', '#fff'], lb: 'L', rb: 'R', menu: '+', ud: '✚', lr: '✚' },
+  kb: { ok: 'Enter', back: 'Esc', x: 'X', y: 'Y', lb: 'Q', rb: 'E', lt: 'PgUp', rt: 'PgDn', menu: 'F1', sel: 'F2', ud: '↑↓', lr: '←→' },
+  xbox: { ok: ['A', '#6ad13a'], back: ['B', '#ff5a4f'], x: ['X', '#4a95ff'], y: ['Y', '#ffc928'], lb: 'LB', rb: 'RB', lt: 'LT', rt: 'RT', menu: '☰', sel: '⧉', ud: '✚', lr: '✚' },
+  ps: { ok: PS.ok, back: PS.back, x: PS.x, y: PS.y, lb: 'L1', rb: 'R1', lt: 'L2', rt: 'R2', menu: 'OPTIONS', sel: 'CREATE', ud: '✚', lr: '✚' },
+  nin: { ok: ['A', '#fff'], back: ['B', '#fff'], x: ['Y', '#fff'], y: ['X', '#fff'], lb: 'L', rb: 'R', lt: 'ZL', rt: 'ZR', menu: '+', sel: '−', ud: '✚', lr: '✚' },
 };
 export function Glyph({ a }: { a: Act }) {
   const k = usePadKind(), v = GL[k][a];

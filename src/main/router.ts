@@ -1,4 +1,7 @@
-import { on } from 'node:events';
+import { EventEmitter, on } from 'node:events';
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, extname, join, parse } from 'node:path';
 import { BrowserWindow, dialog, shell } from 'electron';
 import { initTRPC } from '@trpc/server';
 import superjson from 'superjson';
@@ -18,11 +21,50 @@ import type { Translator } from './translate';
 export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; tr: Translator; defaultPortsDir: string }
 export const portsDirOf = (d: Pick<RouterDeps, 'db' | 'defaultPortsDir'>) => kvGet(d.db, 'portsDir') || d.defaultPortsDir;
 
-async function pick(title: string, props: ('openDirectory' | 'openFile' | 'createDirectory')[], extra: Partial<Electron.OpenDialogOptions> = {}) {
+export interface PickRequest { id: number; title: string; kind: 'dir' | 'exe'; start: string }
+const pickBus = new EventEmitter();
+const pending = new Map<number, (v: string | null) => void>();
+let pickSeq = 0;
+const EXE = new Set(['.exe', '.bat', '.lnk', '.cmd', '.sh', '.appimage', '']);
+
+function listDir(path: string, kind: 'dir' | 'exe') {
+  const out: { name: string; path: string; dir: boolean }[] = [];
+  let names: string[] = [];
+  try { names = readdirSync(path); } catch { return out; }
+  for (const name of names) {
+    if (name.startsWith('.') || name.startsWith('$')) continue;
+    const full = join(path, name);
+    let dir = false;
+    try { dir = statSync(full).isDirectory(); } catch { continue; }
+    if (dir) out.push({ name, path: full, dir: true });
+    else if (kind === 'exe' && EXE.has(extname(name).toLowerCase()) && (process.platform === 'win32' ? extname(name) !== '' : true)) out.push({ name, path: full, dir: false });
+  }
+  return out.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name, 'pt', { sensitivity: 'base' }));
+}
+function places() {
+  const home = homedir();
+  const L: { name: string; path: string }[] = [{ name: 'Pasta pessoal', path: home }];
+  for (const [n, d] of [['Área de Trabalho', 'Desktop'], ['Downloads', 'Downloads'], ['Documentos', 'Documents'], ['Jogos', 'Games']] as const) {
+    const p = join(home, d); if (existsSync(p)) L.push({ name: n, path: p });
+  }
+  if (process.platform === 'win32') for (const c of 'CDEFGHIJKLMNOPQRSTUVWXYZ') { const p = `${c}:\\`; if (existsSync(p)) L.push({ name: `Disco ${c}:`, path: p }); }
+  else L.push({ name: 'Raiz', path: '/' });
+  return L;
+}
+
+async function nativePick(title: string, props: ('openDirectory' | 'openFile' | 'createDirectory')[], extra: Partial<Electron.OpenDialogOptions> = {}) {
   const win = BrowserWindow.getFocusedWindow();
   const opts: Electron.OpenDialogOptions = { title, properties: props, ...extra };
   const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
   return res.canceled ? null : res.filePaths[0] ?? null;
+}
+
+async function pick(title: string, props: ('openDirectory' | 'openFile' | 'createDirectory')[], extra: Partial<Electron.OpenDialogOptions> = {}) {
+  if (!pickBus.listenerCount('pick')) return nativePick(title, props, extra);
+  const id = ++pickSeq;
+  const start = typeof extra.defaultPath === 'string' && existsSync(extra.defaultPath) ? extra.defaultPath : homedir();
+  const res = await new Promise<string | null>(resolve => { pending.set(id, resolve); pickBus.emit('pick', { id, title, kind: props.includes('openFile') ? 'exe' : 'dir', start } satisfies PickRequest); });
+  return res === '\u0000native' ? nativePick(title, props, extra) : res;
 }
 
 const t = initTRPC.create({ transformer: superjson, isServer: true });
@@ -43,6 +85,18 @@ export function createRouter(deps: RouterDeps) {
 
     i18n: t.router({
       translate: t.procedure.input(z.object({ text: z.string().max(8000) })).query(({ input }) => tr.translate(input.text)),
+    }),
+
+    fs: t.router({
+      onPick: t.procedure.subscription(async function* ({ signal }) { for await (const [r] of on(pickBus, 'pick', { signal })) yield r as PickRequest; }),
+      answer: t.procedure.input(z.object({ id: z.number(), path: z.string().nullable(), native: z.boolean().optional() })).mutation(({ input }) => {
+        const f = pending.get(input.id); pending.delete(input.id);
+        f?.(input.native ? '\u0000native' : input.path);
+      }),
+      list: t.procedure.input(z.object({ path: z.string(), kind: z.enum(['dir', 'exe']) })).query(({ input }) => {
+        const p = parse(input.path);
+        return { path: input.path, parent: p.root === input.path ? null : dirname(input.path), entries: listDir(input.path, input.kind), places: places() };
+      }),
     }),
 
     settings: t.router({

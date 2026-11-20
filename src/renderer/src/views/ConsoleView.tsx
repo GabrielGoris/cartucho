@@ -5,6 +5,7 @@ import { CONSOLE_NAME, isSelfInstall, STATUS_LABEL } from '@shared/consoles';
 import { useTRPC } from '../trpc';
 import { Hints } from '../lib/input';
 import { useSpatialNav } from '../lib/spatial';
+import { askConfirm } from '../lib/dialogs';
 import { ago, fmtDate, fmtPlay, plural } from '../lib/format';
 import { sfx } from '../lib/sfx';
 import { GameArt } from '../components/GameArt';
@@ -239,7 +240,7 @@ function Achievements({ id, active, onBack }: { id: string; active: boolean; onB
         <span className="grow" />
         <button className="btn" data-hf disabled={resync.isPending} onClick={() => resync.mutate({ id })}>{resync.isPending ? 'Lendo…' : 'Ler de novo'}</button>
         <button className="btn ghost" data-hf onClick={() => openFolder.mutate({ id })}>Abrir pasta</button>
-        <button className="btn ghost danger" data-hf onClick={() => { if (confirm(`Remover ${d.game.title} do Cartucho? Os arquivos do jogo não são apagados.`)) remove.mutate({ id }); }}>Remover</button>
+        <button className="btn ghost danger" data-hf onClick={() => { void askConfirm({ title: `Remover ${d.game.title} do Cartucho? Os arquivos do jogo não são apagados.`, ok: 'Remover', danger: true }).then(y => { if (y) remove.mutate({ id }); }); }}>Remover</button>
       </header>
       <div className="chub-body">
         <div className="ach-head">

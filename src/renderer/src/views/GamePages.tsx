@@ -5,6 +5,7 @@ import { CONSOLE_NAME, isSelfInstall, SELF_INSTALL_NOTE, STATUS_LABEL } from '@s
 import { useTRPC } from '../trpc';
 import { Hints } from '../lib/input';
 import { useSpatialNav } from '../lib/spatial';
+import { askConfirm } from '../lib/dialogs';
 import { useProgress } from '../lib/progress';
 import { ago, fmtDate, fmtPlay, fmtSize, plural } from '../lib/format';
 import { sfx } from '../lib/sfx';
@@ -61,7 +62,7 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
             <div className="hm-btns">
               {canReinstall && <button className="hm-go" data-hf data-main disabled={reinstall.isPending || !!progress} onClick={() => { sfx.play('ok'); reinstall.mutate({ catalogId: g.catalogId! }); }}>⬇ INSTALAR DE NOVO</button>}
               <button className={`hm-go ${canReinstall ? 'ghost' : ''}`} data-hf data-main={canReinstall ? undefined : true} disabled={relink.isPending} onClick={() => relink.mutate({ id })}>PROCURAR A PASTA</button>
-              <button className="hm-go ghost" data-hf onClick={() => { if (confirm(`Tirar ${g.title} da biblioteca? Nenhum arquivo é apagado.`)) remove.mutate({ id }); }}>TIRAR DA BIBLIOTECA</button>
+              <button className="hm-go ghost" data-hf onClick={() => { void askConfirm({ title: `Tirar ${g.title} da biblioteca? Nenhum arquivo é apagado.`, ok: 'Remover', danger: true }).then(y => { if (y) remove.mutate({ id }); }); }}>TIRAR DA BIBLIOTECA</button>
             </div>
           ) : (
           <div className="hm-btns">
@@ -82,8 +83,8 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
               <button className="btn" data-hf onClick={() => openFolder.mutate({ id })}>Abrir pasta</button>
               {g.sourceRepo && <button className="btn" data-hf onClick={() => gh(g.sourceRepo!)}>Projeto no GitHub</button>}
               {g.managed
-                ? <button className="btn danger" data-hf onClick={() => { if (confirm(`Desinstalar ${g.title}? Os arquivos que vieram no download serão apagados; saves e configurações que você mudou ficam na pasta.`)) uninstall.mutate({ id }); }}>Desinstalar</button>
-                : <button className="btn danger" data-hf onClick={() => { if (confirm(`Tirar ${g.title} da biblioteca? Nenhum arquivo é apagado.`)) remove.mutate({ id }); }}>Remover da biblioteca</button>}
+                ? <button className="btn danger" data-hf onClick={() => { void askConfirm({ title: `Desinstalar ${g.title}? Os arquivos que vieram no download serão apagados; saves e configurações que você mudou ficam na pasta.`, ok: 'Desinstalar', danger: true }).then(y => { if (y) uninstall.mutate({ id }); }); }}>Desinstalar</button>
+                : <button className="btn danger" data-hf onClick={() => { void askConfirm({ title: `Tirar ${g.title} da biblioteca? Nenhum arquivo é apagado.`, ok: 'Remover', danger: true }).then(y => { if (y) remove.mutate({ id }); }); }}>Remover da biblioteca</button>}
             </div>
           )}
 

@@ -1,4 +1,6 @@
-import { forwardRef } from 'react';
+import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
+import { lastInput } from '../lib/input';
+import { Osk } from './Osk';
 
 interface Props {
   value: string;
@@ -9,12 +11,22 @@ interface Props {
   nav?: boolean;
 }
 
-export const SearchBox = forwardRef<HTMLInputElement, Props>(({ value, onChange, placeholder, onDone, className = 'search', nav = true }, ref) => (
-  <input ref={ref} className={className} data-search data-hf={nav ? true : undefined} placeholder={placeholder} value={value} spellCheck={false}
-    onClick={e => e.currentTarget.focus()}
-    onChange={e => onChange(e.target.value)}
-    onKeyDown={e => {
-      if (e.key === 'ArrowDown' || e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); onDone?.(); }
-    }} />
-));
+export const SearchBox = forwardRef<HTMLInputElement, Props>(({ value, onChange, placeholder, onDone, className = 'search', nav = true }, ref) => {
+  const el = useRef<HTMLInputElement>(null);
+  useImperativeHandle(ref, () => el.current!, []);
+  const [osk, setOsk] = useState(false);
+  const close = (done: boolean) => { setOsk(false); el.current?.blur(); if (done) onDone?.(); };
+  return (
+    <>
+      <input ref={el} className={className} data-search data-hf={nav ? true : undefined} placeholder={placeholder} value={value} spellCheck={false}
+        onClick={e => e.currentTarget.focus()}
+        onFocus={() => { if (lastInput() === 'pad') setOsk(true); }}
+        onChange={e => onChange(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'ArrowDown' || e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); setOsk(false); onDone?.(); }
+        }} />
+      {osk && <Osk value={value} onChange={onChange} label={placeholder} onDone={() => close(true)} onCancel={() => close(false)} />}
+    </>
+  );
+});
 SearchBox.displayName = 'SearchBox';

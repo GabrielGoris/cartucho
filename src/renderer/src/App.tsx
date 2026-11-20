@@ -7,7 +7,11 @@ import { fmtPlay } from './lib/format';
 import { useTRPC } from './trpc';
 import { getSettings, reduceMotion, setSettings, useSettings } from './lib/settings';
 import { applyPalette, paletteById, PALETTES } from './lib/palettes';
-import { setShortcutHandler } from './lib/input';
+import { setGlobalKeys, setShortcutHandler } from './lib/input';
+import { useConfirmReq } from './lib/dialogs';
+import { CartuchoMenu, ConfirmHost, PickerHost } from './views/GlobalUI';
+import { MeOverlay, RadarOverlay } from './views/Overlays';
+import { CONSOLES } from './stage/consoles';
 import { sfx } from './lib/sfx';
 import { focusSearch } from './lib/search';
 import { Stage } from './stage/Stage';
@@ -41,6 +45,9 @@ export function App() {
   const [inside, setInside] = useState<Inside | null>(null);
   const [zoom, setZoom] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [gov, setGov] = useState<null | 'radar' | 'me'>(null);
+  const confirmReq = useConfirmReq();
   const [tvAnim, setTvAnim] = useState<'' | 'off' | 'on'>('');
   const [toasts, setToasts] = useState<{ k: string; n: string; g: string }[]>([]);
   const [playing, setPlaying] = useState<Record<string, string>>({});
@@ -63,6 +70,16 @@ export function App() {
     transition(() => setInside({ id, ...opts, key: Date.now() }));
   };
   const leaveConsole = () => transition(() => { setInside(null); setZoom(false); setPage('stage'); });
+
+  const gk = useRef({ booting, picker, confirmReq, inside, leaveConsole });
+  gk.current = { booting, picker, confirmReq, inside, leaveConsole };
+  useEffect(() => setGlobalKeys(k => {
+    const g = gk.current;
+    if (g.booting || g.picker || g.confirmReq || document.querySelector('.osk-ov, .gl-pick')) return false;
+    if (k === 'Start') { sfx.play(menu ? 'back' : 'ok'); setMenu(m => !m); return true; }
+    if (k === 'Home') { setMenu(false); setGov(null); setSettingsOpen(false); if (g.inside) g.leaveConsole(); else setPage('stage'); sfx.play('back'); return true; }
+    return false;
+  }), [menu]);
 
   useEffect(() => setShortcutHandler(key => {
     const k = key.toLowerCase();
@@ -105,7 +122,7 @@ export function App() {
     <div id="tv" className={tvClass} style={{ ['--crt' as string]: s.crtLvl / 100 }}>
       <Stage list={list} sel={sel} mode={stageMode} zoom={zoom} palette={palette} pixel={s.pixel} onSelect={i => { sfx.play('move'); setSel(i); }} onEnter={i => enterConsole(list[i]!.id)} />
       {!inside && (
-        <Select active={!booting && !settingsOpen && !askPicker} list={list} page={page} setPage={setPage} sel={sel} setSel={setSel}
+<Select active={!booting && !settingsOpen && !askPicker && !menu && !gov} list={list} page={page} setPage={setPage} sel={sel} setSel={setSel}
           onEnterConsole={enterConsole} onSettings={() => { sfx.play('ok'); setSettingsOpen(true); }} />
       )}
       {inside && (() => {
@@ -113,6 +130,12 @@ export function App() {
         if (H) return <H.component key={inside.key} id={inside.id} game={inside.game} tab={inside.tab} onBack={leaveConsole} />;
         return <ConsoleView key={inside.key} id={inside.id} game={inside.game} tab={inside.tab} active={!settingsOpen} onBack={leaveConsole} />;
       })()}
+      {menu && <CartuchoMenu inside={inside ? CONSOLES.find(c => c.id === inside.id)?.name ?? null : null} onClose={() => setMenu(false)}
+        onSettings={() => setSettingsOpen(true)} onRadar={() => setGov('radar')} onProfile={() => setGov('me')} onPickConsoles={() => setPicker(true)} onLeave={leaveConsole} />}
+      {gov === 'radar' && <RadarOverlay onClose={() => setGov(null)} onOpenConsole={id => { setGov(null); enterConsole(id, { tab: 'cat' }); }} />}
+      {gov === 'me' && <MeOverlay onClose={() => setGov(null)} />}
+      <ConfirmHost />
+      <PickerHost />
       {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} onPickConsoles={() => { setSettingsOpen(false); setPicker(true); }} />}
       {askPicker && <ConsolePicker first={!s.picked} onClose={() => setPicker(false)} />}
       {booting && <Boot summary={summary.data} onDone={() => setBooting(false)} />}
