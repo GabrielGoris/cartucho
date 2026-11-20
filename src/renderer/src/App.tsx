@@ -10,7 +10,8 @@ import { applyPalette, paletteById, PALETTES } from './lib/palettes';
 import { setGlobalKeys, setShortcutHandler } from './lib/input';
 import { useConfirmReq } from './lib/dialogs';
 import { CartuchoMenu, ConfirmHost, PickerHost } from './views/GlobalUI';
-import { MeOverlay, RadarOverlay } from './views/Overlays';
+import { MeOverlay, RadarOverlay, SupportOverlay } from './views/Overlays';
+import { askConfirm } from './lib/dialogs';
 import { CONSOLES } from './stage/consoles';
 import { sfx } from './lib/sfx';
 import { focusSearch } from './lib/search';
@@ -23,6 +24,7 @@ import { Settings } from './views/Settings';
 import { ConsolePicker } from './views/ConsolePicker';
 import { HUBS } from './hubs';
 import { TitleBar } from './components/TitleBar';
+import { AllGames } from './views/AllGames';
 
 type Inside = { id: ConsoleId; game?: string; tab?: 'lib' | 'cat'; key: number };
 const LAST = 'cartucho.lastConsole';
@@ -44,10 +46,11 @@ export function App() {
   useEffect(() => { try { localStorage.setItem(LAST, list[sel]!.id); } catch { } }, [sel, list]);
   const [picker, setPicker] = useState(false);
   const [inside, setInside] = useState<Inside | null>(null);
+  const [all, setAll] = useState(false);
   const [zoom, setZoom] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menu, setMenu] = useState(false);
-  const [gov, setGov] = useState<null | 'radar' | 'me'>(null);
+  const [gov, setGov] = useState<null | 'radar' | 'me' | 'support'>(null);
   const confirmReq = useConfirmReq();
   const [tvAnim, setTvAnim] = useState<'' | 'off' | 'on'>('');
   const [toasts, setToasts] = useState<{ k: string; n: string; g: string }[]>([]);
@@ -56,6 +59,17 @@ export function App() {
 
   const trpc = useTRPC(), qc = useQueryClient();
   const overlay = useMutation(trpc.win.overlay.mutationOptions());
+  const installUpd = useMutation(trpc.updates.install.mutationOptions());
+  const asked = useRef<string | null>(null);
+  useSubscription(trpc.updates.onState.subscriptionOptions(undefined, {
+    onData: u => {
+      qc.setQueryData(trpc.updates.state.queryKey(), u);
+      if (u.status !== 'ready' || !u.version || asked.current === u.version) return;
+      asked.current = u.version;
+      void askConfirm({ title: `Cartucho ${u.version} pronto`, text: 'A atualização já foi baixada. Reiniciar agora para instalar? Se preferir deixar para depois, ela entra sozinha quando você fechar o Cartucho.', ok: 'Reiniciar agora', cancel: 'Depois' })
+        .then(y => { if (y) installUpd.mutate(); });
+    },
+  }));
   useEffect(() => { overlay.mutate({ color: palette.bg0, symbol: palette.acc }); }, [palette.id]);
   const summary = useQuery(trpc.library.summary.queryOptions());
 
@@ -72,15 +86,17 @@ export function App() {
     setSelId(id); setZoom(true); sfx.play('ok');
     transition(() => setInside({ id, ...opts, key: Date.now() }));
   };
-  const leaveConsole = () => transition(() => { setInside(null); setZoom(false); setPage('stage'); });
+  const leaveConsole = () => transition(() => { setInside(null); setAll(false); setZoom(false); setPage('stage'); });
+  const openAll = () => transition(() => setAll(true));
+  const closeAll = () => transition(() => { setAll(false); setPage('act'); });
 
-  const gk = useRef({ booting, picker, confirmReq, inside, leaveConsole });
-  gk.current = { booting, picker, confirmReq, inside, leaveConsole };
+  const gk = useRef({ booting, picker, confirmReq, inside, leaveConsole, all, closeAll });
+  gk.current = { booting, picker, confirmReq, inside, leaveConsole, all, closeAll };
   useEffect(() => setGlobalKeys(k => {
     const g = gk.current;
     if (g.booting || g.picker || g.confirmReq || document.querySelector('.osk-ov, .gl-pick')) return false;
     if (k === 'Start') { sfx.play(menu ? 'back' : 'ok'); setMenu(m => !m); return true; }
-    if (k === 'Home') { setMenu(false); setGov(null); setSettingsOpen(false); if (g.inside) g.leaveConsole(); else setPage('stage'); sfx.play('back'); return true; }
+    if (k === 'Home') { setMenu(false); setGov(null); setSettingsOpen(false); if (g.inside) g.leaveConsole(); else if (g.all) g.closeAll(); else setPage('stage'); sfx.play('back'); return true; }
     return false;
   }), [menu]);
 
@@ -113,35 +129,37 @@ export function App() {
   }));
 
   const tvClass = useMemo(() => [
-    tvAnim, inside && HUBS[inside.id]?.hd ? 'hd' : '', s.crtLvl ? '' : 'no-crt', s.flicker && !s.reduce ? '' : 'no-flicker', s.frame ? '' : 'no-frame',
+    tvAnim, (inside && HUBS[inside.id]?.hd) || all ? 'hd' : '', s.crtLvl ? '' : 'no-crt', s.flicker && !s.reduce ? '' : 'no-flicker', s.frame ? '' : 'no-frame',
     s.glow ? '' : 'no-glow', s.blur ? '' : 'no-blur', s.reduce ? 'reduce' : '',
-  ].filter(Boolean).join(' '), [tvAnim, s, inside]);
+  ].filter(Boolean).join(' '), [tvAnim, s, inside, all]);
 
   const gameOpen = Object.keys(playing).length > 0;
-  const stageMode = inside || gameOpen ? 'hidden' : booting || page === 'act' ? 'behind' : 'stage';
+  const stageMode = inside || all || gameOpen ? 'hidden' : booting || page === 'act' ? 'behind' : 'stage';
   const askPicker = picker || (!s.picked && !booting && !inside && !settingsOpen && page === 'stage');
 
   return (
     <>
-    <TitleBar ctx={inside ? CONSOLES.find(c => c.id === inside.id)?.name ?? null : null} />
+    <TitleBar ctx={inside ? CONSOLES.find(c => c.id === inside.id)?.name ?? null : all ? 'Todos os jogos' : null} />
     <div id="tv" className={tvClass} style={{ ['--crt' as string]: s.crtLvl / 100 }}>
       <Stage list={list} sel={sel} mode={stageMode} zoom={zoom} palette={palette} pixel={s.pixel} onSelect={i => { sfx.play('move'); setSel(i); }} onEnter={i => enterConsole(list[i]!.id)} />
-      {!inside && (
+      {all && !inside && <AllGames onBack={closeAll} />}
+      {!inside && !all && (
 <Select active={!booting && !settingsOpen && !askPicker && !menu && !gov} list={list} page={page} setPage={setPage} sel={sel} setSel={setSel}
-          onEnterConsole={enterConsole} onSettings={() => { sfx.play('ok'); setSettingsOpen(true); }} />
+          onEnterConsole={enterConsole} onAll={openAll} onSettings={() => { sfx.play('ok'); setSettingsOpen(true); }} />
       )}
       {inside && (() => {
         const H = HUBS[inside.id];
         if (H) return <H.component key={inside.key} id={inside.id} game={inside.game} tab={inside.tab} onBack={leaveConsole} />;
         return <ConsoleView key={inside.key} id={inside.id} game={inside.game} tab={inside.tab} active={!settingsOpen} onBack={leaveConsole} />;
       })()}
-      {menu && <CartuchoMenu inside={inside ? CONSOLES.find(c => c.id === inside.id)?.name ?? null : null} onClose={() => setMenu(false)}
-        onSettings={() => setSettingsOpen(true)} onRadar={() => setGov('radar')} onProfile={() => setGov('me')} onPickConsoles={() => setPicker(true)} onLeave={leaveConsole} />}
+      {menu && <CartuchoMenu inside={inside ? CONSOLES.find(c => c.id === inside.id)?.name ?? null : all ? 'Todos os jogos' : null} onClose={() => setMenu(false)}
+        onSettings={() => setSettingsOpen(true)} onRadar={() => setGov('radar')} onProfile={() => setGov('me')} onPickConsoles={() => setPicker(true)} onLeave={all ? closeAll : leaveConsole} onAll={openAll} onSupport={() => setGov('support')} />}
       {gov === 'radar' && <RadarOverlay onClose={() => setGov(null)} onOpenConsole={id => { setGov(null); enterConsole(id, { tab: 'cat' }); }} />}
       {gov === 'me' && <MeOverlay onClose={() => setGov(null)} />}
+      {gov === 'support' && <SupportOverlay onClose={() => setGov(null)} />}
       <ConfirmHost />
       <PickerHost />
-      {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} onPickConsoles={() => { setSettingsOpen(false); setPicker(true); }} />}
+      {settingsOpen && <Settings onSupport={() => { setSettingsOpen(false); setGov('support'); }} onClose={() => setSettingsOpen(false)} onPickConsoles={() => { setSettingsOpen(false); setPicker(true); }} />}
       {askPicker && <ConsolePicker first={!s.picked} onClose={() => setPicker(false)} />}
       {booting && <Boot summary={summary.data} onDone={() => setBooting(false)} />}
 

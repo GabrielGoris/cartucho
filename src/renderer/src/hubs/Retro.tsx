@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AchievementView, ConsoleId } from '@shared/types';
-import { isSelfInstall } from '@shared/consoles';
+import { CONSOLE_NAME, isSelfInstall } from '@shared/consoles';
 import { useTRPC } from '../trpc';
 import { Glyph, useKeys, type Key } from '../lib/input';
 import { getSettings, setSettings, useSettings } from '../lib/settings';
@@ -9,11 +9,13 @@ import { setSfxProfile, sfx } from '../lib/sfx';
 import { ago, fmtDate, fmtPlay, plural } from '../lib/format';
 import { focusSearch } from '../lib/search';
 import { GameArt } from '../components/GameArt';
-import { Discover, initialDiscover, type DOpt } from '../components/Discover';
+import { Discover, initialDiscover } from '../components/Discover';
 import { GameView } from '../components/GameView';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
-import { useHubActions, useHubData, type HubGame } from './data';
+import { useHubData, type HubGame } from './data';
+import { useGameMenu } from './menu';
+import { otherConsoles } from '../stage/consoles';
 import { Obj, SHELLS, shellH, type Kind } from './shells';
 
 type Tab = 'games' | 'disc' | 'news' | 'ach' | 'time' | 'cfg';
@@ -45,21 +47,18 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
   const kind = cfg.kind;
   const cols = SHELLS[kind].cols, rh = shellH(kind) + (kind === 'mc2' ? 190 : 140);
   const self = isSelfInstall(id);
-  const data = useHubData(id);
-  const act = useHubActions();
-  const trpc = useTRPC(), qc = useQueryClient();
   const s = useSettings();
+  const data = useHubData(id === 'other' ? otherConsoles(s.hidden) as ConsoleId[] : id);
+  const trpc = useTRPC(), qc = useQueryClient();
   const [toast, show] = useHubToast();
   const [st, set] = useState<St>({ tab: tab === 'cat' ? 1 : 0, idx: 0, li: 0, game: null, achOpen: false, ai2: 0 });
   const up = (p: Partial<St>) => set(x => ({ ...x, ...p }));
   const [dst, setDst] = useState(initialDiscover);
   const clock = useClock();
   const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show('Pasta dos jogos alterada'); } }));
-  const chooseExe = useMutation(trpc.games.chooseExe.mutationOptions({ onSuccess: () => void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }) }));
-  const openFolder = useMutation(trpc.games.openFolder.mutationOptions());
 
   useEffect(() => { setSfxProfile(cfg.sfx); const t = setTimeout(() => sfx.play('boot'), 150); return () => clearTimeout(t); }, [cfg.sfx]);
-  useEffect(() => { if (act.error) { show(act.error); act.reset(); } }, [act.error]);
+
   useEffect(() => {
     const go = () => { sfx.play('ok'); set(x => ({ ...x, tab: 1, game: null, achOpen: false })); setDst(d => ({ ...d, zone: 'search' })); setTimeout(focusSearch, 80); };
     addEventListener('cartucho:search', go);
@@ -93,52 +92,13 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
 
   const game = st.game ? lookup.get(st.game) ?? null : null;
 
-  const options = (x: HubGame, page = false): DOpt[] => {
-    const inst = x.installed;
-    const L: DOpt[] = [];
-    if (inst?.missing) {
-      if (x.catalog?.repo && !self) L.push({ k: 'reinstall', l: 'Instalar de novo' });
-      L.push({ k: 'relink', l: 'Procurar a pasta' });
-      L.push({ k: 'remove', l: 'Tirar da biblioteca' });
-    } else if (inst) {
-      L.push(inst.running ? { k: 'quit', l: 'Fechar o jogo' } : inst.exe ? { k: 'play', l: 'Jogar' } : { k: 'exe', l: 'Escolher o .exe' });
-      if (x.update?.updateAvailable && !self) L.push({ k: 'update', l: `Atualizar para ${x.update.latest?.tag}` });
-      if (inst.adapter) L.push({ k: 'ach', l: 'Conquistas' });
-      L.push({ k: 'folder', l: 'Abrir pasta' });
-      if (inst.exe) L.push({ k: 'exe', l: 'Trocar o .exe' });
-    } else {
-      if (x.repo && !self) L.push({ k: 'install', l: 'Instalar' });
-      L.push({ k: 'add', l: self ? 'Já instalei: adicionar pasta' : 'Escolher pasta' });
-    }
-    if (x.repo) L.push({ k: 'gh', l: 'Ver no GitHub' });
-    if (!page) L.push({ k: 'info', l: 'Página do jogo' });
-    return L;
-  };
+  const menu = useGameMenu({
+    show, onInfo: x => { sfx.play('ok'); up({ game: x.key }); }, onRemoved: () => up({ game: null }),
+    onAch: x => up({ game: null, tab: 3, li: Math.max(0, data.lib.indexOf(x)), achOpen: true, ai2: 0 }),
+  });
+  useEffect(() => { if (menu.error) { show(menu.error); menu.reset(); } }, [menu.error]);
+  const { options, run } = menu;
   const openGame = (x: HubGame) => { sfx.play('ok'); up({ game: x.key }); };
-
-  const run = (k: string, x: HubGame) => {
-    if (k === 'play' || k === 'quit' || k === 'install') {
-      const r = act.primary(x);
-      sfx.play(r === 'quit' ? 'back' : 'ok');
-      if (r === 'play') show(`${x.title} aberto`);
-      else if (r === 'install') show(`Baixando ${x.repo}…`);
-      else if (r === 'quit') show('Fechando…');
-      else if (r === 'pick') chooseExe.mutate({ id: x.installed!.id });
-      else if (r === 'relink') show('Escolha onde o jogo está agora');
-      return;
-    }
-    sfx.play('ok');
-    if (k === 'add') { act.addFolder(x); return show('Escolha a pasta do jogo'); }
-    if (k === 'reinstall') { act.reinstall(x); return show(`Baixando ${x.repo} de novo…`); }
-    if (k === 'relink') { act.relink(x); return show('Escolha onde o jogo está agora'); }
-    if (k === 'remove') { act.remove(x); up({ game: null }); return show('Jogo tirado da biblioteca · nenhum arquivo apagado'); }
-    if (k === 'update') { act.update(x); return show(`Atualizando para ${x.update?.latest?.tag}…`); }
-    if (k === 'ach') return up({ game: null, tab: 3, li: Math.max(0, data.lib.indexOf(x)), achOpen: true, ai2: 0 });
-    if (k === 'folder') return openFolder.mutate({ id: x.installed!.id });
-    if (k === 'exe') return chooseExe.mutate({ id: x.installed!.id });
-    if (k === 'gh') return act.github(x);
-    if (k === 'info') return openGame(x);
-  };
 
   const goTab = (d: number) => { sfx.play('move'); set(x => ({ ...x, tab: (x.tab + d + TABS.length) % TABS.length, li: 0, achOpen: false })); };
   const setTab = (i: number) => { if (i === st.tab) return; sfx.play('move'); up({ tab: i, li: 0, achOpen: false }); };
@@ -197,7 +157,8 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
     : [['ok', tk === 'cfg' ? 'OK' : tk === 'ach' ? (st.achOpen ? 'Fechar' : 'Ver lista') : 'Abrir'], ['ud', 'Mover'], ['rb', 'Seção'], ['back', 'Voltar']];
   const H = <div className="rh-ft">{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>;
   const off = Math.max(0, Math.min(st.li - 3, rows.length - VISIBLE));
-  const line = (x: HubGame) => x.installed?.missing ? 'Pasta não encontrada' : x.installed?.running ? 'Jogando agora' : x.installed?.playMs ? `${fmtPlay(x.installed.playMs)} jogadas` : 'Ainda não jogado';
+  const line = (x: HubGame) => id === 'other' ? `${sourceOf(x)} · ${line0(x)}` : line0(x);
+  const line0 = (x: HubGame) => x.installed?.missing ? 'Pasta não encontrada' : x.installed?.running ? 'Jogando agora' : x.installed?.playMs ? `${fmtPlay(x.installed.playMs)} jogadas` : 'Ainda não jogado';
 
   const header = (
     <header className="rh-hd">
@@ -282,7 +243,8 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
         {tk === 'disc' && !game && header}
         {tk === 'disc' && !game && (
           <Discover theme="d-retro" shape={kind === 'snes' || kind === 'n64' ? 'wide' : kind === 'mc1' || kind === 'gb' || kind === 'nds' ? 'square' : 'tall'} cname={c.name} games={data.catalog} extra={data.lib.filter(x => !x.catalog)} self={self} st={dst} set={setDst}
-            options={x => options(x).filter(o => o.k !== 'info')} run={run} onOpen={openGame} onBack={() => { sfx.play('back'); up({ tab: 0 }); }} onTab={goTab} />
+            options={x => options(x).filter(o => o.k !== 'info')} run={run} onOpen={openGame} onBack={() => { sfx.play('back'); up({ tab: 0 }); }} onTab={goTab}
+            {...(id === 'other' ? { groupOf: sourceOf, groupLabel: 'Plataforma' } : {})} />
         )}
         {game && <GameView theme="d-retro" g={game} opts={options(game, true)} run={run} self={self} onBack={() => up({ game: null })} />}
         {toast}
@@ -323,3 +285,5 @@ function PortsDir() {
   const q = useQuery(trpc.settings.portsDir.queryOptions());
   return <>{q.data ?? '…'}</>;
 }
+
+const sourceOf = (g: HubGame) => (g.console === 'other' ? g.platformName ?? 'Outros' : CONSOLE_NAME[g.console]);

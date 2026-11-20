@@ -176,3 +176,18 @@
 .dsc.square .dsc-c .cv-w { height: 220px; }
 .dsc.square .dsc-d .cv-w { width: 300px; height: 300px; }
 .gv-note { margin: 0; font-size: 21px; color: var(--d-acc); }
+.dsc-groups { position: absolute; top: 226px; left: 110px; right: 110px; height: 56px; display: flex; align-items: center; gap: 10px; overflow: hidden; white-space: nowrap; padding: 0 4px; -webkit-mask: linear-gradient(90deg, #000 92%, transparent); mask: linear-gradient(90deg, #000 92%, transparent); }
+.dsc-groups .lb { flex: none; font-size: 19px; color: var(--d-dim); margin-right: 6px; text-transform: uppercase; letter-spacing: 2px; }
+.dsc-groups button { flex: none; height: 44px; padding: 0 18px; border-radius: var(--d-chip-r); border: 2px solid var(--d-line); font-size: 20px; color: var(--d-dim); display: flex; align-items: center; gap: 10px; }
+.dsc-groups button small { font-size: 15px; opacity: .7; }
+.dsc-groups button.cur { border-color: var(--d-acc); color: var(--d-ink); }
+.dsc-groups button.on { box-shadow: var(--d-focus); color: var(--d-ink); }
+.dsc.has-groups .dsc-body, .dsc.has-groups .dsc-det { top: 300px; }
+.dsc.in-tabs .dsc-groups { top: 236px; }
+.dsc.in-tabs.has-groups .dsc-body, .dsc.in-tabs.has-groups .dsc-det { top: 310px; }
+.dsc.d-app { --d-bg: radial-gradient(ellipse at 18% -10%, rgb(var(--acc-rgb) / .2), transparent 50%), var(--bg); --d-panel: rgb(var(--panel-rgb) / .9); --d-line: var(--line); --d-ink: var(--ink); --d-dim: var(--dim); --d-acc: var(--acc); --d-on-acc: var(--on-acc);
+  --d-title: var(--font-display); --d-tw: 400; --d-r: 10px; --d-cr: 8px; --d-chip-r: 6px; --d-menu: var(--bg2); --d-focus: 0 0 0 3px var(--bg), 0 0 0 6px var(--acc), 0 0 26px rgb(var(--acc-rgb) / .5); --gv-h1: 46px; --gv-solid: var(--bg); }
+.dsc.d-app .dsc-hd h2 { font-size: 34px; }
+.dsc.d-app .dsc-row h3 { font-size: 17px; letter-spacing: 1px; }
+.dsc.d-app .gv-sec h3 { font-size: 20px; }
+.sk-all { background: var(--bg0); --toast-bg: var(--bg2); --toast-fg: var(--ink); }

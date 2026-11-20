@@ -21,17 +21,19 @@ export interface HubGame {
 
 const FRESH_MS = 14 * 86400_000;
 
-export function useHubData(consoleId: ConsoleId) {
+export function useHubData(scope: ConsoleId | readonly ConsoleId[] | null) {
   const trpc = useTRPC();
+  const key = scope == null ? '*' : typeof scope === 'string' ? scope : scope.join(',');
+  const set = useMemo(() => (scope == null ? null : new Set<string>(typeof scope === 'string' ? [scope] : scope)), [key]);
   const games = useQuery(trpc.games.list.queryOptions());
-  const cat = useQuery(trpc.catalog.list.queryOptions({ console: consoleId }));
+  const cat = useQuery(trpc.catalog.list.queryOptions(set == null ? undefined : set.size === 1 ? { console: [...set][0]! } : { consoles: [...set] }));
   const radar = useQuery(trpc.catalog.radar.queryOptions());
-  const mine = useMemo(() => (games.data ?? []).filter(g => g.console === consoleId && !g.missing), [games.data, consoleId]);
+  const mine = useMemo(() => (games.data ?? []).filter(g => (!set || set.has(g.console)) && !g.missing), [games.data, set]);
   const updates = useQueries({ queries: mine.filter(g => g.sourceRepo).map(g => ({ ...trpc.ports.checkUpdate.queryOptions({ id: g.id }), staleTime: 5 * 60_000 })) });
   const updById = new Map(mine.filter(g => g.sourceRepo).map((g, i) => [g.id, updates[i]?.data ?? null]));
 
   return useMemo(() => {
-    const feed: RadarEvent[] = (radar.data ?? []).filter(e => e.console === consoleId);
+    const feed: RadarEvent[] = (radar.data ?? []).filter(e => !set || set.has(e.console));
     const fresh = new Set(feed.filter(e => e.kind === 'new' && Date.now() - e.at < FRESH_MS).map(e => e.gameId));
     const byCat = new Map((cat.data ?? []).map(c => [c.id, c]));
     const lib: HubGame[] = mine.map(g => {
@@ -54,7 +56,7 @@ export function useHubData(consoleId: ConsoleId) {
       withUpdate: lib.filter(g => g.update?.updateAvailable),
       playMs: mine.reduce((s, g) => s + g.playMs, 0),
     };
-  }, [mine, cat.data, radar.data, consoleId, cat.isLoading, games.isLoading, updates.map(u => u.dataUpdatedAt).join()]);
+  }, [mine, cat.data, radar.data, set, cat.isLoading, games.isLoading, updates.map(u => u.dataUpdatedAt).join()]);
 }
 
 export function useHubActions() {

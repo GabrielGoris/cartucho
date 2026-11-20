@@ -11,8 +11,8 @@ import type { HubGame } from '../hubs/data';
 
 export type DFilter = 'top' | 'all' | 'new' | 'play' | 'wip' | 'inst';
 export type DSort = 'pop' | 'az' | 'year' | 'recent';
-export interface DState { q: string; filter: DFilter; sort: DSort; zone: 'search' | 'chips' | 'body'; row: number; col: number; chip: number; menu: boolean; mi: number }
-export const initialDiscover = (): DState => ({ q: '', filter: 'top', sort: 'pop', zone: 'body', row: 0, col: 0, chip: 0, menu: false, mi: 0 });
+export interface DState { q: string; filter: DFilter; sort: DSort; zone: 'search' | 'chips' | 'groups' | 'body'; row: number; col: number; chip: number; menu: boolean; mi: number; grp: string | null }
+export const initialDiscover = (): DState => ({ q: '', filter: 'top', sort: 'pop', zone: 'body', row: 0, col: 0, chip: 0, menu: false, mi: 0, grp: null });
 export interface DOpt { k: string; l: string; icon?: ReactNode }
 
 const FILTERS: [DFilter, string][] = [['top', 'Destaques'], ['all', 'Todos'], ['new', 'Novos'], ['play', 'Jogáveis'], ['wip', 'Em progresso'], ['inst', 'Instalados']];
@@ -32,12 +32,25 @@ function sorter(s: DSort) {
   };
 }
 
-export function Discover({ theme, cname, games, extra = [], self, st, set, options, run, onOpen, onBack, hints, shape = 'tall', onTab }: {
+export function Discover({ theme, cname, games: all, extra: allExtra = [], self, st, set, options, run, onOpen, onBack, hints, shape = 'tall', onTab, groupOf, groupLabel = 'Plataforma', allLabel = 'Todas', title = 'Descobrir', place }: {
   theme: string; cname: string; games: HubGame[]; extra?: HubGame[]; self: boolean;
   st: DState; set: (f: (s: DState) => DState) => void;
   options: (g: HubGame) => DOpt[]; run: (k: string, g: HubGame) => void; onOpen: (g: HubGame) => void; onBack: () => void;
   hints?: boolean; shape?: 'tall' | 'wide' | 'square'; onTab?: (d: 1 | -1) => void;
+  groupOf?: (g: HubGame) => string; groupLabel?: string; allLabel?: string; title?: string; place?: string;
 }) {
+  const groups = useMemo(() => {
+    if (!groupOf) return [] as [string, number][];
+    const m = new Map<string, number>();
+    for (const g of [...all, ...allExtra]) { const k = groupOf(g); m.set(k, (m.get(k) ?? 0) + 1); }
+    return [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pt'));
+  }, [all, allExtra, groupOf]);
+  const hasGroups = groups.length > 1;
+  const grp = hasGroups && st.grp && groups.some(x => x[0] === st.grp) ? st.grp : null;
+  const games = useMemo(() => (grp && groupOf ? all.filter(g => groupOf(g) === grp) : all), [all, grp, groupOf]);
+  const extra = useMemo(() => (grp && groupOf ? allExtra.filter(g => groupOf(g) === grp) : allExtra), [allExtra, grp, groupOf]);
+  const grpRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { grpRef.current?.querySelector('.cur')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); }, [grp]);
   const { COLS, CARD_W, ROW_H, GRID_ROW } = SHAPES[shape];
   const up = (p: Partial<DState>) => set(s => ({ ...s, ...p }));
   const searchRef = useRef<HTMLInputElement>(null);
@@ -92,6 +105,10 @@ export function Discover({ theme, cname, games, extra = [], self, st, set, optio
     if (c === 'sort') { const j = SORTS.findIndex(s => s[0] === st.sort); sfx.play('ok'); up({ sort: SORTS[(j + 1) % SORTS.length]![0], filter: st.filter === 'top' ? 'all' : st.filter, row: 0, col: 0 }); return; }
     sfx.play('ok'); up({ filter: c, q: '', row: 0, col: 0, chip: i });
   };
+  const toChip = (i: number) => { const c = chips[i]!; sfx.play('move'); up(c === 'sort' ? { chip: i } : { chip: i, filter: c, q: '', row: 0, col: 0 }); };
+  const gIdx = grp ? groups.findIndex(x => x[0] === grp) + 1 : 0;
+  const toGroup = (i: number) => { sfx.play('move'); up({ grp: i === 0 ? null : groups[i - 1]![0], row: 0, col: 0 }); };
+  const below = hasGroups ? 'groups' : 'body';
 
   useKeys((k: Key) => {
     if (st.menu) {
@@ -106,21 +123,31 @@ export function Discover({ theme, cname, games, extra = [], self, st, set, optio
     if (k === 'LB' || k === 'RB') { const i = FILTERS.findIndex(f => f[0] === st.filter); const n = (i + (k === 'RB' ? 1 : -1) + FILTERS.length) % FILTERS.length; sfx.play('move'); up({ filter: FILTERS[n]![0], chip: n, q: '', row: 0, col: 0 }); return; }
     if (st.zone === 'search') {
       if (k === 'Enter') { sfx.play('ok'); searchRef.current?.focus(); }
-      else if (k === 'ArrowDown') mv({ zone: 'chips' });
+      else if (k === 'ArrowDown') mv({ zone: onTab ? below : 'chips' });
+      else if (k === 'ArrowRight' && onTab) mv({ zone: 'chips', chip: Math.max(0, FILTERS.findIndex(f => f[0] === st.filter)) });
       else if (k === 'Escape') { if (st.q) { sfx.play('back'); up({ q: '' }); } else mv({ zone: 'body' }); }
       return;
     }
     if (st.zone === 'chips') {
-      if (k === 'ArrowLeft' && st.chip > 0) mv({ chip: st.chip - 1 });
-      else if (k === 'ArrowRight' && st.chip < chips.length - 1) mv({ chip: st.chip + 1 });
-      else if (k === 'Enter') pickChip(st.chip);
-      else if (k === 'ArrowUp') mv({ zone: 'search' });
-      else if (k === 'ArrowDown' && total) mv({ zone: 'body' });
+      if (k === 'ArrowLeft' && st.chip > 0) toChip(st.chip - 1);
+      else if (k === 'ArrowLeft' && onTab) mv({ zone: 'search' });
+      else if (k === 'ArrowRight' && st.chip < chips.length - 1) toChip(st.chip + 1);
+      else if (k === 'Enter') { if (chips[st.chip] === 'sort') pickChip(st.chip); else if (total) mv({ zone: below }); }
+      else if (k === 'ArrowUp' && !onTab) mv({ zone: 'search' });
+      else if (k === 'ArrowDown') { if (hasGroups) mv({ zone: 'groups' }); else if (total) mv({ zone: 'body' }); }
+      else if (k === 'Escape') { sfx.play('back'); onBack(); }
+      return;
+    }
+    if (st.zone === 'groups') {
+      if (k === 'ArrowLeft' && gIdx > 0) toGroup(gIdx - 1);
+      else if (k === 'ArrowRight' && gIdx < groups.length) toGroup(gIdx + 1);
+      else if (k === 'ArrowUp') mv({ zone: 'chips', chip: Math.max(0, FILTERS.findIndex(f => f[0] === st.filter)) });
+      else if ((k === 'ArrowDown' || k === 'Enter') && total) mv({ zone: 'body' });
       else if (k === 'Escape') { sfx.play('back'); onBack(); }
       return;
     }
     if (k === 'Escape') { if (st.q) { sfx.play('back'); up({ q: '', row: 0, col: 0 }); } else { sfx.play('back'); onBack(); } return; }
-    if (!g) { if (k === 'ArrowUp') mv({ zone: 'chips' }); return; }
+    if (!g) { if (k === 'ArrowUp') mv({ zone: hasGroups ? 'groups' : 'chips' }); return; }
     if (k === 'Enter') { sfx.play('ok'); onOpen(g); return; }
     if (k === 'X') { sfx.play('ok'); up({ menu: true, mi: 0 }); return; }
     if (shelves) {
@@ -128,7 +155,7 @@ export function Discover({ theme, cname, games, extra = [], self, st, set, optio
       if (k === 'ArrowRight' && st.col < n - 1) mv({ col: st.col + 1 });
       else if (k === 'ArrowLeft' && st.col > 0) mv({ col: st.col - 1 });
       else if (k === 'ArrowDown' && st.row < rows.length - 1) mv({ row: st.row + 1, col: Math.min(st.col, rows[st.row + 1]!.items.length - 1) });
-      else if (k === 'ArrowUp') { if (st.row > 0) mv({ row: st.row - 1, col: Math.min(st.col, rows[st.row - 1]!.items.length - 1) }); else mv({ zone: 'chips', chip: FILTERS.findIndex(f => f[0] === st.filter) }); }
+      else if (k === 'ArrowUp') { if (st.row > 0) mv({ row: st.row - 1, col: Math.min(st.col, rows[st.row - 1]!.items.length - 1) }); else mv(hasGroups ? { zone: 'groups' } : { zone: 'chips', chip: FILTERS.findIndex(f => f[0] === st.filter) }); }
       else if (k === 'RT') mv({ row: Math.min(rows.length - 1, st.row + 2), col: 0 });
       else if (k === 'LT') mv({ row: Math.max(0, st.row - 2), col: 0 });
       return;
@@ -138,7 +165,7 @@ export function Discover({ theme, cname, games, extra = [], self, st, set, optio
     else if (k === 'ArrowLeft' && st.col > 0) mv({ col: st.col - 1 });
     else if (k === 'ArrowDown' && i + COLS < n) mv({ row: st.row + 1 });
     else if (k === 'ArrowDown' && st.row < Math.floor((n - 1) / COLS)) mv({ row: st.row + 1, col: (n - 1) % COLS });
-    else if (k === 'ArrowUp') { if (st.row > 0) mv({ row: st.row - 1 }); else mv({ zone: 'chips', chip: FILTERS.findIndex(f => f[0] === st.filter) }); }
+    else if (k === 'ArrowUp') { if (st.row > 0) mv({ row: st.row - 1 }); else mv(hasGroups ? { zone: 'groups' } : { zone: 'chips', chip: FILTERS.findIndex(f => f[0] === st.filter) }); }
     else if (k === 'RT') { const r = Math.min(Math.floor((n - 1) / COLS), st.row + 2); mv({ row: r, col: Math.min(st.col, n - 1 - r * COLS) }); }
     else if (k === 'LT') mv({ row: Math.max(0, st.row - 2) });
   });
@@ -154,12 +181,12 @@ export function Discover({ theme, cname, games, extra = [], self, st, set, optio
   const visRows = 2, rowTop = shelves ? Math.max(0, Math.min(st.row, rows.length - visRows)) : Math.max(0, st.row - 1);
 
   return (
-    <div className={`dsc ${theme} ${shape} ${onTab ? 'in-tabs' : ''}`}>
+    <div className={`dsc ${theme} ${shape} ${onTab ? 'in-tabs' : ''} ${hasGroups ? 'has-groups' : ''}`}>
       <div className="dsc-hd">
-        <h2>Descobrir<small>{cname}</small></h2>
+        <h2>{title}<small>{cname}</small></h2>
         <div className={`dsc-q ${st.zone === 'search' ? 'f' : ''}`} onClick={focusSearch}>
           <span className="ic">⌕</span>
-          <SearchBox ref={searchRef} value={st.q} nav={false} className="dsc-qi" placeholder={`Buscar em ${cname} por nome, estúdio ou ano`}
+          <SearchBox ref={searchRef} value={st.q} nav={false} className="dsc-qi" placeholder={`Buscar em ${place ?? cname} por nome, estúdio ou ano`}
             onChange={v => up({ q: v, row: 0, col: 0 })} onDone={() => up({ zone: st.q.trim() ? 'body' : 'chips' })} />
           {st.q && <span className="cnt">{plural(grid.length, 'resultado', 'resultados')}</span>}
         </div>
@@ -172,6 +199,16 @@ export function Discover({ theme, cname, games, extra = [], self, st, set, optio
         <button className={`sort ${st.zone === 'chips' && st.chip === FILTERS.length ? 'on' : ''}`} onClick={() => pickChip(FILTERS.length)}>Ordenar: {SORTS.find(s => s[0] === st.sort)![1]}</button>
       </div>
 
+      {hasGroups && (
+        <div className={`dsc-groups ${st.zone === 'groups' ? 'f' : ''}`} ref={grpRef}>
+          <span className="lb">{groupLabel}</span>
+          {[['', all.length + allExtra.length] as [string, number], ...groups].map(([k, n], i) => (
+            <button key={k || '*'} className={`${i === gIdx ? 'cur' : ''} ${st.zone === 'groups' && i === gIdx ? 'on' : ''}`} onClick={() => { up({ zone: 'groups' }); toGroup(i); }}>
+              {k || allLabel}<small>{n}</small>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="dsc-body" ref={bodyRef}>
         {shelves ? (
           <div className="dsc-in" style={{ transform: `translateY(-${rowTop * ROW_H}px)` }}>
@@ -211,7 +248,8 @@ export function Discover({ theme, cname, games, extra = [], self, st, set, optio
       {hints !== false && (
         <div className="dsc-ft">
           {st.menu ? <><span><Glyph a="ok" />Confirmar</span><span><Glyph a="back" />Fechar</span></>
-            : st.zone === 'search' ? <><span><Glyph a="ok" />Digitar</span><span><Glyph a="ud" />Filtros</span><span><Glyph a="back" />{st.q ? 'Limpar' : 'Voltar'}</span></>
+            : st.zone === 'search' ? <><span><Glyph a="ok" />Digitar</span><span><Glyph a={onTab ? 'lr' : 'ud'} />Filtros</span><span><Glyph a="back" />{st.q ? 'Limpar' : 'Voltar'}</span></>
+            : st.zone === 'groups' ? <><span><Glyph a="lr" />{groupLabel}</span><span><Glyph a="ud" />Jogos</span><span><Glyph a="back" />Voltar</span></>
             : st.zone === 'chips' ? <><span><Glyph a="lr" />Filtro</span>{onTab && <span><Glyph a="lb" /><Glyph a="rb" />Seção</span>}<span><Glyph a="ok" />Escolher</span><span><Glyph a="back" />Voltar</span></>
             : <><span><Glyph a="ok" />Ver jogo</span><span><Glyph a="x" />Ações</span><span><Glyph a="y" />Buscar</span><span><Glyph a="lb" /><Glyph a="rb" />{onTab ? 'Seção' : 'Filtro'}</span><span><Glyph a="back" />{st.q ? 'Limpar busca' : 'Voltar'}</span></>}
         </div>

@@ -20,6 +20,7 @@ interface Props {
   sel: number; setSel: (i: number | ((prev: number) => number)) => void;
   onEnterConsole: (id: ConsoleId, opts?: { game?: string; tab?: 'lib' | 'cat' }) => void;
   onSettings: () => void;
+  onAll: () => void;
 }
 
 function Clock() {
@@ -28,7 +29,7 @@ function Clock() {
   return <span className="clock">{t}</span>;
 }
 
-export function Select({ active, list, page, setPage, sel, setSel, onEnterConsole, onSettings }: Props) {
+export function Select({ active, list, page, setPage, sel, setSel, onEnterConsole, onSettings, onAll }: Props) {
   const me = useProfile();
   const trpc = useTRPC(), qc = useQueryClient();
   const summary = useQuery(trpc.library.summary.queryOptions());
@@ -77,7 +78,7 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
   useSpatialNav(root, {
     active: active && page === 'act' && !ov, initial: '[data-main]',
     onFocus: setCaption,
-    onKey: k => { if (k === 'Tab' || k === 'LB' || k === 'RB' || k === 'Select') { go('stage'); return true; } if (k === 'Escape') return true; },
+    onKey: k => { if (k === 'LB') { sfx.play('ok'); onAll(); return true; } if (k === 'Tab' || k === 'RB' || k === 'Select') { go('stage'); return true; } if (k === 'Escape') return true; },
   });
 
   const c = list[sel]!, group = c.id === 'other' ? otherConsoles(s.hidden) : [c.id];
@@ -92,6 +93,7 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
         <div className="seg" role="tablist">
           <button role="tab" data-hf className={page === 'act' ? 'on' : ''} aria-selected={page === 'act'} onClick={() => go('act')}>INÍCIO</button>
           <button role="tab" data-hf className={page === 'stage' ? 'on' : ''} aria-selected={page === 'stage'} onClick={() => { go('stage'); setZone('car'); }}>CONSOLES</button>
+          <button role="tab" data-hf onClick={() => { sfx.play('ok'); onAll(); }}>TODOS OS JOGOS</button>
         </div>
         <div className="top-right">
           <button className={`hm-pill ${unseen ? 'has' : ''}`} data-hf data-cap="Radar" onClick={() => { sfx.play('ok'); setOv('radar'); }}><i />{unseen ? plural(unseen, 'novidade', 'novidades') : 'radar'}</button>
@@ -131,7 +133,7 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
 
       {add.error && <div className="toasts"><div className="toast"><div className="toast-k">NÃO DEU PARA ADICIONAR</div><div className="toast-g">{add.error.message}</div></div></div>}
 
-      <Hints items={page === 'act' ? [['ok', 'Abrir'], ['sel', 'Consoles'], ['menu', 'Menu']] : zone === 'top' ? [['lr', 'Mover'], ['ok', 'Abrir'], ['ud', 'Voltar ao palco']] : zone === 'grp' ? [['lr', 'Fabricante'], ['ok', 'Ligar'], ['ud', 'Palco']] : [['lr', 'Console'], ['ok', 'Ligar'], ['ud', 'Menu e fabricantes'], ['menu', 'Menu']]} />
+      <Hints items={page === 'act' ? [['ok', 'Abrir'], ['sel', 'Consoles'], ['lb', 'Todos os jogos'], ['menu', 'Menu']] : zone === 'top' ? [['lr', 'Mover'], ['ok', 'Abrir'], ['ud', 'Voltar ao palco']] : zone === 'grp' ? [['lr', 'Fabricante'], ['ok', 'Ligar'], ['ud', 'Palco']] : [['lr', 'Console'], ['ok', 'Ligar'], ['ud', 'Menu e fabricantes'], ['menu', 'Menu']]} />
       <div className="sel-tools">
         <button className="icon-btn" data-hf title="Trocar botões mostrados (C)" onClick={() => {
           const o = ['auto', 'kb', 'xbox', 'ps', 'nin'] as const; setSettings({ pad: o[(o.indexOf(s.pad) + 1) % o.length]! });
