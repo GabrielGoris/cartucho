@@ -1,0 +1,26 @@
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { useSubscription } from '@trpc/tanstack-react-query';
+import { useTRPC } from '../trpc';
+
+export function TitleBar({ ctx }: { ctx: string | null }) {
+  const trpc = useTRPC();
+  const st = useQuery(trpc.win.state.queryOptions());
+  const [fs, setFs] = useState<boolean | null>(null);
+  useSubscription(trpc.win.onState.subscriptionOptions(undefined, { onData: d => setFs(d.fullscreen) }));
+  const full = fs ?? st.data?.fullscreen ?? false;
+  const toggle = useMutation(trpc.win.toggleFullScreen.mutationOptions());
+  useEffect(() => { document.body.classList.toggle('has-tb', !full); }, [full]);
+  if (full) return null;
+  return (
+    <header className={`tb ${navigator.userAgent.includes('Mac') ? 'mac' : ''}`} onDoubleClick={e => { if (e.target === e.currentTarget) toggle.mutate(); }}>
+      <span className="logo tb-logo"><i />CARTUCHO</span>
+      {ctx && <span className="tb-ctx">{ctx}</span>}
+      <span className="sp" />
+      <button className="tb-fs" title="Tela cheia (Alt+Enter ou F11)" onClick={() => toggle.mutate()}>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" strokeWidth="1.6" /></svg>
+        Tela cheia<kbd>Alt+Enter</kbd>
+      </button>
+    </header>
+  );
+}

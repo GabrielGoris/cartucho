@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSubscription } from '@trpc/tanstack-react-query';
 import type { ConsoleId, PlayEvent, UnlockEvent } from '@shared/types';
 import { pushProgress } from './lib/progress';
@@ -22,6 +22,7 @@ import { ConsoleView } from './views/ConsoleView';
 import { Settings } from './views/Settings';
 import { ConsolePicker } from './views/ConsolePicker';
 import { HUBS } from './hubs';
+import { TitleBar } from './components/TitleBar';
 
 type Inside = { id: ConsoleId; game?: string; tab?: 'lib' | 'cat'; key: number };
 const LAST = 'cartucho.lastConsole';
@@ -54,6 +55,8 @@ export function App() {
   const toast = (t: { k: string; n: string; g: string }) => { setToasts(x => [...x, t]); setTimeout(() => setToasts(x => x.filter(y => y !== t)), 6000); };
 
   const trpc = useTRPC(), qc = useQueryClient();
+  const overlay = useMutation(trpc.win.overlay.mutationOptions());
+  useEffect(() => { overlay.mutate({ color: palette.bg0, symbol: palette.acc }); }, [palette.id]);
   const summary = useQuery(trpc.library.summary.queryOptions());
 
   const timers = useRef<number[]>([]);
@@ -119,6 +122,8 @@ export function App() {
   const askPicker = picker || (!s.picked && !booting && !inside && !settingsOpen && page === 'stage');
 
   return (
+    <>
+    <TitleBar ctx={inside ? CONSOLES.find(c => c.id === inside.id)?.name ?? null : null} />
     <div id="tv" className={tvClass} style={{ ['--crt' as string]: s.crtLvl / 100 }}>
       <Stage list={list} sel={sel} mode={stageMode} zoom={zoom} palette={palette} pixel={s.pixel} onSelect={i => { sfx.play('move'); setSel(i); }} onEnter={i => enterConsole(list[i]!.id)} />
       {!inside && (
@@ -151,5 +156,6 @@ export function App() {
         ))}
       </div>
     </div>
+    </>
   );
 }

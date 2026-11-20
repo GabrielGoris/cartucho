@@ -39,6 +39,7 @@ if (typeof window !== 'undefined') {
   addEventListener('mousemove', () => setLast('kb'), { passive: true });
   addEventListener('keydown', e => {
     setLast('kb');
+    if (e.key === 'F11' || (e.altKey && e.key === 'Enter')) { e.preventDefault(); return; }
     if (e.repeat && (e.key === 'Enter' || e.key === 'Escape')) return;
     if (isTyping(e.target)) { if (e.key === 'Escape') (e.target as HTMLElement).blur(); return; }
     if (!e.ctrlKey && !e.altKey && !e.metaKey && shortcut?.(e.key)) { e.preventDefault(); return; }
