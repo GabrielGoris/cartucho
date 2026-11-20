@@ -1,20 +1,12 @@
-/**
- * Palco 3D: os consoles em carrossel sobre uma mesa redonda com a linha neon,
- * cada um numa plataforma hexagonal. Portado do protótipo para React Three Fiber.
- */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { Palette } from '../lib/palettes';
-import type { StageConsole } from './consoles';
+import { stageSize, type StageConsole } from './consoles';
 import { loadStageModel, setModelFocus, type StageModel } from './models';
 
-const PAD_Y = 0.026, PAD_TOP = PAD_Y + 0.04;   // plataforma um pouco acima da linha da mesa
-/**
- * A mesa cresce com o número de consoles à mostra (cada um precisa de ~3 unidades de borda para as
- * plataformas não se encostarem); a câmera fica sempre à mesma distância do console da frente.
- */
+const PAD_Y = 0.026, PAD_TOP = PAD_Y + 0.04;
 function geometry(n: number) {
   const R = Math.max(7.2, (Math.max(1, n) * 3.05) / (Math.PI * 2));
   return {
@@ -26,12 +18,12 @@ type Geo = ReturnType<typeof geometry>;
 
 export type StageMode = 'stage' | 'behind' | 'hidden';
 interface Props {
-  list: StageConsole[];   // consoles à mostra, na ordem do carrossel
+  list: StageConsole[];
   sel: number;
-  mode: StageMode;        // stage = palco em uso; behind = atrás da Home (desfocado); hidden = dentro de um console
-  zoom: boolean;          // câmera chega perto (ao ligar um console)
+  mode: StageMode;
+  zoom: boolean;
   palette: Palette;
-  pixel: boolean;         // renderiza em baixa resolução (visual retrô)
+  pixel: boolean;
   onSelect: (i: number) => void;
   onEnter: (i: number) => void;
 }
@@ -56,7 +48,6 @@ function Scene({ list, sel, mode, zoom, palette: P, pixel, onSelect, onEnter }: 
   const { gl, scene, camera, size, setDpr } = useThree();
   const G = useMemo(() => geometry(list.length), [list.length]), { R, RING_R } = G;
 
-  // ambiente de luz (reflexos suaves nos plásticos) + fundo e neblina na cor da paleta
   useEffect(() => {
     const pm = new THREE.PMREMGenerator(gl);
     const env = pm.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -65,9 +56,7 @@ function Scene({ list, sel, mode, zoom, palette: P, pixel, onSelect, onEnter }: 
   }, [gl, scene]);
   useEffect(() => { scene.background = new THREE.Color(P.bg); scene.fog = new THREE.Fog(P.bg, 12, 26); }, [scene, P.bg]);
 
-  // baixa resolução de propósito: ~520 px de largura, ampliados sem suavizar (CSS pixelated)
   useEffect(() => { setDpr(pixel ? Math.min(1, 520 / Math.max(1, size.width)) : Math.min(2, window.devicePixelRatio || 1)); }, [pixel, size.width, setDpr]);
-  // o modelo sobe um pouco na tela, deixando a parte de baixo para o nome
   useEffect(() => {
     const cam = camera as THREE.PerspectiveCamera, w = size.width, h = size.height;
     cam.fov = w / h < 1.2 ? 50 : 36;
@@ -96,7 +85,6 @@ function Scene({ list, sel, mode, zoom, palette: P, pixel, onSelect, onEnter }: 
         <cylinderGeometry args={[R + 1.3, R + 1.4, 0.2, 64]} />
         <meshStandardMaterial color={P.panel} roughness={0.9} flatShading />
       </mesh>
-      {/* linha contínua rente à mesa; as plataformas ficam por cima, então ela "entra" por baixo de cada uma */}
       <mesh rotation-x={-Math.PI / 2} position-y={-0.017}>
         <ringGeometry args={[RING_R - 0.045, RING_R + 0.045, 160]} />
         <meshBasicMaterial color={P.acc} />
@@ -116,7 +104,6 @@ function Carousel({ list, G, sel, mode, zoom, padColor, onSelect, onEnter }: { l
   const tmp = useMemo(() => new THREE.Vector3(), []);
   const { camera, gl } = useThree();
 
-  // girar pelo caminho mais curto: o alvo é sempre -sel·STEP, na volta mais perto de onde já está
   useEffect(() => {
     const a = anim.current, base = -sel * STEP, TAU = Math.PI * 2;
     a.rotTarget = base + Math.round((a.rotTarget - base) / TAU) * TAU;
@@ -171,10 +158,32 @@ function Carousel({ list, G, sel, mode, zoom, padColor, onSelect, onEnter }: { l
 
 function ConsoleModel({ c, mixers }: { c: StageConsole; mixers: Set<THREE.AnimationMixer> }) {
   const [m, setM] = useState<StageModel | null>(null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     let alive = true;
-    loadStageModel(c).then(x => { if (!alive) return; setM(x); if (x.mixer) mixers.add(x.mixer); }, e => console.warn(`[palco] ${c.id}:`, e));
+    loadStageModel(c).then(x => { if (!alive) return; setM(x); if (x.mixer) mixers.add(x.mixer); }, e => { console.warn(`[palco] ${c.id}:`, e); if (alive) setFailed(true); });
     return () => { alive = false; };
   }, [c, mixers]);
-  return m ? <primitive object={m.object} /> : null;
+  if (m) return <primitive object={m.object} />;
+  return failed ? <GenericConsole c={c} /> : null;
+}
+
+function GenericConsole({ c }: { c: StageConsole }) {
+  const w = stageSize(c.cm, true), h = w * 0.2, d = w * 0.72;
+  return (
+    <group>
+      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[w, h, d]} />
+        <meshStandardMaterial color="#1c1c22" roughness={0.45} metalness={0.15} />
+      </mesh>
+      <mesh position={[0, h * 0.55, d / 2 + 0.002]}>
+        <planeGeometry args={[w * 0.86, h * 0.08]} />
+        <meshStandardMaterial color={c.color} emissive={c.color} emissiveIntensity={1.4} />
+      </mesh>
+      <mesh position={[0, h + 0.002, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[w * 0.94, d * 0.9]} />
+        <meshStandardMaterial color="#26262e" roughness={0.6} />
+      </mesh>
+    </group>
+  );
 }

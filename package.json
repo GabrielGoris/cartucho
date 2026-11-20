@@ -1,7 +1,7 @@
 {
   "name": "cartucho",
   "productName": "Cartucho",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "engines": {
     "node": ">=22.13"
@@ -61,6 +61,8 @@
     },
     "files": [
       "out/**/*",
+      "!out/renderer/models/playstation_2.glb",
+      "!out/renderer/models/a_playstation_2_slim.glb",
       "package.json"
     ],
     "win": {
