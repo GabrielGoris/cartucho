@@ -11,28 +11,29 @@ O Cartucho é um projeto pessoal e gratuito, sem nenhuma ligação com Nintendo,
 - A lista de jogos vem do [Recompendium](https://recompendium.com/) e as imagens do [LaunchBox Games Database](https://gamesdb.launchbox-app.com/), consultados no seu PC; nada disso fica neste repositório.
 - Para os consoles que ainda estão à venda (hoje, **Nintendo Switch e Switch 2**), o Cartucho não baixa nem atualiza nada: mostra só quais jogos têm recomp, sem link nem nome do projeto. Você pesquisa e instala por conta própria e depois adiciona a pasta no Cartucho.
 
-## O que já funciona
+## Baixar
 
-- **Abertura** com o cartucho entrando no console e o resumo da biblioteca (dá para desligar nas configurações).
-- **Início**: o jogo mais recente em destaque e os outros numa fileira, navegável por setas ou controle.
-- **Palco 3D** (React Three Fiber) com 20 lugares: NES, Game Boy (GB/GBC/GBA), SNES, N64, GameCube, DS, Wii, Switch, Switch 2, PS1 a PS5, PSP, Xbox, Xbox 360, Mega Drive (com Mega CD e 32X), PC e Outros. Nome, ano e contagem real de recomps e instalados por console.
-- **Você escolhe o palco**: na primeira vez nos Consoles o Cartucho pergunta quais aparecem (depois em Configurações → Consoles no palco). Os escondidos não somem: os jogos deles vão para **Outros**, que separa tudo por console de origem.
-- **Hubs no estilo de cada console**: Nintendo Switch e Switch 2 (fileira de blocos, atalhos, telas com barra lateral) e PlayStation 5 (fileira de ícones com o jogo em destaque, cartões de conquistas, tempo de jogo, novidades e versão) já têm o seu, todos com busca. Os outros consoles ainda usam o hub provisório.
-- **Instalar e atualizar** pelo GitHub, direto da ficha do jogo no catálogo (exceto Switch e Switch 2, veja o aviso acima): escolhe o download certo para Windows, confere o hash publicado, passa no Windows Defender, desempacota numa pasta própria e acha o .exe. Atualizações só entram se vierem da mesma conta, guardam cópia dos arquivos trocados em `_cartucho-backup` e nunca sobrescrevem configurações (.ini, .toml, .cfg…) nem saves. Projetos cujo download não é o jogo pronto (ferramentas que montam o jogo a partir da sua cópia) são avisados antes de baixar.
-- **Jogar e tempo de jogo**: o Jogar abre o .exe e acompanha até ele fechar, como na Steam (tempo total, sessões, últimos 14 dias). Com um jogo aberto, o palco 3D para de desenhar.
-- **Desinstalar** apaga só o que veio no download; saves e configurações que você mudou ficam.
-- **Imagens em boa resolução**: capas, artes de fundo e logos do [LaunchBox Games Database](https://gamesdb.launchbox-app.com/) (sem conta). Na primeira vez o Cartucho baixa o banco deles (~100 MB, atualizado uma vez por mês) e depois só as imagens dos jogos que aparecem na tela, guardadas em `media/` dentro dos dados do app. Sem o jogo lá, usa a capa do Recompendium.
-- **Página do jogo** (PS5): arte grande, botões de jogar/instalar/escolher pasta, descrição, requisitos e até 4 capturas de tela do LaunchBox, que dá para ampliar.
-- **Textos em português**: as descrições e os requisitos do catálogo vêm em inglês; o Cartucho traduz pelo [MyMemory](https://mymemory.translated.net/) (grátis, sem conta) e guarda cada tradução no banco, então cada texto é traduzido uma vez só. Se o limite diário do serviço acabar, mostra o original. Dá para desligar em Configurações.
-- **Configurações** (tecla S ou ⚙): paletas, filtro CRT, moldura, brilho, palco pixelado, sons, abertura, botões do controle e menos movimento.
-- **Controle**: teclado, Xbox, PlayStation e Nintendo; os botões na tela mudam conforme o controle conectado.
+Baixe o instalador (`Cartucho-Setup-x.y.z.exe`) na página de [Releases](https://github.com/GabrielGoris/cartucho/releases/latest). Depois de instalado, o Cartucho se atualiza sozinho.
 
-- **Catálogo** do [Recompendium](https://recompendium.com/), filtrado por console, com busca. Fica salvo no seu PC, então abre offline com a última cópia.
-- **Radar**: depois da primeira carga, avisa jogo novo, mudança de status (ex.: Em progresso → Jogável) e versão nova de jogo que você tem.
-- **Meus jogos**: você aponta a pasta onde o recomp está instalado e o Cartucho reconhece qual é.
-- **Conquistas** (camadas 1 e 2): a lista original vem da sua cópia do jogo, e os desbloqueios vêm do arquivo que o próprio recomp grava. Enquanto o Cartucho está aberto, ele observa esse arquivo e avisa na hora quando você desbloqueia algo.
+Como o instalador não tem assinatura digital, o Windows pode mostrar "O Windows protegeu o computador": clique em **Mais informações** e depois em **Executar assim mesmo**.
 
-Recomps com conquistas suportados hoje: **UnleashedRecomp**, **MarathonRecomp** (Sonic 06), **Sonic 3 A.I.R.** e **Sonic 1/2 (2013)** do RSDKv4. Detalhes e limitações em [docs/conquistas.md](docs/conquistas.md).
+## Apoie
+
+O Cartucho é de graça e vai continuar sendo. Se ele te ajudou, dá para apoiar em [buymeacoffee.com/goris](https://buymeacoffee.com/goris) (também em Configurações e no menu do Start/≡ do controle).
+
+## O que ele faz
+
+- **Palco 3D** com 20 lugares (NES, Game Boy, SNES, N64, GameCube, DS, Wii, Switch, Switch 2, PS1 a PS5, PSP, Xbox, Xbox 360, Mega Drive, PC e Outros). Você escolhe quais aparecem; os escondidos vão para **Outros**, separados por plataforma.
+- **Um hub com a cara de cada console**, com o mesmo jeito de usar em todos: **Meus jogos** (nos consoles antigos, em cartuchos e caixas parecidos com os de verdade), **Descobrir** (destaques, filtros, ordenação e busca), novidades, conquistas, tempo de jogo e ajustes.
+- **Todos os jogos**: o catálogo inteiro de todos os consoles numa tela só, com filtro por console.
+- **Página do jogo** no mesmo padrão em todos os hubs: capa em tamanho original, ações, capturas de tela e descrição.
+- **Instalar e atualizar** pelo GitHub, direto do catálogo (exceto Switch e Switch 2, veja o aviso acima): escolhe o download certo, confere o hash, passa no Windows Defender e acha o .exe. Atualizações guardam cópia do que foi trocado e nunca mexem em configurações nem saves.
+- **Tempo de jogo como na Steam**, inclusive de jogos abertos fora do Cartucho, enquanto ele estiver aberto ou na bandeja. Dá para abrir com o Windows e criar atalho na Área de Trabalho que abre o jogo pelo Cartucho.
+- **Conquistas** lidas dos arquivos dos próprios recomps, com aviso na hora em que você desbloqueia. Suportados hoje: **UnleashedRecomp**, **MarathonRecomp** (Sonic 06), **Sonic 3 A.I.R.** e **Sonic 1/2 (2013)** do RSDKv4. Detalhes em [docs/conquistas.md](docs/conquistas.md).
+- **Radar**: avisa jogo novo no catálogo, mudança de status e versão nova de jogo que você tem.
+- **Controle em tudo**: Xbox, PlayStation e Nintendo, com teclado na tela para a busca, seletor de pastas e confirmações dentro do app. Teclado e mouse também funcionam.
+- **Imagens** do [LaunchBox Games Database](https://gamesdb.launchbox-app.com/) e **textos traduzidos** para o português pelo [MyMemory](https://mymemory.translated.net/), guardados no seu PC.
+- **Perfil, paletas, filtro CRT, sons, tela cheia** (Alt+Enter ou F11) e janela que lembra o tamanho e a posição.
 
 ## Como rodar
 
@@ -45,7 +46,7 @@ npm run dev
 
 Não há módulo nativo para compilar: o banco usa o SQLite que já vem no Node/Electron, então não precisa de Python nem Visual Studio.
 
-Atalhos: setas/Enter/Esc (ou o controle), Tab alterna Início/Consoles, Q/E trocam de console ou aba, S configurações, P troca a paleta, C troca os botões mostrados, M liga/desliga o som, F11 tela cheia.
+Atalhos: setas/Enter/Esc (ou o controle), Tab alterna Início/Consoles, Q/E trocam de console ou aba, X ações, Y busca, F1 menu (Start), F2 Select, S configurações, P troca a paleta, C troca os botões mostrados, M liga/desliga o som, Alt+Enter ou F11 tela cheia.
 
 Outros comandos:
 
@@ -54,7 +55,7 @@ Outros comandos:
 | `npm test` | testes dos leitores de arquivo e do serviço de conquistas |
 | `npm run typecheck` | checagem de tipos |
 | `npm run build` | gera o app em `out/` |
-| `npm run dist` | gera o instalador do Windows em `release/` |
+| `npm run dist` | gera o instalador do Windows em `release/` (no Windows) |
 
 ### Variáveis úteis para desenvolvimento
 
@@ -67,12 +68,21 @@ Outros comandos:
 
 Os jogos instalados pelo Cartucho vão para `%USERPROFILE%\Games\Cartucho` (dá para mudar em Configurações → Pasta dos jogos).
 
+## Lançar uma versão
+
+1. Mude a versão no `package.json` (ex.: `1.0.1`) e faça o commit.
+2. Crie a tag e envie: `git tag v1.0.1` e `git push origin main --follow-tags`.
+3. O workflow **Lançar versão** roda os testes, gera o instalador e publica no GitHub Releases. Quem já tem o Cartucho recebe a atualização sozinho.
+
 ## Estrutura
 
 ```
 src/
   main/                 processo principal (Electron)
-    index.ts            janela, tRPC por IPC
+    index.ts            app, tRPC por IPC
+    window.ts           janela, tela cheia e barra de título
+    background.ts       bandeja, abrir com o Windows e atalhos
+    updater.ts          atualização automática (GitHub Releases)
     router.ts           tudo que a tela pode pedir
     db.ts               SQLite (node:sqlite) + migrações
     catalog.ts          catálogo do Recompendium + radar
@@ -90,7 +100,8 @@ src/
     public/models/      modelos 3D do palco (.glb) e CREDITOS.md
     src/stage/          palco 3D (R3F): consoles, carregamento dos modelos, cena
     src/hubs/           hubs no estilo de cada console (dados e ações comuns em data.ts)
-    src/views/          abertura, Início, hub do console, configurações, radar e perfil
+    src/components/     Descobrir, página do jogo, teclado na tela, barra de título
+    src/views/          abertura, Início, Todos os jogos, configurações, radar, perfil e apoio
     src/lib/            entrada (teclado/controle), navegação por setas, paletas, sons, configurações
   shared/               tipos e tabelas usados dos dois lados
 test/                   testes com arquivos sintéticos montados byte a byte
@@ -99,10 +110,14 @@ docs/                   notas técnicas
 
 ## Créditos
 
-- Modelos 3D: veja [src/renderer/public/models/CREDITOS.md](src/renderer/public/models/CREDITOS.md) (atenção às licenças NC, ND e à do PS2 antes de publicar).
+- Modelos 3D: veja [src/renderer/public/models/CREDITOS.md](src/renderer/public/models/CREDITOS.md) (cada modelo tem a sua licença; os NC só podem ser usados sem fins comerciais).
 
 - Catálogo: [Recompendium](https://recompendium.com/).
 - Imagens dos jogos: [LaunchBox Games Database](https://gamesdb.launchbox-app.com/).
 - Lógica de instalação e acompanhamento inspirada no Harbour (MIT-0).
 - Formatos do Xbox 360 conforme [Xenia](https://github.com/xenia-project/xenia) e [XenonRecomp](https://github.com/hedge-dev/XenonRecomp).
 - Nomes das conquistas do Sonic 3 A.I.R. e do RSDKv4 vêm do código desses projetos; veja [docs/conquistas.md](docs/conquistas.md).
+
+## Licença
+
+O código é MIT (veja [LICENSE](LICENSE)). Os modelos 3D têm as licenças dos seus autores, listadas em CREDITOS.md.

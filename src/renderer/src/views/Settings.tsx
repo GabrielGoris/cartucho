@@ -1,3 +1,4 @@
+import { askConfirm } from '../lib/dialogs';
 import { useRef, type ReactNode } from 'react';
 import { SearchBox } from '../components/SearchBox';
 import { AVATARS, useProfile } from '../lib/profile';
@@ -54,6 +55,7 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
   const artRefresh = useMutation(trpc.art.refresh.mutationOptions());
   const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => qc.setQueryData(trpc.settings.portsDir.queryKey(), d) }));
   const me = useProfile();
+  const quit = useMutation(trpc.system.quit.mutationOptions());
   const nameRef = useRef<HTMLInputElement>(null);
   const win = useQuery(trpc.win.state.queryOptions());
   useSubscription(trpc.win.onState.subscriptionOptions(undefined, { onData: d => qc.setQueryData(trpc.win.state.queryKey(), d) }));
@@ -112,6 +114,10 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
       <div className="st-w">
         <header className="st-h"><span className="glow">CONFIGURAÇÕES</span><span className="st-hint"><Glyph a="ud" />escolher <Glyph a="lr" />mudar <Glyph a="back" />fechar</span></header>
         <div className="st-rows" ref={root}>
+          <button className="st-r st-sup" data-hf onClick={() => { sfx.play('ok'); onSupport(); }}>
+            <span><span className="t">♥ Apoiar o Cartucho</span><span className="d">O Cartucho é de graça e vai continuar sendo. Um café ajuda a manter o catálogo e os hubs em dia.</span></span>
+            <span className="c"><span className="st-pick"><b style={{ minWidth: 0 }}>☕ Abrir</b>›</span></span>
+          </button>
           {SECTIONS.map(([sec, rows]) => (
             <div key={sec}>
               <div className="st-sec">{sec}</div>
@@ -160,11 +166,11 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
             <span><span className="t">Cartucho {u ? `v${u.current}` : ''}</span><span className="d">{updText}</span></span>
             <span className="c"><span className="st-pick"><b style={{ minWidth: 0 }}>{u?.status === 'ready' ? 'Reiniciar e atualizar' : check.isPending || u?.status === 'checking' ? 'Verificando…' : 'Verificar agora'}</b>›</span></span>
           </button>
-          <div className="st-sec">SOBRE</div>
-          <button className="st-r" data-hf onClick={() => { sfx.play('ok'); onSupport(); }}>
-            <span><span className="t">Apoiar o Cartucho</span><span className="d">O Cartucho é de graça. Um café ajuda a manter tudo em dia.</span></span>
-            <span className="c"><span className="st-pick"><b style={{ minWidth: 0 }}>☕</b>›</span></span>
+          <button className="st-r" data-hf onClick={() => { sfx.play('ok'); void askConfirm({ title: 'Sair do Cartucho?', text: 'O Cartucho fecha de vez, sem ficar na bandeja.', ok: 'Sair', cancel: 'Ficar' }).then(y => { if (y) quit.mutate(); }); }}>
+            <span><span className="t">Sair do Cartucho</span><span className="d">Fecha o app de vez. Também fica no menu do Start/≡ do controle.</span></span>
+            <span className="c"><span className="st-pick"><b style={{ minWidth: 0 }}>⏻</b>›</span></span>
           </button>
+          <div className="st-sec">SOBRE</div>
           <p className="st-credits">
             Catálogo: Recompendium (recompendium.com). Imagens: LaunchBox Games Database. Modelos 3D do Sketchfab, de: Laser Design (SNES, CC BY-NC), Joseph Rohm (N64, CC BY),
             Jeffrey fan 2000 (GameCube, CC BY), elouisetrewartha (Wii, CC BY-NC), Smoggybeard (Switch, CC BY-NC-SA), NAIT Studio (Switch 2, CC BY),

@@ -6,7 +6,7 @@ import { Glyph, PAD_NAMES, useKeys, usePadKind } from '../lib/input';
 import { useSpatialNav } from '../lib/spatial';
 import { getSettings, setSettings, useSettings } from '../lib/settings';
 import { sfx } from '../lib/sfx';
-import { setMenuOpen, useConfirmReq } from '../lib/dialogs';
+import { askConfirm, setMenuOpen, useConfirmReq } from '../lib/dialogs';
 
 export function ConfirmHost() {
   const req = useConfirmReq();
@@ -101,12 +101,15 @@ export function CartuchoMenu({ inside, onSettings, onRadar, onProfile, onPickCon
   const pad = usePadKind();
   useEffect(() => { setMenuOpen(true); return () => setMenuOpen(false); }, []);
   useSpatialNav(root, { active: true, initial: '[data-main]', onKey: k => { if (k === 'Escape' || k === 'Start') { sfx.play('back'); onClose(); return true; } } });
+  const trpc = useTRPC();
+  const quit = useMutation(trpc.system.quit.mutationOptions());
   const cyclePad = () => { const o = ['auto', 'kb', 'xbox', 'ps', 'nin'] as const; setSettings({ pad: o[(o.indexOf(getSettings().pad) + 1) % o.length]! }); };
   const go = (f: () => void) => () => { sfx.play('ok'); onClose(); f(); };
   return (
     <div className="ov gl-ov" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="gl-menu" ref={root}>
         <h3><i />CARTUCHO{inside ? <small>{inside}</small> : null}</h3>
+        <button data-hf className="sup-b" onClick={go(onSupport)}>♥ Apoiar o Cartucho</button>
         {inside && <button data-hf data-main onClick={go(onLeave)}>◀ Voltar ao palco</button>}
         <button data-hf data-main={inside ? undefined : true} onClick={go(onSettings)}>⚙ Configurações</button>
         {inside !== 'Todos os jogos' && <button data-hf onClick={go(onAll)}>▤ Todos os jogos</button>}
@@ -115,7 +118,7 @@ export function CartuchoMenu({ inside, onSettings, onRadar, onProfile, onPickCon
         <button data-hf onClick={go(onPickConsoles)}>▦ Consoles no palco</button>
         <button data-hf onClick={() => { sfx.play('move'); cyclePad(); }}>🎮 Botões: {s.pad === 'auto' ? `Auto (${PAD_NAMES[pad]})` : PAD_NAMES[s.pad]}</button>
         <button data-hf onClick={() => { setSettings({ snd: !s.snd }); sfx.play('move'); }}>♪ Sons: {s.snd ? 'ligados' : 'desligados'}</button>
-        <button data-hf onClick={go(onSupport)}>♥ Apoiar o Cartucho</button>
+        <button data-hf className="quit" onClick={() => { sfx.play('ok'); void askConfirm({ title: 'Sair do Cartucho?', text: 'O Cartucho fecha de vez, sem ficar na bandeja. Jogos abertos continuam rodando, mas o tempo deles para de contar.', ok: 'Sair', cancel: 'Ficar' }).then(y => { if (y) quit.mutate(); }); }}>⏻ Sair do Cartucho</button>
         <div className="gl-h"><span><Glyph a="ok" />Escolher</span><span><Glyph a="back" />Fechar</span></div>
       </div>
     </div>

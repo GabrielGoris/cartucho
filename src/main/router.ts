@@ -2,7 +2,7 @@ import { EventEmitter, on } from 'node:events';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { homedir, userInfo } from 'node:os';
 import { dirname, extname, join, parse } from 'node:path';
-import { BrowserWindow, dialog, shell } from 'electron';
+import { app, BrowserWindow, dialog, shell } from 'electron';
 import { initTRPC } from '@trpc/server';
 import superjson from 'superjson';
 import { z } from 'zod';
@@ -109,6 +109,7 @@ export function createRouter(deps: RouterDeps) {
 
     system: t.router({
       user: t.procedure.query(() => { try { return userInfo().username; } catch { return ''; } }),
+      quit: t.procedure.mutation(() => { const b = deps.bg?.(); if (b) b.quitting = true; setTimeout(() => app.quit(), 120); }),
     }),
 
     background: t.router({
