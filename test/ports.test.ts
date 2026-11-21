@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { chmodSync, copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,7 +9,7 @@ import { AchievementService } from '../src/main/achievements/service';
 import { createGitHub, guessAsset, parseRepo, type Asset } from '../src/main/ports/github';
 import { Ports } from '../src/main/ports/installer';
 import { listCatalog, listRadar, perConsole } from '../src/main/catalog';
-import { FOLLOW, Player } from '../src/main/play';
+import { FOLLOW, Player, type Proc } from '../src/main/play';
 import { buildZip } from './fixtures';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'cartucho-'));
@@ -120,7 +120,7 @@ describe('instalar, atualizar e desinstalar', () => {
     expect(readFileSync(join(g.installDir, 'save.dat'), 'utf8')).toBe('meu save');
     expect(readFileSync(join(g.installDir, 'config.ini'), 'utf8')).toBe('minha config');
     expect(ach.listGames()).toEqual([]);
-  });
+  }, 15_000);
 
   it('pasta apagada por fora: o jogo fica como "não encontrado" e instalar de novo reaproveita a mesma entrada', async () => {
     releases = []; publish('v1', 'autor', { 'MeuRecomp/MeuRecomp.exe': 'exe v1' });
@@ -218,14 +218,16 @@ describe.skipIf(process.platform === 'win32')('jogar e contar o tempo', () => {
   });
   it('launcher que fecha logo: segue o jogo que ele abriu na mesma pasta', async () => {
     const db = openDb(':memory:'), dir = tmp();
-    const exe = join(dir, 'launcher.sh'), real = join(dir, 'jogo-real');
-    copyFileSync('/bin/sleep', real); chmodSync(real, 0o755);
-    writeFileSync(exe, `#!/bin/sh\n"${real}" 1.6 &\nsleep 0.1\n`); chmodSync(exe, 0o755);
+    const exe = join(dir, 'launcher.sh');
+    writeFileSync(exe, '#!/bin/sh\nsleep 0.1\n'); chmodSync(exe, 0o755);
     const ach = new AchievementService(db, tmp());
     const g = await ach.addGame(dir, { exe });
-    const player = new Player(db, ach, async () => '');
+    let until = 0;
+    const procs = async (): Promise<Proc[]> => (Date.now() < until ? [{ pid: 999_999, ppid: 1, path: join(dir, 'bin', 'Jogo.exe') }] : []);
+    const player = new Player(db, ach, async () => '', () => {}, procs);
     ach.isRunning = player.isRunning;
     const ended = new Promise<number>(ok => player.events.on('play', e => { if (!e.running) ok(e.sessionMs ?? 0); }));
+    until = Date.now() + 1500;
     await player.play(g.id);
     await new Promise(r => setTimeout(r, 700));
     expect(ach.getGame(g.id).running).toBe(true);

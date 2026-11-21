@@ -13,7 +13,7 @@ export class Player {
   private scanTimer: NodeJS.Timeout | null = null;
   private scanning = false;
 
-  constructor(private db: DB, private games: AchievementService, private openPath: (p: string) => Promise<string>, private onExit: () => void = () => {}) {
+  constructor(private db: DB, private games: AchievementService, private openPath: (p: string) => Promise<string>, private onExit: () => void = () => {}, private procs: () => Promise<Proc[]> = processTable) {
     db.prepare('UPDATE play_session SET ended_at = started_at WHERE ended_at IS NULL').run();
   }
 
@@ -74,7 +74,7 @@ export class Player {
   private followTick(gameId: string, r: Run) {
     const f = r.follow!;
     f.timer = setTimeout(() => {
-      void processTable().then(table => {
+      void this.procs().then(table => {
         if (this.running.get(gameId) !== r) return;
         const alive = followAlive(table, f.pids, f.dirs);
         if (alive.length) { f.pids = new Set(alive); f.seenAt = Date.now(); f.misses = 0; return this.followTick(gameId, r); }
