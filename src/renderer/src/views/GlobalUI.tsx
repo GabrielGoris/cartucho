@@ -7,6 +7,7 @@ import { useSpatialNav } from '../lib/spatial';
 import { getSettings, setSettings, useSettings } from '../lib/settings';
 import { sfx } from '../lib/sfx';
 import { askConfirm, setMenuOpen, useConfirmReq } from '../lib/dialogs';
+import { CONSOLES } from '../stage/consoles';
 
 export function ConfirmHost() {
   const req = useConfirmReq();
@@ -22,6 +23,37 @@ export function ConfirmHost() {
           <button className="btn" data-hf data-main onClick={() => { sfx.play('back'); req.resolve(false); }}>{req.cancel ?? 'Cancelar'}</button>
           <button className={`btn ${req.danger ? 'danger' : 'acc'}`} data-hf onClick={() => { sfx.play('ok'); req.resolve(true); }}>{req.ok ?? 'Confirmar'}</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+const PLATFORM_ORDER = ['pc', ...CONSOLES.map(c => c.id).filter(id => id !== 'pc' && id !== 'other'), 'other'];
+
+export function PlatformHost() {
+  const trpc = useTRPC();
+  const [req, setReq] = useState<{ id: number; title: string; current: string | null } | null>(null);
+  const answer = useMutation(trpc.games.answerPlatform.mutationOptions());
+  useSubscription(trpc.games.onAskPlatform.subscriptionOptions(undefined, { onData: r => setReq(r) }));
+  const root = useRef<HTMLDivElement>(null);
+  const done = (c: string | null) => { if (!req) return; sfx.play(c ? 'ok' : 'back'); answer.mutate({ id: req.id, console: c }); setReq(null); };
+  useSpatialNav(root, { active: !!req, initial: '[data-main]', onKey: k => { if (k === 'Escape') { done(null); return true; } } });
+  if (!req) return null;
+  const main = req.current ?? 'pc';
+  return (
+    <div className="ov gl-ov">
+      <div className="gl-box gl-plat" ref={root}>
+        <h3>De qual plataforma é {req.title}?</h3>
+        <p>O jogo vai aparecer nessa plataforma, e o Cartucho usa ela para achar capa, sinopse e nota.</p>
+        <div className="gl-plats">{PLATFORM_ORDER.map(id => {
+          const c = CONSOLES.find(x => x.id === id)!;
+          return (
+            <button key={id} className={`btn ${id === req.current ? 'cur' : ''}`} data-hf {...(id === main ? { 'data-main': '' } : {})} onClick={() => done(id)}>
+              <i style={{ background: c.color }} />{id === 'pc' ? 'PC (Windows)' : c.name}
+            </button>
+          );
+        })}</div>
+        <div className="gl-btns"><button className="btn" data-hf onClick={() => done(null)}>{req.current ? 'Cancelar' : 'Decidir depois'}</button></div>
       </div>
     </div>
   );

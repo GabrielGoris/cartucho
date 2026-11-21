@@ -32,6 +32,11 @@ describe('followAlive', () => {
     expect(followAlive(table, new Set([999]), [dir])).toEqual([30]);
   });
 
+  it('acha pelo nome do .exe quando o Windows não mostra o caminho (jogo aberto como administrador)', () => {
+    const t: Proc[] = [...table, { pid: 50, ppid: 4, path: '', name: 'Castlevania Belmont\'s Curse.exe' }];
+    expect(followAlive(t, new Set(), ['C:\\Outra'], ["castlevania belmont's curse.exe"])).toEqual([50]);
+  });
+
   it('não acha nada quando o jogo fechou de verdade', () => {
     expect(followAlive(table, new Set([999]), ['C:\\Jogos\\Outro'])).toEqual([]);
   });
@@ -39,6 +44,7 @@ describe('followAlive', () => {
 
 describe('parseProcTable', () => {
   it('lê PID, PID do pai e caminho', () => {
+    expect(parseProcTable('7|1|C:\\J\\a.exe|a.exe\r\n')).toEqual([{ pid: 7, ppid: 1, path: 'C:\\J\\a.exe', name: 'a.exe' }]);
     expect(parseProcTable('4|0|\r\n1234|900|C:\\Jogos\\Zelda\\Game.exe\r\nlixo\r\n')).toEqual([
       { pid: 4, ppid: 0, path: '' },
       { pid: 1234, ppid: 900, path: 'C:\\Jogos\\Zelda\\Game.exe' },

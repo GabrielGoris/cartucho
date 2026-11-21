@@ -30,6 +30,7 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
   const [note, setNote] = useState<string | null>(null);
   const lnk = useMutation(trpc.background.shortcut.mutationOptions({ onSuccess: () => setNote('Atalho criado na Área de Trabalho. Ele abre o jogo pelo Cartucho e conta o tempo.'), onError: e => setNote(e.message) }));
   const qc = useQueryClient();
+  const plat = useMutation(trpc.games.changePlatform.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
   const dir = useMutation(trpc.games.relink.mutationOptions({
     onSuccess: r => { if (r) { setNote(`Pasta trocada para ${r.installDir}.`); void qc.invalidateQueries(); } },
     onError: e => setNote(e.message),
@@ -38,6 +39,7 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
     ...base,
     ...(inst && !inst.missing && !base.some(o => o.k === 'relink') ? [{ k: '__dir', l: 'Trocar a pasta' }] : []),
     ...(inst && !inst.missing && inst.exe && navigator.userAgent.includes('Windows') ? [{ k: '__lnk', l: 'Atalho na Área de Trabalho' }] : []),
+    ...(inst && !g.catalog ? [{ k: '__plat', l: 'Trocar a plataforma' }] : []),
   ];
   const main = opts.filter((o, j) => j === 0 || MAIN.has(o.k)), rest = opts.filter((o, j) => j !== 0 && !MAIN.has(o.k));
   const shown: DOpt[] = rest.length > 1 ? [...main, { k: '__more', l: 'Mais opções' }] : [...main, ...rest];
@@ -64,7 +66,7 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
   useEffect(() => { strip.current?.children[si]?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); }, [si]);
 
   const mv = (f: () => void) => { sfx.play('move'); f(); };
-  const runOpt = (o: DOpt | undefined) => { if (!o) return; setMore(false); if (o.k === '__lnk') { sfx.play('ok'); lnk.mutate({ id: inst!.id }); } else if (o.k === '__dir') { sfx.play('ok'); dir.mutate({ id: inst!.id }); } else run(o.k, g); };
+  const runOpt = (o: DOpt | undefined) => { if (!o) return; setMore(false); if (o.k === '__lnk') { sfx.play('ok'); lnk.mutate({ id: inst!.id }); } else if (o.k === '__dir') { sfx.play('ok'); dir.mutate({ id: inst!.id }); } else if (o.k === '__plat') { sfx.play('ok'); plat.mutate({ id: inst!.id }); } else run(o.k, g); };
   const act = (j: number) => { const o = shown[j]; if (o?.k === '__more') { sfx.play(more ? 'back' : 'ok'); setMi(0); setMore(!more); } else runOpt(o); };
 
   useKeys((k: Key) => {

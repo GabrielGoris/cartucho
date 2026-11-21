@@ -57,6 +57,8 @@ describe('nomes', () => {
   it('"Outros" vira a plataforma de origem', () => {
     expect(artPlatform('other', 'Mega Drive / Genesis')).toBe('megadrive');
     expect(artPlatform('other', 'Panasonic M2')).toBeNull();
+    expect(artPlatform('other', null)).toBe('pc');
+    expect(artPlatform('other', 'Outros')).toBeNull();
     expect(artPlatform('switch2')).toBe('switch2');
   });
 });

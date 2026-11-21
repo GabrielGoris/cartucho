@@ -7,6 +7,7 @@ import { initTRPC } from '@trpc/server';
 import superjson from 'superjson';
 import { z } from 'zod';
 import type { InstallProgress, LibrarySummary, PlayEvent, UnlockEvent } from '@shared/types';
+import { CONSOLE_NAME } from '@shared/consoles';
 import type { DB } from './db';
 import { kvGet, kvSet } from './db';
 import { listCatalog, listRadar, markRadarSeen, perConsole, platformCount, radarCounts, refreshCatalog } from './catalog';
@@ -70,6 +71,17 @@ async function pick(title: string, props: ('openDirectory' | 'openFile' | 'creat
   const start = typeof extra.defaultPath === 'string' && existsSync(extra.defaultPath) ? extra.defaultPath : homedir();
   const res = await new Promise<string | null>(resolve => { pending.set(id, resolve); pickBus.emit('pick', { id, title, kind: props.includes('openFile') ? 'exe' : 'dir', start } satisfies PickRequest); });
   return res === '\u0000native' ? nativePick(title, props, extra) : res;
+}
+
+export interface PlatformRequest { id: number; title: string; current: string | null }
+const platBus = new EventEmitter();
+const platPending = new Map<number, (v: string | null) => void>();
+let platSeq = 0;
+
+async function askPlatform(title: string, current: string | null) {
+  if (!platBus.listenerCount('ask')) return null;
+  const id = ++platSeq;
+  return new Promise<string | null>(resolve => { platPending.set(id, resolve); platBus.emit('ask', { id, title, current } satisfies PlatformRequest); });
 }
 
 const t = initTRPC.create({ transformer: superjson, isServer: true });
@@ -224,7 +236,22 @@ export function createRouter(deps: RouterDeps) {
       }),
       addFromDialog: t.procedure.input(z.object({ catalogId: z.string().optional() }).optional()).mutation(async ({ input }) => {
         const dir = await pick(input?.catalogId ? 'Escolha a pasta onde você instalou o jogo' : 'Escolha a pasta do jogo', ['openDirectory']);
-        return dir ? ach.addGame(dir, { catalogId: input?.catalogId ?? null }) : null;
+        if (!dir) return null;
+        const g = await ach.addGame(dir, { catalogId: input?.catalogId ?? null });
+        if (g.catalogId || g.adapter || g.console !== 'other') return g;
+        const c = await askPlatform(g.title, null);
+        if (c && c !== 'other' && Object.hasOwn(CONSOLE_NAME, c)) ach.patchGame(g.id, { console: c });
+        return ach.getGame(g.id);
+      }),
+      changePlatform: t.procedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+        const g = ach.getGame(input.id);
+        const c = await askPlatform(g.title, g.console);
+        if (c && c !== g.console && Object.hasOwn(CONSOLE_NAME, c)) ach.patchGame(g.id, { console: c });
+        return ach.getGame(g.id);
+      }),
+      onAskPlatform: t.procedure.subscription(async function* ({ signal }) { for await (const [r] of on(platBus, 'ask', { signal })) yield r as PlatformRequest; }),
+      answerPlatform: t.procedure.input(z.object({ id: z.number(), console: z.string().nullable() })).mutation(({ input }) => {
+        const f = platPending.get(input.id); platPending.delete(input.id); f?.(input.console);
       }),
       relink: t.procedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
         const dir = await pick(`Onde está ${ach.getGame(input.id).title} agora?`, ['openDirectory']);

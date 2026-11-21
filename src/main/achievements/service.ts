@@ -60,13 +60,14 @@ export class AchievementService {
     const r = this.db.prepare('SELECT release_json, manifest_json FROM installed_game WHERE id = ?').get(id) as { release_json: string | null; manifest_json: string | null } | undefined;
     return { release: r?.release_json ? JSON.parse(r.release_json) as InstalledRelease : null, manifest: r?.manifest_json ? JSON.parse(r.manifest_json) as Record<string, number> : null };
   }
-  patchGame(id: string, p: { exe?: string | null; sourceRepo?: string | null; release?: InstalledRelease | null; manifest?: Record<string, number> | null; title?: string }) {
+  patchGame(id: string, p: { exe?: string | null; sourceRepo?: string | null; release?: InstalledRelease | null; manifest?: Record<string, number> | null; title?: string; console?: string }) {
     const sets: string[] = [], args: (string | null)[] = [];
     if (p.exe !== undefined) { sets.push('exe = ?'); args.push(p.exe); }
     if (p.sourceRepo !== undefined) { sets.push('source_repo = ?'); args.push(p.sourceRepo); }
     if (p.release !== undefined) { sets.push('release_json = ?', 'version = ?'); args.push(p.release ? JSON.stringify(p.release) : null, p.release?.tag ?? null); }
     if (p.manifest !== undefined) { sets.push('manifest_json = ?'); args.push(p.manifest ? JSON.stringify(p.manifest) : null); }
     if (p.title !== undefined) { sets.push('title = ?'); args.push(p.title); }
+    if (p.console !== undefined) { sets.push('console = ?'); args.push(p.console); }
     if (sets.length) this.db.prepare(`UPDATE installed_game SET ${sets.join(', ')} WHERE id = ?`).run(...args, id);
     this.events.emit('changed', id);
   }

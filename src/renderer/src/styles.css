@@ -366,6 +366,11 @@ body.pal-light .stage-behind { filter: blur(8px) brightness(.85) saturate(.6); }
 .gl-box h3 { margin: 0 0 10px; font-size: 26px; font-weight: normal; line-height: 1.3; }
 .gl-box p { margin: 0 0 14px; font-size: 20px; color: var(--dim); }
 .gl-btns { display: flex; gap: 14px; justify-content: flex-end; margin-top: 18px; }
+.gl-plat { width: min(900px, 92%); }
+.gl-plats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 6px; }
+.gl-plats .btn { display: flex; align-items: center; gap: 10px; justify-content: flex-start; min-width: 0; padding: 12px 14px; font-family: var(--font-body); font-size: 18px; letter-spacing: 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gl-plats .btn i { flex: none; width: 12px; height: 12px; border-radius: 50%; }
+.gl-plats .btn.cur { border-color: var(--acc); }
 .btn.danger { border-color: var(--pink); color: var(--pink); }
 .gl-menu { width: min(460px, 90%); padding: 20px; display: flex; flex-direction: column; gap: 6px; }
 .gl-menu h3 { margin: 0 0 10px; font-family: var(--font-display); font-size: 14px; font-weight: normal; color: var(--acc); display: flex; align-items: center; gap: 10px; }

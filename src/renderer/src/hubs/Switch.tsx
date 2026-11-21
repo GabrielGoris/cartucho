@@ -63,6 +63,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
   const row = data.lib;
   const all = useMemo(() => new Map([...data.lib, ...data.catalog].flatMap(g => [[g.key, g] as const, ...(g.installed && g.catalog ? [[g.catalog.id, g] as const] : [])])), [data.lib, data.catalog]);
   const game = st.game ? all.get(st.game) ?? null : null;
+  useEffect(() => { if (st.page === 'game' && st.game && all.size && !all.has(st.game)) up({ page: 'home', zone: 'row', game: null, from: null }); }, [st.page, st.game, all]);
   const timeList = data.lib.filter(g => g.installed!.playMs > 0).sort((a, b) => b.installed!.playMs - a.installed!.playMs);
 
   const side: Side[] = (() => {
@@ -215,8 +216,8 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
           {st.page === 'cat'
             ? <Discover theme="d-s2" cname={c.name} games={data.catalog} extra={data.lib.filter(x => !x.catalog)} self={self} st={dst} set={setDst}
                 options={dOpts} run={dRun} onOpen={x => open('game', { game: x.key, from: 'cat', fromSi: 0 })} onBack={() => { sfx.play('back'); up({ page: 'home', zone: 'row' }); }} />
-            : st.page === 'game' && game
-            ? <GameView theme="d-s2" g={game} self={self} opts={gOpts(game)} run={gRun} onBack={closeGame}
+            : st.page === 'game'
+            ? game && <GameView theme="d-s2" g={game} self={self} opts={gOpts(game)} run={gRun} onBack={closeGame}
                 extra={game.installed && <>{game.installed.adapter && <><h3>Conquistas</h3><GameAch id={game.installed.id} /></>}<h3>Tempo de jogo</h3><GameTime g={game} /></>} />
             : st.page === 'home'
             ? <Home v1={v1} row={row} st={st} feedCount={data.feed.length} updCount={data.withUpdate.length} newCount={data.catalog.filter(g => g.isNew).length}

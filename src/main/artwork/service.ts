@@ -20,7 +20,7 @@ const OTHER: [RegExp, string][] = [
 ];
 const BY_NAME = new Set(['other', 'gb', 'megadrive']);
 export const artPlatform = (console: string, platformName?: string | null) =>
-  !BY_NAME.has(console) ? console : OTHER.find(([re]) => re.test(platformName ?? ''))?.[1] ?? (console === 'other' ? null : console);
+  !BY_NAME.has(console) ? console : OTHER.find(([re]) => re.test(platformName ?? ''))?.[1] ?? (console !== 'other' ? console : platformName?.trim() ? null : 'pc');
 
 const MAX_IMAGE = 20 * 1048576;
 const NOT_FOUND_RETRY = 14 * 86400_000;
