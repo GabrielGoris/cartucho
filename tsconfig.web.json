@@ -17,14 +17,14 @@
     "isolatedModules": true,
     "composite": true,
     "noEmit": true,
-    "baseUrl": ".",
     "paths": {
       "@shared/*": [
-        "src/shared/*"
+        "./src/shared/*"
       ]
     },
     "types": [
-      "node"
+      "node",
+      "vite/client"
     ]
   },
   "include": [
