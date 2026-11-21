@@ -64,14 +64,17 @@ let asked = 0, found = 0, kept = 0, failed = 0, fromIgdb = 0;
 for (const e of cat.entradas ?? []) {
   if (!e.entry || !e.nombre || e.retirado) continue;
   const old = prev.jogos?.[e.entry];
-  const retryIgdb = !!token && old && !old.n && !old.i;
+  const retryIgdb = !!token && old && !old.i && (!old.n || old.n.by === 'OpenCritic');
   if (old && !retryIgdb && now - old.t < (old.n ? KEEP_FOUND : KEEP_MISSING)) { out.jogos[e.entry] = old; kept++; continue; }
   if (asked >= MAX) { if (old) out.jogos[e.entry] = old; continue; }
   asked++;
   const cid = toConsoleId(e.consola), platform = artPlatform(cid, e.consola_nombre ?? e.consola ?? 'Outros');
   try {
     let n = await wikidataScore(json, e.nombre, platform);
-    if (!n && token) { n = await igdb(e.nombre, platform); if (n) fromIgdb++; }
+    if (token && (!n || n.by === 'OpenCritic')) {
+      const ig = await igdb(e.nombre, platform);
+      if (ig && (!n || ig.platform)) { n = ig; fromIgdb++; }
+    }
     out.jogos[e.entry] = token ? { n, t: now, i: 1 } : { n, t: now };
     if (n) found++;
   } catch (err) {
