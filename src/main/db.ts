@@ -1,19 +1,13 @@
-/**
- * SQLite embutido do próprio Node (node:sqlite). Sem módulo nativo para compilar: o `npm install` não
- * precisa de Python nem Visual Studio, e o mesmo código roda no Electron e nos testes.
- */
 import { DatabaseSync } from 'node:sqlite';
 
 export type DB = DatabaseSync;
 
-/** Roda `fn` numa transação (BEGIN/COMMIT, ROLLBACK se der erro). */
 export function tx<T>(db: DB, fn: () => T): T {
   db.exec('BEGIN');
   try { const r = fn(); db.exec('COMMIT'); return r; }
   catch (e) { db.exec('ROLLBACK'); throw e; }
 }
 
-/** Cada item roda uma vez, em ordem. Para mudar o esquema, acrescente um novo item no fim. */
 const MIGRATIONS: string[] = [
   `
   CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -85,13 +79,10 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (game_id, ach_id)
   );
   `,
-  // 2: projetos que o Recompendium lista sem link (ex.: jogos atuais de Switch 2) deixam de ficar escondidos.
-  // Zera "retired" para eles não virarem "novos" no radar na próxima atualização; os retirados de verdade voltam a 1.
   `
   ALTER TABLE catalog_game ADD COLUMN no_link INTEGER NOT NULL DEFAULT 0;
   UPDATE catalog_game SET retired = 0;
   `,
-  // 3: instalar/atualizar pelo GitHub e tempo de jogo
   `
   ALTER TABLE installed_game ADD COLUMN source_repo TEXT;          -- dono/projeto no GitHub, para atualizações
   ALTER TABLE installed_game ADD COLUMN release_json TEXT;         -- versão instalada: {tag, assetId, date, uploader}
@@ -99,9 +90,11 @@ const MIGRATIONS: string[] = [
   ALTER TABLE installed_game ADD COLUMN manifest_json TEXT;        -- arquivos que vieram no download (para desinstalar)
   CREATE INDEX play_session_game ON play_session(game_id, started_at);
   `,
-  // 4: Xbox, NES, Game Boy, Mega Drive e DS ganharam lugar próprio: baixa o catálogo inteiro de novo para remapear
   `
   DELETE FROM kv WHERE key IN ('catalog.etag', 'catalog.lastModified');
+  `,
+  `
+  CREATE TABLE game_info (key TEXT PRIMARY KEY, json TEXT NOT NULL, fetched_at INTEGER NOT NULL);
   `,
 ];
 

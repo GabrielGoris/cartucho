@@ -1,0 +1,51 @@
+name: Notas da crítica
+
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: notas
+  cancel-in-progress: false
+
+jobs:
+  notas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Notas da última vez
+        run: |
+          if git ls-remote --exit-code --heads origin dados >/dev/null; then
+            git show origin/dados:notas.json > "$RUNNER_TEMP/antes.json" || echo '{}' > "$RUNNER_TEMP/antes.json"
+          else
+            echo '{}' > "$RUNNER_TEMP/antes.json"
+          fi
+      - name: Buscar notas no Wikidata
+        run: node --no-warnings --experimental-transform-types --import ./scripts/ts.mjs scripts/notas.ts "$RUNNER_TEMP/antes.json" "$RUNNER_TEMP/notas.json"
+      - name: Publicar no ramo dados
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin dados >/dev/null; then
+            git worktree add "$RUNNER_TEMP/dados" origin/dados
+            cd "$RUNNER_TEMP/dados"
+            git checkout -B dados
+          else
+            git worktree add --orphan -b dados "$RUNNER_TEMP/dados"
+            cd "$RUNNER_TEMP/dados"
+          fi
+          cp "$RUNNER_TEMP/notas.json" notas.json
+          git add notas.json
+          if git diff --cached --quiet; then echo "Nada mudou."; exit 0; fi
+          git commit -m "Notas da crítica $(date -u +%F)"
+          git push origin dados

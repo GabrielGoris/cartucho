@@ -1,11 +1,17 @@
-## Cartucho 1.0.4
+## Cartucho 1.0.5
 
-Atualizações mais rápidas e sem as telas do instalador.
+Nota da crítica, sinopse e uma página do jogo mais limpa.
+
+### Novo
+
+- **Nota da crítica:** os jogos mostram a nota do Metacritic, ou do OpenCritic quando não há Metacritic, na página do jogo e no painel do Descobrir. Passe o mouse ou suba com o controle até a nota para ver de onde ela vem; OK ou clique abre a página da nota.
+- **Sinopse, desenvolvedora e ano** para jogos que não estão no catálogo, vindos do banco do LaunchBox. Jogos da Steam adicionados pelo .exe trazem a sinopse em português e a nota direto da loja.
 
 ### Melhorado
 
-- **Atualização silenciosa:** quando uma versão nova termina de baixar, é só clicar em "Reiniciar agora". O Cartucho fecha, instala e abre de novo sozinho em alguns segundos, sem passar pelas telas do instalador. Esta atualização para a 1.0.4 ainda mostra o instalador uma última vez; as próximas já são silenciosas.
-- **Sem aviso no meio do jogo:** se a atualização ficar pronta enquanto você joga, o aviso só aparece quando o jogo fechar. Se escolher "Depois", ela é instalada quando você fechar o Cartucho.
-- **Instalação só para o seu usuário:** novas instalações não pedem mais autorização de administrador do Windows, nem para instalar nem para atualizar. Quem instalou "para todos os usuários" continua assim e o Windows segue pedindo autorização nas atualizações; para deixar de pedir, desinstale e instale de novo. Jogos, tempo de jogo e configurações ficam guardados.
+- **Página do jogo com menos botões:** fica só a ação principal e "Mais opções", com Abrir pasta, Trocar o .exe, Ver no GitHub, Trocar a pasta e o atalho.
+- **Notas na hora:** as notas dos jogos do catálogo são preparadas uma vez por dia e baixadas pelo Cartucho, sem esperar consulta.
+
+Na primeira vez que abrir, o Cartucho baixa de novo o banco do LaunchBox (uns 100 MB) para guardar as sinopses.
 
 Gostou? Dá para apoiar em [buymeacoffee.com/goris](https://buymeacoffee.com/goris).

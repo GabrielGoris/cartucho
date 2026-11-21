@@ -12,6 +12,7 @@ import { Ports } from './ports/installer';
 import { Player } from './play';
 import { portsDirOf } from './router';
 import { Artwork } from './artwork/service';
+import { GameInfoService } from './artwork/info';
 import { Translator } from './translate';
 import { WinCtl } from './window';
 import { Background, playArg, startHidden } from './background';
@@ -89,6 +90,9 @@ void app.whenReady().then(async () => {
     ...(process.env.CARTUCHO_LAUNCHBOX_METADATA ? { metadataUrl: process.env.CARTUCHO_LAUNCHBOX_METADATA } : {}),
     ...(process.env.CARTUCHO_LAUNCHBOX_IMAGES ? { imageUrl: process.env.CARTUCHO_LAUNCHBOX_IMAGES } : {}),
   });
+  const info = new GameInfoService(db, ((url, init) => net.fetch(url, init as RequestInit)) as Fetch, art);
+  void info.startNotas();
+  setTimeout(() => info.warm(ach.listGames().filter(g => !g.missing).map(g => ({ console: g.console, platformName: g.platformName, title: g.title, installDir: g.installDir, exe: g.exe, catalogId: g.catalogId }))), 20_000);
   protocol.handle('media', req => {
     const u = new URL(req.url);
     const file = u.hostname === 'art' ? art.resolve(decodeURIComponent(u.pathname)) : null;
@@ -100,7 +104,7 @@ void app.whenReady().then(async () => {
   });
   const ports = new Ports(db, ach, gh, () => portsDirOf({ db, defaultPortsDir }), player.isRunning);
   createIPCHandler({
-    router: createRouter({ db, ach, ports, player, art, win: () => ctl, bg: () => bg, upd: () => upd, tr: new Translator(db, ((url, init) => net.fetch(url, init as RequestInit)) as ConstructorParameters<typeof Translator>[1]), defaultPortsDir }),
+    router: createRouter({ db, ach, ports, player, art, info, win: () => ctl, bg: () => bg, upd: () => upd, tr: new Translator(db, ((url, init) => net.fetch(url, init as RequestInit)) as ConstructorParameters<typeof Translator>[1]), defaultPortsDir }),
     preload: false,
     allow: e => isOurPage(e.senderFrame?.url ?? ''),
   });

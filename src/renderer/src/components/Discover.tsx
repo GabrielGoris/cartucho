@@ -5,6 +5,7 @@ import { sfx } from '../lib/sfx';
 import { fmtPlay, plural } from '../lib/format';
 import { matchesQuery, similarity } from '../lib/search';
 import { useTranslated } from '../lib/translate';
+import { useInfo } from '../lib/art';
 import { GameArt } from './GameArt';
 import { SearchBox } from './SearchBox';
 import type { HubGame } from '../hubs/data';
@@ -261,12 +262,14 @@ export function Discover({ theme, cname, games: all, extra: allExtra = [], self,
 function Detail({ g, self }: { g: HubGame; self: boolean }) {
   const needs = useTranslated(g.catalog?.needs);
   const i = g.installed;
+  const score = useInfo(g.console, g.title, g.platformName, i?.id, g.catalog?.id)?.score ?? null;
   return (
     <div className="dsc-d" key={g.key}>
       <span className="cv-w"><GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant="cover" /></span>
       <h3>{g.title}</h3>
       <p className="meta">{[g.catalog?.year, g.catalog?.developer].filter(Boolean).join(' · ') || g.platformName}</p>
       <div className="pills">
+        {score && <span className={`pill score ${score.value >= 75 ? 'hi' : score.value >= 50 ? 'mid' : 'lo'}`} title={`Nota do ${score.by}${score.platform ? ` · ${score.platform}` : ''}`}>{score.value}</span>}
         {g.status && <span className={`pill ${g.status}`}>{STATUS_LABEL[g.status]}</span>}
         {g.isNew && <span className="pill new">Novo</span>}
         {i && <span className="pill inst">{i.missing ? 'Pasta não encontrada' : i.playMs ? `${fmtPlay(i.playMs)} jogadas` : 'Instalado'}</span>}

@@ -50,6 +50,7 @@
 .dsc-d .pill { padding: 5px 12px; border-radius: 8px; font-size: 17px; font-weight: 500; background: var(--d-line); }
 .dsc-d .pill.full { background: #1f7a45; color: #fff; } .dsc-d .pill.play { background: #2a63b8; color: #fff; } .dsc-d .pill.wip { background: #a86a10; color: #fff; }
 .dsc-d .pill.new { background: #ff4f8b; color: #fff; } .dsc-d .pill.inst { background: var(--d-acc); color: var(--d-on-acc); }
+.dsc-d .pill.score { min-width: 44px; text-align: center; font-weight: 800; color: #fff; } .dsc-d .pill.score.hi { background: #1f8a4c; } .dsc-d .pill.score.mid { background: #d8a80d; color: #1b1b1b; } .dsc-d .pill.score.lo { background: #c0392b; }
 .dsc-d .needs { margin: 0; font-size: 18px; line-height: 1.45; color: var(--d-dim); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .dsc-d .needs b { color: var(--d-ink); font-weight: 500; }
 .dsc-none { color: var(--d-dim); font-size: 22px; }
@@ -102,10 +103,18 @@
 .gv-head h1 { margin: 0; font-family: var(--d-title); font-weight: var(--d-tw); font-size: 72px; line-height: 1.05; text-wrap: balance; }
 .gv-logo { max-width: 760px; max-height: 220px; object-fit: contain; object-position: left center; filter: drop-shadow(0 6px 20px rgba(0,0,0,.45)); align-self: flex-start; }
 .gv-meta { margin: 0; font-size: 26px; color: var(--d-dim); }
-.gv-pills { display: flex; flex-wrap: wrap; gap: 10px; }
+.gv-pills { position: relative; z-index: 9; display: flex; flex-wrap: wrap; gap: 10px; }
 .gv-pills .pill { padding: 7px 16px; border-radius: 8px; font-size: 21px; font-weight: 500; background: var(--d-line); color: var(--d-ink); }
 .gv-pills .pill.full { background: #1f7a45; color: #fff; } .gv-pills .pill.play { background: #2a63b8; color: #fff; } .gv-pills .pill.wip { background: #a86a10; color: #fff; }
 .gv-pills .pill.new { background: #ff4f8b; color: #fff; } .gv-pills .pill.inst { background: var(--d-acc); color: var(--d-on-acc); }
+.gv-pills .pill.score { position: relative; min-width: 58px; text-align: center; font-weight: 800; color: #fff; cursor: pointer; transition: transform .12s, box-shadow .12s; }
+.gv-pills .pill.score.hi { background: #1f8a4c; } .gv-pills .pill.score.mid { background: #d8a80d; color: #1b1b1b; } .gv-pills .pill.score.lo { background: #c0392b; }
+.gv-pills .pill.score.on { box-shadow: var(--d-focus); transform: scale(1.06); }
+.gv-pop { display: none; position: absolute; top: calc(100% + 12px); left: 0; z-index: 8; min-width: 360px; padding: 16px 20px; border-radius: 12px; background: var(--d-panel); color: var(--d-ink); border: 2px solid var(--d-line); box-shadow: 0 12px 32px rgba(0,0,0,.35); text-align: left; font-weight: 400; cursor: default; }
+.gv-pop b { display: block; font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+.gv-pop span { display: block; font-size: 19px; opacity: .85; }
+.gv-pop small { display: block; margin-top: 10px; font-size: 16px; opacity: .6; }
+.gv-pills .pill.score:hover .gv-pop, .gv-pills .pill.score.on .gv-pop { display: block; }
 .gv-warn { margin: 0; font-size: 22px; color: #ff8a7a; }
 .gv-prog { position: relative; max-width: 760px; height: 46px; border-radius: 10px; background: var(--d-panel); overflow: hidden; display: flex; align-items: center; padding: 0 18px; font-size: 21px; }
 .gv-prog span { position: relative; z-index: 1; }
@@ -115,6 +124,12 @@
 .gv-acts button .ico, .gv-acts button svg { font-size: 30px; width: 30px; height: 30px; }
 .gv-acts button.pri { background: var(--d-acc); color: var(--d-on-acc); border-color: transparent; font-weight: 600; min-width: 240px; justify-content: center; }
 .gv-acts button.on { box-shadow: var(--d-focus); transform: scale(1.05); }
+.gv-aw { position: relative; display: flex; }
+.gv-caret { font-style: normal; font-size: 18px; opacity: .7; transition: transform .15s; }
+.gv-acts button.more.open .gv-caret { transform: rotate(180deg); }
+.gv-menu { position: absolute; top: calc(100% + 10px); left: 0; z-index: 8; display: flex; flex-direction: column; gap: 4px; min-width: 340px; padding: 8px; border-radius: 14px; background: var(--d-panel); border: 2px solid var(--d-line); box-shadow: 0 14px 36px rgba(0,0,0,.4); }
+.dsc.gv .gv-acts .gv-aw .gv-menu button { height: 58px; padding: 0 20px; border: 0; border-radius: 10px; background: transparent; font-size: 22px; justify-content: flex-start; white-space: nowrap; transform: none; box-shadow: none; }
+.dsc.gv .gv-acts .gv-aw .gv-menu button.on { background: var(--d-acc); color: var(--d-on-acc); }
 .gv-sec { margin-top: 56px; max-width: 1500px; }
 .gv-sec h3 { margin: 0 0 18px; font-family: var(--d-title); font-weight: var(--d-tw); font-size: 34px; }
 .gv-sec p { margin: 0 0 22px; font-size: 25px; line-height: 1.6; color: var(--d-ink); }

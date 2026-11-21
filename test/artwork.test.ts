@@ -1,16 +1,16 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deflateRawSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { readDatabase } from '../src/main/artwork/launchbox';
+import { infoBucket, readDatabase } from '../src/main/artwork/launchbox';
 import { Artwork, artPlatform, looseKey } from '../src/main/artwork/service';
 import { Writer } from './fixtures';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'cartucho-'));
 const XML = `<?xml version="1.0"?><LaunchBox>
-<Game><Name>Pokémon Pokopia</Name><DatabaseID>1</DatabaseID><Platform>Nintendo Switch 2</Platform></Game>
+<Game><Name>Pokémon Pokopia</Name><DatabaseID>1</DatabaseID><Platform>Nintendo Switch 2</Platform><Overview>Build a town &amp; make friends.</Overview><Developer>Omega Force</Developer><ReleaseYear>2026</ReleaseYear></Game>
 <Game><Name>The Legend of Zelda: Ocarina of Time</Name><DatabaseID>2</DatabaseID><Platform>Nintendo Switch 2</Platform></Game>
 <Game><Name>Sonic the Hedgehog</Name><DatabaseID>3</DatabaseID><Platform>Sega Genesis</Platform></Game>
 <Game><Name>Algo de outra plataforma</Name><DatabaseID>4</DatabaseID><Platform>Atari Jaguar</Platform></Game>
@@ -70,6 +70,14 @@ describe('banco do LaunchBox', () => {
     expect(i.names['Atari Jaguar']).toBeUndefined();
   });
 
+  it('guarda sinopse, desenvolvedora e ano em arquivos pequenos', async () => {
+    const dir = tmp(), info = join(dir, 'info'); mkdirSync(info); writeFileSync(join(dir, 'm.zip'), metadataZip());
+    await readDatabase(join(dir, 'm.zip'), looseKey, info);
+    const lines = readFileSync(join(info, infoBucket('1')), 'utf8').trim().split('\n');
+    expect(lines.map(l => JSON.parse(l))).toEqual([['1', 'Build a town & make friends.', 'Omega Force', 2026]]);
+    expect(existsSync(join(info, infoBucket('3')))).toBe(false);
+  });
+
   it('baixa o banco uma vez, busca e guarda as imagens, e avisa quando chegam', async () => {
     const dir = tmp();
     const art = new Artwork(dir, fetch as never, { metadataUrl: `${base}/Metadata.zip`, imageUrl: `${base}/img` });
@@ -83,6 +91,8 @@ describe('banco do LaunchBox', () => {
     expect(got.fanart).toBe('media://art/switch2/fanart/pokemonpokopia.jpg');
     expect(got.logo).toBeUndefined();
     expect(zipHits).toBe(1);
+    expect(await art.info('switch2', null, ['Pokopia'])).toEqual({ overview: 'Build a town & make friends.', developer: 'Omega Force', year: 2026 });
+    expect(await art.info('switch2', null, ['The Legend of Zelda: Ocarina of Time'])).toBeNull();
     expect(art.resolve('/switch2/cover/pokemonpokopia.png')).toBe(join(dir, 'switch2', 'cover', 'pokemonpokopia.png'));
     expect(art.resolve('/../../etc/passwd')).toBeNull();
 

@@ -5,12 +5,12 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { Fetch } from '../ports/github';
-import { type ArtKind, KINDS, PLATFORMS, createLaunchBox } from './launchbox';
+import { type ArtKind, KINDS, type LaunchBoxInfo, PLATFORMS, createLaunchBox } from './launchbox';
 
 export type ArtSet = Partial<Record<ArtKind, string>>;
 
 const FORMAT_TAG = /(\.(xiso|iso|cso|chd|rvz|wbfs|nsp|xci|z64|n64|v64|nds|3ds|gba|gbc|gb|sfc|smc|nes))+$/i;
-const cleanTitle = (n: string) => n.replace(FORMAT_TAG, '').replace(/\s*[([][^)\]]*[)\]]/g, '').replace(/_/g, ' ').replace(/^\d{3,5}\s*-?\s+(?=\S)/, '').replace(/\s+/g, ' ').trim() || n;
+export const cleanTitle = (n: string) => n.replace(FORMAT_TAG, '').replace(/\s*[([][^)\]]*[)\]]/g, '').replace(/_/g, ' ').replace(/^\d{3,5}\s*-?\s+(?=\S)/, '').replace(/\s+/g, ' ').trim() || n;
 export const looseKey = (s: string) => cleanTitle(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/&|\band\b|\bthe\b/g, '').replace(/[^a-z0-9]/g, '');
 
 const OTHER: [RegExp, string][] = [
@@ -55,6 +55,16 @@ export class Artwork {
       await fsp.rename(part, file);
     } catch (e) { await fsp.unlink(part).catch(() => {}); throw e; }
   }
+
+  async info(console: string, platformName: string | null | undefined, names: string[], offline = false): Promise<LaunchBoxInfo | null> {
+    const platform = artPlatform(console, platformName);
+    if (!platform || !PLATFORMS[platform]) return null;
+    return this.lb.info(platform, names, { offline }).catch(() => null);
+  }
+
+  indexReady() { return this.lb.building() ? Promise.resolve(false) : this.lb.load({ offline: true }).then(() => true, () => false); }
+
+  notify() { this.changed(); }
 
   private folder(platform: string, kind: ArtKind) { return join(this.dir, platform, kind); }
 

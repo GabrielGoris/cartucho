@@ -16,13 +16,14 @@ import type { Ports } from './ports/installer';
 import { parseRepo } from './ports/github';
 import type { Player } from './play';
 import type { Artwork } from './artwork/service';
+import type { GameInfoService } from './artwork/info';
 import type { Translator } from './translate';
 import type { WinCtl, WinState } from './window';
 import type { Background } from './background';
 import { logFile } from './log';
 import type { Updater, UpdState } from './updater';
 
-export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; tr: Translator; defaultPortsDir: string; win?: () => WinCtl | null; bg?: () => Background | null; upd?: () => Updater | null }
+export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; info?: GameInfoService; tr: Translator; defaultPortsDir: string; win?: () => WinCtl | null; bg?: () => Background | null; upd?: () => Updater | null }
 export const portsDirOf = (d: Pick<RouterDeps, 'db' | 'defaultPortsDir'>) => kvGet(d.db, 'portsDir') || d.defaultPortsDir;
 
 export interface PickRequest { id: number; title: string; kind: 'dir' | 'exe'; start: string }
@@ -81,6 +82,12 @@ export function createRouter(deps: RouterDeps) {
         .query(({ input }) => art.get(input.console, input.platformName, [input.title])),
       shots: t.procedure.input(z.object({ console: z.string(), platformName: z.string().nullish(), title: z.string() }))
         .query(({ input }) => art.shots(input.console, input.platformName, [input.title])),
+      info: t.procedure.input(z.object({ console: z.string(), platformName: z.string().nullish(), title: z.string(), id: z.string().nullish(), catalogId: z.string().nullish() }))
+        .query(({ input }) => {
+          let g: { installDir: string; exe: string | null } | null = null;
+          if (input.id) { try { g = ach.getGame(input.id); } catch { g = null; } }
+          return deps.info?.get({ console: input.console, platformName: input.platformName, title: input.title, installDir: g?.installDir, exe: g?.exe, catalogId: input.catalogId }) ?? null;
+        }),
       status: t.procedure.query(() => art.status),
       refresh: t.procedure.mutation(() => art.refresh()),
       onChanged: t.procedure.subscription(async function* ({ signal }) { for await (const _ of on(art.events, 'changed', { signal })) yield Date.now(); }),
