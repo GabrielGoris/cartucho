@@ -1,6 +1,6 @@
 # Modelos 3D do palco
 
-Baixados do Sketchfab, exceto o do PS2 (CGTrader, convertido de FBX para GLB com os materiais originais). Os arquivos não foram alterados: o Cartucho gira, normaliza o tamanho
+Baixados do Sketchfab. Os arquivos não foram alterados: o Cartucho gira, normaliza o tamanho
 e esconde peças na hora de carregar (src/renderer/src/stage/models.ts).
 
 | Console | Arquivo | Autor | Licença |
@@ -15,7 +15,7 @@ e esconde peças na hora de carregar (src/renderer/src/stage/models.ts).
 | Nintendo Switch | nintendo_switch.glb | Smoggybeard | CC BY-NC-SA 4.0 |
 | Nintendo Switch 2 | nintendo_switch_2.glb | NAIT Studio | CC BY 4.0 |
 | PlayStation | playstation_1.glb | ecjhr0awipso | CC BY 4.0 |
-| PlayStation 2 | playstation_2.glb | ATEZ (CGTrader) | Editorial License (no AI) — **fora do repositório** |
+| PlayStation 2 | ps2_console.glb | barbi0526 | CC BY 4.0 |
 | PSP | sony_psp.glb | Ilya Ostrovsky | CC BY 4.0 |
 | PlayStation 3 | ps3_slim.glb | Vasily | CC BY 4.0 |
 | PlayStation 4 | playstation_4_original.glb | Laxity | CC BY 4.0 |
@@ -29,6 +29,5 @@ e esconde peças na hora de carregar (src/renderer/src/stage/models.ts).
 Atenção antes de publicar o código ou o app:
 - NC (não comercial): ok para um app gratuito.
 - ND (PS5): não pode distribuir versão modificada do arquivo. Por isso a compressão de modelos não deve mexer nele.
-- PS2 (CGTrader, Editorial License): não permite redistribuir o arquivo nem usá-lo num produto. Por isso
-  `playstation_2.glb` está no .gitignore: fica só na sua pasta, e quem clonar o repositório vê a plataforma vazia
-  até ter um modelo próprio. Para distribuir o Cartucho, o PS2 precisa de um modelo com licença CC BY/CC0.
+- Os modelos antigos do PS2 (`playstation_2.glb`, CGTrader, e `a_playstation_2_slim.glb`) não podem ser redistribuídos:
+  continuam no .gitignore e fora do instalador. O palco usa o `ps2_console.glb` (CC BY).
