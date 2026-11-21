@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AchievementView, ConsoleId } from '@shared/types';
 import { CONSOLE_NAME, isSelfInstall } from '@shared/consoles';
@@ -67,11 +67,12 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
 
   const mine = data.lib;
   const lookup = useMemo(() => new Map([...data.lib, ...data.catalog].flatMap(x => [[x.key, x] as const, ...(x.installed && x.catalog ? [[x.catalog.id, x] as const] : [])])), [data.lib, data.catalog]);
+  const shown = useRef(false);
   useEffect(() => {
-    if (!game0) return;
+    if (!game0 || shown.current) return;
     const i = mine.findIndex(g => g.key === game0 || g.catalog?.id === game0);
-    if (i >= 0) up({ idx: i, tab: 0 });
-    else if (lookup.has(game0)) up({ game: lookup.get(game0)!.key });
+    if (i >= 0) { shown.current = true; up({ idx: i, tab: 0, game: mine[i]!.key }); }
+    else if (lookup.has(game0)) { shown.current = true; up({ game: lookup.get(game0)!.key }); }
   }, [game0, mine.length, lookup.size]);
   useEffect(() => { if (st.idx >= mine.length && mine.length) up({ idx: mine.length - 1 }); }, [mine.length]);
   const g = mine[st.idx] ?? null;

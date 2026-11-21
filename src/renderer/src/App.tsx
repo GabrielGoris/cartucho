@@ -7,7 +7,7 @@ import { fmtPlay } from './lib/format';
 import { useTRPC } from './trpc';
 import { getSettings, reduceMotion, setSettings, useSettings } from './lib/settings';
 import { applyPalette, paletteById, PALETTES } from './lib/palettes';
-import { setGlobalKeys, setShortcutHandler } from './lib/input';
+import { setGameRunning, setGlobalKeys, setShortcutHandler } from './lib/input';
 import { useConfirmReq } from './lib/dialogs';
 import { CartuchoMenu, ConfirmHost, PickerHost } from './views/GlobalUI';
 import { MeOverlay, RadarOverlay, SupportOverlay } from './views/Overlays';
@@ -134,6 +134,7 @@ export function App() {
   ].filter(Boolean).join(' '), [tvAnim, s, inside, all]);
 
   const gameOpen = Object.keys(playing).length > 0;
+  useEffect(() => setGameRunning(gameOpen), [gameOpen]);
   const stageMode = inside || all || gameOpen ? 'hidden' : booting || page === 'act' ? 'behind' : 'stage';
   const askPicker = picker || (!s.picked && !booting && !inside && !settingsOpen && page === 'stage');
 
@@ -141,7 +142,7 @@ export function App() {
     <>
     <TitleBar ctx={inside ? CONSOLES.find(c => c.id === inside.id)?.name ?? null : all ? 'Todos os jogos' : null} onMenu={() => { sfx.play('ok'); setMenu(true); }} />
     <div id="tv" className={tvClass} style={{ ['--crt' as string]: s.crtLvl / 100 }}>
-      <Stage sleep={gameOpen} list={list} sel={sel} mode={stageMode} zoom={zoom} palette={palette} pixel={s.pixel} onSelect={i => { sfx.play('move'); setSel(i); }} onEnter={i => enterConsole(list[i]!.id)} />
+      <Stage list={list} sel={sel} mode={stageMode} zoom={zoom} palette={palette} pixel={s.pixel} onSelect={i => { sfx.play('move'); setSel(i); }} onEnter={i => enterConsole(list[i]!.id)} />
       {all && !inside && <AllGames onBack={closeAll} />}
       {!inside && !all && (
 <Select active={!booting && !settingsOpen && !askPicker && !menu && !gov} list={list} page={page} setPage={setPage} sel={sel} setSel={setSel}

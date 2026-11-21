@@ -88,10 +88,11 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   }, [firstFeed?.id]);
 
   const row = data.lib;
+  const shown = useRef(false);
   useEffect(() => {
-    if (!game0) return;
+    if (!game0 || shown.current) return;
     const i = row.findIndex(g => g.key === game0 || g.catalog?.id === game0);
-    if (i >= 0) up({ idx: i });
+    if (i >= 0) { shown.current = true; up({ idx: i }); openGame(row[i]!); }
   }, [game0, row.length]);
   const g = st.page === 'home' ? row[st.idx] ?? null : null;
   const all = useMemo(() => new Map([...data.lib, ...data.catalog].flatMap(x => [[x.key, x] as const, ...(x.installed && x.catalog ? [[x.catalog.id, x] as const] : [])])), [data.lib, data.catalog]);

@@ -81,10 +81,11 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
   }, []);
 
   const lib = data.lib;
+  const shown = useRef(false);
   useEffect(() => {
-    if (!game0) return;
+    if (!game0 || shown.current) return;
     const i = lib.findIndex(g => g.key === game0 || g.catalog?.id === game0);
-    if (i >= 0) up({ tab: 1, zone: 'tiles', fi: i });
+    if (i >= 0) { shown.current = true; up({ tab: 1, zone: 'tiles', fi: i }); openGame(lib[i]!); }
   }, [game0, lib.length]);
   const byPlay = useMemo(() => [...lib].sort((a, b) => (b.installed?.playMs ?? 0) - (a.installed?.playMs ?? 0)), [lib]);
   const all = useMemo(() => new Map([...data.lib, ...data.catalog].flatMap(x => [[x.key, x] as const, ...(x.installed && x.catalog ? [[x.catalog.id, x] as const] : [])])), [data.lib, data.catalog]);

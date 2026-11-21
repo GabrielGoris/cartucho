@@ -13,16 +13,14 @@ interface Props {
   onStage: () => void;
   onAddGame: () => void;
   adding: boolean;
+  starting: string | null;
 }
 
-/** Legenda embaixo da fileira (também atualizada pela navegação com setas, em Select). */
 export const showCap = (e: { currentTarget: HTMLElement }) => setCaption(e.currentTarget);
 export function setCaption(el: HTMLElement | null) { const c = document.getElementById('hmCap'); if (c) c.textContent = el?.dataset.cap ?? ''; }
 
-/** Início: o jogo mais recente em destaque e os outros numa fileira. */
-export function Home({ games, summary, onOpenGame, onPlay, playError, onStage, onAddGame, adding }: Props) {
+export function Home({ games, summary, onOpenGame, onPlay, playError, onStage, onAddGame, adding, starting }: Props) {
   if (!games) return null;
-  // o último jogado primeiro; os nunca jogados pela data em que entraram
   const sorted = [...games].sort((a, b) => (b.lastPlayed ?? b.addedAt) - (a.lastPlayed ?? a.addedAt));
   const top = sorted[0], rec = sorted.slice(1, 7);
   const color = (id: string) => CONSOLES.find(c => c.id === id)?.color ?? 'var(--acc)';
@@ -43,20 +41,22 @@ export function Home({ games, summary, onOpenGame, onPlay, playError, onStage, o
     </div>
   );
 
-  const a = top.achievements;
+  const a = top.achievements, live = top.running || starting === top.id;
   return (
     <div className="home">
       <div className="hm2-hero">
         <GameArt title={top.title} console={top.console} fallback={top.coverUrl} />
         <div className="hm2-txt">
-          <span className="k" style={{ color: color(top.console) }}>{top.running ? 'JOGANDO AGORA' : top.lastPlayed ? 'CONTINUAR' : 'NA SUA BIBLIOTECA'} · {CONSOLE_NAME[top.console].toUpperCase()}</span>
+          <span className="k" style={{ color: color(top.console) }}>{live ? 'JOGANDO AGORA' : top.lastPlayed ? 'CONTINUAR' : 'NA SUA BIBLIOTECA'} · {CONSOLE_NAME[top.console].toUpperCase()}</span>
           <h1>{top.title}</h1>
           <p>{top.lastPlayed ? `${fmtPlay(top.playMs)} jogadas · ${ago(top.lastPlayed)}` : `adicionado ${ago(top.addedAt)}`}{a && a.total ? ` · ${a.unlocked}/${a.total} conquistas` : ''}</p>
           <div className="hm-btns">
-            {top.exe && !top.running
-              ? <button className="hm-go" data-hf data-main onClick={() => onPlay(top)}>▶ {top.lastPlayed ? 'CONTINUAR' : 'JOGAR'}</button>
-              : <button className="hm-go" data-hf data-main onClick={() => onOpenGame(top)}>▶ ABRIR</button>}
-            {top.exe && !top.running && <button className="hm-go ghost" data-hf onClick={() => onOpenGame(top)}>DETALHES</button>}
+            {live
+              ? <button className="hm-go live" data-hf data-main onClick={() => onOpenGame(top)}>● JOGANDO</button>
+              : top.exe
+                ? <button className="hm-go" data-hf data-main onClick={() => onPlay(top)}>▶ {top.lastPlayed ? 'CONTINUAR' : 'JOGAR'}</button>
+                : <button className="hm-go" data-hf data-main onClick={() => onOpenGame(top)}>▶ ABRIR</button>}
+            {top.exe && !live && <button className="hm-go ghost" data-hf onClick={() => onOpenGame(top)}>DETALHES</button>}
           </div>
           {playError && <p className="err" style={{ margin: 0 }}>{playError}</p>}
         </div>

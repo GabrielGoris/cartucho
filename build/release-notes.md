@@ -1,17 +1,16 @@
-## Cartucho 1.0.1
+## Cartucho 1.0.2
 
-Correções depois dos primeiros testes da 1.0.0.
+Correções do palco 3D, da página do jogo e do botão Continuar.
 
 ### Corrigido
 
-- **Trocar a pasta de um jogo:** a página de todo jogo instalado tem a ação "Trocar a pasta", para quando você escolheu a pasta errada.
-- **Pasta que já é de outro jogo:** agora o Cartucho avisa de qual jogo ela é, em vez de não fazer nada.
-- **Travada ao abrir ou fechar um jogo:** o palco 3D é desligado enquanto o jogo roda e volta quando ele fecha, liberando a placa de vídeo. Se a placa de vídeo for reiniciada, o palco se recria sozinho.
-- **Controle durante o jogo:** o Cartucho não reage mais aos botões que você aperta dentro do jogo; ele só lê o controle quando está em foco.
-- **Abrir pelo Continuar:** o Cartucho não segura mais a tela enquanto abre o jogo.
+- **Palco 3D sumindo e voltando sem parar:** depois de abrir um jogo, o palco podia entrar num ciclo de se recriar a cada segundo, inclusive ao voltar de um console. Agora ele só fica parado enquanto o jogo roda e não é mais desmontado.
+- **Travada ao abrir Detalhes pelo Início:** o mesmo ciclo do palco pesava na placa de vídeo e podia congelar o Cartucho.
+- **Controle sem resposta depois de fechar um jogo:** o Cartucho só ignora o controle enquanto um jogo está aberto, mesmo que o Windows não devolva o foco para a janela.
 
-### Novo
+### Melhorado
 
-- **Registro do Cartucho** em Configurações › Sobre: abre a pasta do `cartucho.log`. Se algo travar ou der erro, mande esse arquivo junto com o relato.
+- **Detalhes abre a página do jogo:** o botão Detalhes do Início, os jogos da fileira e um jogo recém-adicionado levam direto à página do jogo em todos os consoles.
+- **Jogando:** ao clicar em Continuar, o botão vira "Jogando" na hora e volta para Continuar quando o jogo fecha.
 
 Gostou? Dá para apoiar em [buymeacoffee.com/goris](https://buymeacoffee.com/goris).

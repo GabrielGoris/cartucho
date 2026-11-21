@@ -105,7 +105,7 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
         </div>
       </header>
 
-      {page === 'act' && <Home games={games.data?.filter(g => !g.missing)} summary={summary.data} onOpenGame={openGame} onPlay={g => { initAudio(); if (g.missing) return openGame(g); sfx.play('ok'); play.mutate({ id: g.id }); }} playError={play.error?.message ?? null} onStage={() => go('stage')} onAddGame={() => add.mutate()} adding={add.isPending} />}
+      {page === 'act' && <Home games={games.data?.filter(g => !g.missing)} summary={summary.data} onOpenGame={openGame} onPlay={g => { initAudio(); if (g.missing) return openGame(g); sfx.play('ok'); play.mutate({ id: g.id }); }} playError={play.error?.message ?? null} onStage={() => go('stage')} onAddGame={() => add.mutate()} adding={add.isPending} starting={play.isPending ? play.variables?.id ?? null : null} />}
 
       {page === 'stage' && (
         <div className="stage-ui">

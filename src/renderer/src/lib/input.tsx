@@ -72,6 +72,8 @@ export function usePadKind(): PadKind {
 }
 
 let prev: boolean[] = [], axisAt = 0, held: Key | null = null, heldAt = 0, away = false;
+let gameRunning = false;
+export const setGameRunning = (v: boolean) => { gameRunning = v; };
 const DIRS = new Set<Key>(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 function activePad() {
   const all = [...(navigator.getGamepads?.() ?? [])].filter((x): x is Gamepad => !!x);
@@ -81,7 +83,7 @@ function activePad() {
   return p;
 }
 function poll() {
-  if (!document.hasFocus() || document.hidden) { away = true; held = null; return; }
+  if (document.hidden || (gameRunning && !document.hasFocus())) { away = true; held = null; return; }
   const p = activePad();
   if (p && away) { away = false; prev = p.buttons.map(x => x.pressed || x.value > 0.5); axisAt = performance.now() + 400; return; }
   if (p) {

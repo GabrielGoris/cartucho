@@ -26,17 +26,28 @@ interface Props {
   pixel: boolean;
   onSelect: (i: number) => void;
   onEnter: (i: number) => void;
-  sleep?: boolean;
 }
 
 export function Stage(p: Props) {
   const [gen, setGen] = useState(0);
+  const live = useRef<HTMLCanvasElement | null>(null);
+  const retry = useRef(0);
+  useEffect(() => () => { live.current = null; clearTimeout(retry.current); }, []);
   return (
     <div className={`stage stage-${p.mode}`} onWheel={e => { if (p.mode === 'stage') p.onSelect(p.sel + (e.deltaY > 0 ? 1 : -1)); }}>
-      {!p.sleep && <Canvas
+      <Canvas
         key={gen}
         onCreated={({ gl }) => {
-          gl.domElement.addEventListener('webglcontextlost', ev => { ev.preventDefault(); setTimeout(() => setGen(g => g + 1), 1200); }, { once: true });
+          const el = gl.domElement;
+          live.current = el;
+          el.addEventListener('webglcontextlost', ev => {
+            ev.preventDefault();
+            if (live.current !== el) return;
+            live.current = null;
+            console.warn('[palco] contexto WebGL perdido, recriando');
+            clearTimeout(retry.current);
+            retry.current = window.setTimeout(() => setGen(g => g + 1), 1200);
+          });
         }}
         flat
         gl={{ antialias: false, powerPreference: 'high-performance' }}
@@ -45,7 +56,7 @@ export function Stage(p: Props) {
         aria-label="Consoles em 3D girando num palco"
       >
         <Scene {...p} />
-      </Canvas>}
+      </Canvas>
     </div>
   );
 }

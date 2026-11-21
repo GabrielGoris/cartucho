@@ -150,6 +150,9 @@ input { user-select: text; }
 .hm-go { font-family: var(--font-display); font-size: 14px; padding: 18px 26px 16px; border-radius: 6px; background: var(--acc); color: var(--on-acc); box-shadow: 0 0 16px rgb(var(--acc-rgb) / .45); align-self: flex-start; }
 .hm-go.ghost { background: rgb(var(--bg-rgb) / .7); color: var(--ink); border: 1px solid var(--line); box-shadow: none; }
 .hm-go[data-on] { outline-color: #fff; }
+.hm-go.live { background: rgb(var(--bg-rgb) / .7); color: var(--cyan); border: 1px solid var(--cyan); box-shadow: 0 0 16px rgb(0 0 0 / .3); animation: hmLive 1.6s ease-in-out infinite alternate; }
+@keyframes hmLive { to { border-color: transparent; } }
+#tv.reduce .hm-go.live { animation: none; }
 .hm2-rec { position: absolute; left: 0; bottom: 0; }
 .hm2-row { display: flex; gap: 16px; align-items: center; }
 .hm2-row button { width: 104px; height: 104px; border-radius: 8px; position: relative; overflow: hidden; opacity: .8; transition: transform .15s, opacity .15s; }
