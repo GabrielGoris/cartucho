@@ -41,6 +41,13 @@ beforeAll(async () => {
     if (req.url === '/img/pk-us.png') { res.writeHead(200); return res.end(PNG); }
     if (req.url === '/img/pk-bg.jpg' || req.url === '/img/pk-s2.jpg') { res.writeHead(200); return res.end(JPG); }
     if (req.url === '/img/pk-s1.png') { res.writeHead(200); return res.end(PNG); }
+    if (req.url?.startsWith('/api/storesearch/')) { res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ items: /labyrinth/i.test(decodeURIComponent(req.url)) ? [{ type: 'app', id: 99, name: 'Labyrinth Of The Demon King Demo' }, { type: 'app', id: 98, name: 'Labyrinth Of The Demon King' }] : [] })); }
+    if (req.url?.startsWith('/IStoreBrowseService/GetItems/v1/')) {
+      const input = JSON.parse(new URL(req.url, 'http://x').searchParams.get('input_json')!);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify({ response: { store_items: [{ assets: input.ids[0].appid === 98 ? { asset_url_format: 'steam/apps/98/${FILENAME}?t=1', library_capsule: 'library_600x900.jpg', library_hero: 'library_hero.jpg' } : {} }] } }));
+    }
+    if (req.url === '/cdn/steam/apps/98/library_600x900.jpg?t=1' || req.url === '/cdn/steam/apps/98/library_hero.jpg?t=1') { res.writeHead(200); return res.end(JPG); }
     if (req.url === '/img/sonic.png') { res.writeHead(200); return res.end(Buffer.from('<html>não é imagem</html>')); }
     res.writeHead(404); res.end();
   });
@@ -101,6 +108,20 @@ describe('banco do LaunchBox', () => {
     art.get('other', 'Mega Drive / Genesis', ['Sonic the Hedgehog'], ['cover']);
     await new Promise(r => setTimeout(r, 500));
     expect(art.get('other', 'Mega Drive / Genesis', ['Sonic the Hedgehog'], ['cover'])).toEqual({});
+  });
+});
+
+describe('capa da Steam para jogos de PC sem imagem no LaunchBox', () => {
+  it('acha o jogo pelo nome exato (não a demo) e baixa capa e fundo', async () => {
+    const dir = tmp();
+    const art = new Artwork(dir, fetch as never, { metadataUrl: `${base}/Metadata.zip`, imageUrl: `${base}/img`, steamStore: base, steamApi: base, steamCdn: `${base}/cdn/` });
+    mkdirSync(join(dir, 'pc', 'cover'), { recursive: true });
+    writeFileSync(join(dir, 'pc', 'cover', 'labyrinthofdemonking.none'), '');
+    expect(art.get('other', null, ['Labyrinth of the Demon King'])).toEqual({});
+    await new Promise(r => setTimeout(r, 1500));
+    expect(art.get('other', null, ['Labyrinth of the Demon King'])).toEqual({
+      cover: 'media://art/pc/cover/labyrinthofdemonking.jpg', fanart: 'media://art/pc/fanart/labyrinthofdemonking.jpg',
+    });
   });
 });
 

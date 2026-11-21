@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { createWriteStream, existsSync, readdirSync, statSync } from 'node:fs';
+import { createWriteStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -23,6 +23,8 @@ export const artPlatform = (console: string, platformName?: string | null) =>
   !BY_NAME.has(console) ? console : OTHER.find(([re]) => re.test(platformName ?? ''))?.[1] ?? (console !== 'other' ? console : platformName?.trim() ? null : 'pc');
 
 const MAX_IMAGE = 20 * 1048576;
+const NONE_VERSION = '2';
+type SteamArt = Record<ArtKind, string[]>;
 const NOT_FOUND_RETRY = 14 * 86400_000;
 const isImage = (b: Buffer) => (b[0] === 0x89 && b[1] === 0x50) || (b[0] === 0xff && b[1] === 0xd8) || b.subarray(8, 12).toString('latin1') === 'WEBP';
 const extOf = (b: Buffer) => (b[0] === 0x89 ? 'png' : b[0] === 0xff ? 'jpg' : 'webp');
@@ -35,9 +37,14 @@ export class Artwork {
   private running = 0;
   private pending = new Set<string>();
 
-  constructor(private dir: string, private fetch: Fetch, opts: { metadataUrl?: string; imageUrl?: string } = {}) {
+  private steamCache = new Map<string, Promise<SteamArt | null>>();
+  private steam: { store: string; api: string; cdn: string };
+
+  constructor(private dir: string, private fetch: Fetch, opts: { metadataUrl?: string; imageUrl?: string; steamStore?: string; steamApi?: string; steamCdn?: string } = {}) {
+    const { steamStore, steamApi, steamCdn, ...lbOpts } = opts;
+    this.steam = { store: steamStore ?? 'https://store.steampowered.com', api: steamApi ?? 'https://api.steampowered.com', cdn: steamCdn ?? 'https://shared.akamai.steamstatic.com/store_item_assets/' };
     this.lb = createLaunchBox({
-      folder: join(dir, '_index'), key: looseKey, ...opts,
+      folder: join(dir, '_index'), key: looseKey, ...lbOpts,
       download: (url, file, onBytes) => this.download(url, file, onBytes),
       onStatus: s => { this.status = s; this.events.emit('status', s); },
     });
@@ -75,7 +82,8 @@ export class Artwork {
     return null;
   }
   private missingRecently(platform: string, kind: ArtKind, key: string) {
-    try { return Date.now() - statSync(join(this.folder(platform, kind), `${key}.none`)).mtimeMs < NOT_FOUND_RETRY; } catch { return false; }
+    const f = join(this.folder(platform, kind), `${key}.none`);
+    try { return Date.now() - statSync(f).mtimeMs < NOT_FOUND_RETRY && readFileSync(f, 'utf8') === NONE_VERSION; } catch { return false; }
   }
 
   get(console: string, platformName: string | null | undefined, names: string[], kinds: ArtKind[] = ['cover', 'fanart', 'logo']): ArtSet {
@@ -131,14 +139,15 @@ export class Artwork {
     this.pending.add(id);
     this.queue.push(async () => {
       try {
-        const urls = await this.lb.find(platform, names, kind);
+        let urls = await this.lb.find(platform, names, kind);
+        if (!urls.length && platform === 'pc') urls = (await this.steamArt(names))?.[kind] ?? [];
         const folder = this.folder(platform, kind);
         await fsp.mkdir(folder, { recursive: true });
         for (const url of urls) {
           const b = await this.image(url);
           if (b) { await fsp.writeFile(join(folder, `${key}.${extOf(b)}`), b); this.changed(); return; }
         }
-        await fsp.writeFile(join(folder, `${key}.none`), '');
+        await fsp.writeFile(join(folder, `${key}.none`), NONE_VERSION);
       } catch { }
       finally { this.pending.delete(id); }
     });
@@ -151,6 +160,37 @@ export class Artwork {
       void job().finally(() => { this.running--; this.pump(); });
     }
   }
+  private steamArt(names: string[]): Promise<SteamArt | null> {
+    const key = looseKey(names[0] ?? '');
+    let p = this.steamCache.get(key);
+    if (!p) { p = this.findSteamArt(names).catch(() => null); this.steamCache.set(key, p); }
+    return p;
+  }
+
+  private async findSteamArt(names: string[]): Promise<SteamArt | null> {
+    const keys = new Set(names.map(looseKey).filter(Boolean));
+    const get = async <T>(url: string) => {
+      const r = await this.fetch(url, { headers: { 'User-Agent': 'Cartucho' }, signal: AbortSignal.timeout(20_000) });
+      if (!r.ok) throw new Error(`erro ${r.status}`);
+      return (await r.json()) as T;
+    };
+    const found = await get<{ items?: { type?: string; id?: number; name?: string }[] }>(`${this.steam.store}/api/storesearch/?term=${encodeURIComponent(cleanTitle(names[0] ?? ''))}&l=english&cc=US`);
+    const app = (found.items ?? []).find(x => x.type === 'app' && x.id && keys.has(looseKey(x.name ?? '')));
+    if (!app) return null;
+    const input = { ids: [{ appid: app.id }], context: { language: 'english', country_code: 'US' }, data_request: { include_assets: true } };
+    const d = await get<{ response?: { store_items?: { assets?: Record<string, string> }[] } }>(`${this.steam.api}/IStoreBrowseService/GetItems/v1/?input_json=${encodeURIComponent(JSON.stringify(input))}`);
+    const a = d.response?.store_items?.[0]?.assets;
+    const fmt = a?.asset_url_format;
+    if (!a || !fmt) return null;
+    const url = (f?: string) => (f ? [`${this.steam.cdn}${fmt.replace('${FILENAME}', f)}`] : []);
+    return {
+      cover: [...url(a.library_capsule_2x), ...url(a.library_capsule)],
+      fanart: url(a.library_hero),
+      logo: url(a.library_logo),
+      screenshot: [],
+    };
+  }
+
   private async image(url: string): Promise<Buffer | null> {
     const r = await this.fetch(url, { headers: { 'User-Agent': 'Cartucho' }, signal: AbortSignal.timeout(20_000) });
     if (r.status === 404 || !r.ok) return null;
