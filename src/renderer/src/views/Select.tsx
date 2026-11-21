@@ -21,6 +21,7 @@ interface Props {
   onEnterConsole: (id: ConsoleId, opts?: { game?: string; tab?: 'lib' | 'cat' }) => void;
   onSettings: () => void;
   onAll: () => void;
+  onMenu: () => void;
 }
 
 function Clock() {
@@ -29,7 +30,7 @@ function Clock() {
   return <span className="clock">{t}</span>;
 }
 
-export function Select({ active, list, page, setPage, sel, setSel, onEnterConsole, onSettings, onAll }: Props) {
+export function Select({ active, list, page, setPage, sel, setSel, onEnterConsole, onSettings, onAll, onMenu }: Props) {
   const me = useProfile();
   const trpc = useTRPC(), qc = useQueryClient();
   const summary = useQuery(trpc.library.summary.queryOptions());
@@ -98,6 +99,7 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
         <div className="top-right">
           <button className={`hm-pill ${unseen ? 'has' : ''}`} data-hf data-cap="Radar" onClick={() => { sfx.play('ok'); setOv('radar'); }}><i />{unseen ? plural(unseen, 'novidade', 'novidades') : 'radar'}</button>
           <button className="hm-set" data-hf aria-label="Configurações" title="Configurações (S)" onClick={onSettings}>⚙</button>
+          <button className="hm-set hm-menu" data-hf aria-label="Menu do Cartucho" title="Menu do Cartucho (Start no controle, F1 no teclado)" onClick={onMenu}>☰</button>
           <button className="hm-me" data-hf aria-label={`Perfil de ${me.name}`} title={me.name} style={{ background: me.color }} onClick={() => { sfx.play('ok'); setOv('me'); }}>{me.initial}</button>
           <Clock />
         </div>

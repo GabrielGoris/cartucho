@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useSubscription } from '@trpc/tanstack-react-query';
 import { useTRPC } from '../trpc';
 
-export function TitleBar({ ctx }: { ctx: string | null }) {
+export function TitleBar({ ctx, onMenu }: { ctx: string | null; onMenu: () => void }) {
   const trpc = useTRPC();
   const st = useQuery(trpc.win.state.queryOptions());
   const [fs, setFs] = useState<boolean | null>(null);
@@ -17,6 +17,10 @@ export function TitleBar({ ctx }: { ctx: string | null }) {
       <span className="logo tb-logo"><i />CARTUCHO</span>
       {ctx && <span className="tb-ctx">{ctx}</span>}
       <span className="sp" />
+      <button className="tb-fs" title="Menu do Cartucho (Start no controle, F1 no teclado)" onClick={onMenu}>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" fill="none" stroke="currentColor" strokeWidth="1.8" /></svg>
+        Menu
+      </button>
       <button className="tb-fs" title="Tela cheia (Alt+Enter ou F11)" onClick={() => toggle.mutate()}>
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" strokeWidth="1.6" /></svg>
         Tela cheia<kbd>Alt+Enter</kbd>
