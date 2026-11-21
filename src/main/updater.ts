@@ -39,7 +39,7 @@ export class Updater {
   install() {
     if (this.s.status !== 'ready') return false;
     this.beforeInstall();
-    setImmediate(() => electronUpdater.autoUpdater.quitAndInstall(false, true));
+    setImmediate(() => electronUpdater.autoUpdater.quitAndInstall(true, true));
     return true;
   }
 }

@@ -1,12 +1,11 @@
-## Cartucho 1.0.3
+## Cartucho 1.0.4
 
-Correções na página do jogo e na contagem do tempo de jogo.
+Atualizações mais rápidas e sem as telas do instalador.
 
-### Corrigido
+### Melhorado
 
-- **Página do jogo sem resposta:** ao abrir um jogo pelo Detalhes (principalmente no Switch 2) ou ao abrir um console direto em Descobrir, o controle e o teclado paravam de responder e só o Start funcionava. Agora a página aberta recebe os comandos em todos os consoles.
-- **Tempo de jogo de jogos com launcher:** quando o programa escolhido abre o jogo e fecha logo em seguida, o Cartucho continua acompanhando os programas que ele abriu e os que rodam da pasta do jogo. A sessão só termina quando o jogo fecha de verdade, e o botão continua em "Jogando" enquanto isso.
-
-As sessões que já foram gravadas com menos de 1 minuto não mudam; a contagem certa vale a partir da próxima vez que você jogar.
+- **Atualização silenciosa:** quando uma versão nova termina de baixar, é só clicar em "Reiniciar agora". O Cartucho fecha, instala e abre de novo sozinho em alguns segundos, sem passar pelas telas do instalador. Esta atualização para a 1.0.4 ainda mostra o instalador uma última vez; as próximas já são silenciosas.
+- **Sem aviso no meio do jogo:** se a atualização ficar pronta enquanto você joga, o aviso só aparece quando o jogo fechar. Se escolher "Depois", ela é instalada quando você fechar o Cartucho.
+- **Instalação só para o seu usuário:** novas instalações não pedem mais autorização de administrador do Windows, nem para instalar nem para atualizar. Quem instalou "para todos os usuários" continua assim e o Windows segue pedindo autorização nas atualizações; para deixar de pedir, desinstale e instale de novo. Jogos, tempo de jogo e configurações ficam guardados.
 
 Gostou? Dá para apoiar em [buymeacoffee.com/goris](https://buymeacoffee.com/goris).

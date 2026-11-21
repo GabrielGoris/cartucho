@@ -61,13 +61,11 @@ export function App() {
   const overlay = useMutation(trpc.win.overlay.mutationOptions());
   const installUpd = useMutation(trpc.updates.install.mutationOptions());
   const asked = useRef<string | null>(null);
+  const [updReady, setUpdReady] = useState<string | null>(null);
   useSubscription(trpc.updates.onState.subscriptionOptions(undefined, {
     onData: u => {
       qc.setQueryData(trpc.updates.state.queryKey(), u);
-      if (u.status !== 'ready' || !u.version || asked.current === u.version) return;
-      asked.current = u.version;
-      void askConfirm({ title: `Cartucho ${u.version} pronto`, text: 'A atualização já foi baixada. Reiniciar agora para instalar? Se preferir deixar para depois, ela entra sozinha quando você fechar o Cartucho.', ok: 'Reiniciar agora', cancel: 'Depois' })
-        .then(y => { if (y) installUpd.mutate(); });
+      if (u.status === 'ready' && u.version) setUpdReady(u.version);
     },
   }));
   useEffect(() => { overlay.mutate({ color: palette.bg0, symbol: palette.acc }); }, [palette.id]);
@@ -135,6 +133,12 @@ export function App() {
 
   const gameOpen = Object.keys(playing).length > 0;
   useEffect(() => setGameRunning(gameOpen), [gameOpen]);
+  useEffect(() => {
+    if (!updReady || gameOpen || booting || asked.current === updReady) return;
+    asked.current = updReady;
+    void askConfirm({ title: `Cartucho ${updReady} pronto`, text: 'A atualização já foi baixada. Reiniciar agora? O Cartucho fecha, instala e abre de novo sozinho em alguns segundos. Se preferir deixar para depois, ela entra quando você fechar o Cartucho.', ok: 'Reiniciar agora', cancel: 'Depois' })
+      .then(y => { if (y) installUpd.mutate(); });
+  }, [updReady, gameOpen, booting]);
   const stageMode = inside || all || gameOpen ? 'hidden' : booting || page === 'act' ? 'behind' : 'stage';
   const askPicker = picker || (!s.picked && !booting && !inside && !settingsOpen && page === 'stage');
 
