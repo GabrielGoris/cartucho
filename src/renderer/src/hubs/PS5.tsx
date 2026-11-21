@@ -169,7 +169,6 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   };
 
   useKeys((k: Key) => {
-    if (st.page === 'cat' || st.page === 'game') return;
     if (k === 'Escape') return back();
     const R = k === 'ArrowRight', L = k === 'ArrowLeft', U = k === 'ArrowUp', D = k === 'ArrowDown';
     const mv = (p: Partial<St>) => { sfx.play('move'); up(p); };
@@ -198,7 +197,7 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     }
     const total = p === 'cfg' ? CFG.length : data.feed.length;
     if (D && st.si < total - 1) mv({ si: st.si + 1 }); else if (U && st.si > 0) mv({ si: st.si - 1 });
-  });
+  }, !(st.page === 'cat' || st.page === 'game'));
 
   const hints: Hint[] = menu ? [['ok', 'Confirmar'], ['back', 'Fechar']]
     : st.page === 'home' && st.zone === 'row' && g ? [['ok', primaryOf(g).l], ['x', 'Opções']]

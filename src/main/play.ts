@@ -1,6 +1,6 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, readlinkSync } from 'node:fs';
 import { basename, dirname, normalize } from 'node:path';
 import type { PlayEvent, PlayStats } from '@shared/types';
 import type { DB } from './db';
@@ -8,7 +8,7 @@ import type { AchievementService } from './achievements/service';
 
 export class Player {
   readonly events = new EventEmitter<{ play: [PlayEvent] }>();
-  private running = new Map<string, { child: ChildProcess; session: number; start: number }>();
+  private running = new Map<string, Run>();
   private external = new Map<string, { pid: number; session: number; start: number }>();
   private scanTimer: NodeJS.Timeout | null = null;
   private scanning = false;
@@ -59,9 +59,36 @@ export class Player {
 
   private finish(gameId: string, child: ChildProcess) {
     const r = this.running.get(gameId);
-    if (!r || r.child !== child) return;
+    if (!r || r.child !== child || r.follow) return;
+    const now = Date.now();
+    if (now - r.start < FOLLOW.window && child.pid) {
+      let dirs: string[] = [];
+      try { const g = this.games.getGame(gameId); dirs = [...new Set([g.installDir, dirname(g.exe ?? g.installDir)])]; } catch { }
+      r.follow = { pids: new Set([child.pid]), dirs, exitAt: now, seenAt: 0, misses: 0, timer: null };
+      this.followTick(gameId, r);
+      return;
+    }
+    this.end(gameId, r, now);
+  }
+
+  private followTick(gameId: string, r: Run) {
+    const f = r.follow!;
+    f.timer = setTimeout(() => {
+      void processTable().then(table => {
+        if (this.running.get(gameId) !== r) return;
+        const alive = followAlive(table, f.pids, f.dirs);
+        if (alive.length) { f.pids = new Set(alive); f.seenAt = Date.now(); f.misses = 0; return this.followTick(gameId, r); }
+        if (f.seenAt) return this.end(gameId, r, Date.now());
+        if (++f.misses >= FOLLOW.tries) return this.end(gameId, r, f.exitAt);
+        this.followTick(gameId, r);
+      }, () => { if (this.running.get(gameId) === r) this.end(gameId, r, Date.now()); });
+    }, FOLLOW.every);
+  }
+
+  private end(gameId: string, r: Run, end: number) {
+    if (this.running.get(gameId) !== r) return;
+    if (r.follow?.timer) clearTimeout(r.follow.timer);
     this.running.delete(gameId);
-    const end = Date.now();
     this.db.prepare('UPDATE play_session SET ended_at = ? WHERE id = ?').run(end, r.session);
     let title = ''; try { title = this.games.getGame(gameId).title; } catch {  }
     this.events.emit('play', { gameId, title, running: false, sessionMs: end - r.start });
@@ -116,6 +143,10 @@ export class Player {
     const ext = this.external.get(gameId);
     if (ext) { try { spawn('taskkill', ['/pid', String(ext.pid), '/t', '/f'], { windowsHide: true, stdio: 'ignore' }); } catch { } return true; }
     const r = this.running.get(gameId);
+    if (r?.follow) {
+      for (const pid of r.follow.pids) killTree(pid);
+      return true;
+    }
     if (!r?.child.pid) return false;
     try {
       if (process.platform === 'win32') spawn('taskkill', ['/pid', String(r.child.pid), '/t', '/f'], { windowsHide: true, stdio: 'ignore' });
@@ -126,6 +157,7 @@ export class Player {
 
   stop() {
     const now = Date.now();
+    for (const r of this.running.values()) if (r.follow?.timer) clearTimeout(r.follow.timer);
     for (const r of this.running.values()) this.db.prepare('UPDATE play_session SET ended_at = ? WHERE id = ?').run(now, r.session);
     this.running.clear();
     if (this.scanTimer) { clearInterval(this.scanTimer); this.scanTimer = null; }
@@ -150,6 +182,61 @@ export class Player {
     }
     return { totalMs: sum.ms, sessions: sum.n, lastPlayed: sum.last, days };
   }
+}
+
+interface Run {
+  child: ChildProcess; session: number; start: number;
+  follow?: { pids: Set<number>; dirs: string[]; exitAt: number; seenAt: number; misses: number; timer: NodeJS.Timeout | null };
+}
+export const FOLLOW = { window: 90_000, every: 4000, tries: 4 };
+
+export interface Proc { pid: number; ppid: number; path: string }
+
+export function followAlive(table: Proc[], pids: Set<number>, dirs: string[]) {
+  const key = (x: string) => x.replace(/[\\/]+/g, '/').toLowerCase();
+  const roots = dirs.filter(Boolean).map(d => key(d).replace(/\/$/, '') + '/');
+  const tracked = new Set(pids), alive = new Set<number>();
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const p of table) {
+      if (alive.has(p.pid) || p.pid === process.pid) continue;
+      const inDir = !!p.path && roots.some(r => key(p.path).startsWith(r));
+      if (tracked.has(p.pid) || tracked.has(p.ppid) || inDir) { alive.add(p.pid); if (!tracked.has(p.pid)) { tracked.add(p.pid); grew = true; } }
+    }
+  }
+  return [...alive];
+}
+
+export function parseProcTable(out: string): Proc[] {
+  const L: Proc[] = [];
+  for (const line of out.split(/\r?\n/)) {
+    const m = line.match(/^(\d+)\|(\d+)\|(.*)$/);
+    if (m) L.push({ pid: Number(m[1]), ppid: Number(m[2]), path: m[3]!.trim() });
+  }
+  return L;
+}
+
+async function processTable(): Promise<Proc[]> {
+  if (process.platform === 'win32') {
+    return parseProcTable(await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId)|$($_.ParentProcessId)|$($_.ExecutablePath)" }']));
+  }
+  const L: Proc[] = [];
+  for (const d of readdirSync('/proc')) {
+    if (!/^\d+$/.test(d)) continue;
+    try {
+      const st = readFileSync(`/proc/${d}/stat`, 'utf8'), ppid = Number(st.slice(st.lastIndexOf(')') + 2).split(' ')[1]);
+      let path = ''; try { path = readlinkSync(`/proc/${d}/exe`); } catch { }
+      L.push({ pid: Number(d), ppid, path });
+    } catch { }
+  }
+  return L;
+}
+
+function killTree(pid: number) {
+  try {
+    if (process.platform === 'win32') spawn('taskkill', ['/pid', String(pid), '/t', '/f'], { windowsHide: true, stdio: 'ignore' });
+    else process.kill(pid, 'SIGTERM');
+  } catch { }
 }
 
 const run = (cmd: string, args: string[]) => new Promise<string>((ok, fail) => {

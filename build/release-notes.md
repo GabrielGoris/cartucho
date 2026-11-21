@@ -1,16 +1,12 @@
-## Cartucho 1.0.2
+## Cartucho 1.0.3
 
-Correções do palco 3D, da página do jogo e do botão Continuar.
+Correções na página do jogo e na contagem do tempo de jogo.
 
 ### Corrigido
 
-- **Palco 3D sumindo e voltando sem parar:** depois de abrir um jogo, o palco podia entrar num ciclo de se recriar a cada segundo, inclusive ao voltar de um console. Agora ele só fica parado enquanto o jogo roda e não é mais desmontado.
-- **Travada ao abrir Detalhes pelo Início:** o mesmo ciclo do palco pesava na placa de vídeo e podia congelar o Cartucho.
-- **Controle sem resposta depois de fechar um jogo:** o Cartucho só ignora o controle enquanto um jogo está aberto, mesmo que o Windows não devolva o foco para a janela.
+- **Página do jogo sem resposta:** ao abrir um jogo pelo Detalhes (principalmente no Switch 2) ou ao abrir um console direto em Descobrir, o controle e o teclado paravam de responder e só o Start funcionava. Agora a página aberta recebe os comandos em todos os consoles.
+- **Tempo de jogo de jogos com launcher:** quando o programa escolhido abre o jogo e fecha logo em seguida, o Cartucho continua acompanhando os programas que ele abriu e os que rodam da pasta do jogo. A sessão só termina quando o jogo fecha de verdade, e o botão continua em "Jogando" enquanto isso.
 
-### Melhorado
-
-- **Detalhes abre a página do jogo:** o botão Detalhes do Início, os jogos da fileira e um jogo recém-adicionado levam direto à página do jogo em todos os consoles.
-- **Jogando:** ao clicar em Continuar, o botão vira "Jogando" na hora e volta para Continuar quando o jogo fecha.
+As sessões que já foram gravadas com menos de 1 minuto não mudam; a contagem certa vale a partir da próxima vez que você jogar.
 
 Gostou? Dá para apoiar em [buymeacoffee.com/goris](https://buymeacoffee.com/goris).

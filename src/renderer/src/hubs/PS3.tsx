@@ -289,7 +289,6 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   };
 
   useKeys((k: Key) => {
-    if (disc || game) return;
     if (k === 'Escape') return back();
     const R = k === 'ArrowRight', L = k === 'ArrowLeft', U = k === 'ArrowUp', D = k === 'ArrowDown';
     const mv = (p: Partial<St>) => { sfx.play('move'); up(p); };
@@ -308,7 +307,7 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     if (L && sel > 0) return mv({ ii: st.ii.map((v, j) => (j === st.ci ? sel - 1 : v)) });
     if ((D || k === 'RB' || k === 'Tab') && st.ci < CATS.length - 1) return goCat(st.ci + 1);
     if ((U || k === 'LB') && st.ci > 0) return goCat(st.ci - 1);
-  });
+  }, !(disc || game));
 
   const hints: Hint[] = st.opt || st.list ? [['ud', 'Escolher'], ['ok', st.list ? 'Fechar lista' : 'Confirmar'], ['back', 'Fechar']]
     : [['lr', 'Item'], ['ud', 'Categoria'], ['back', 'Sair']];

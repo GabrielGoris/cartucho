@@ -196,7 +196,6 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   };
 
   useKeys((k: Key) => {
-    if (view?.kind === 'cat' || game) return;
     setPtr(null);
     if (k === 'Escape') return back();
     const R = k === 'ArrowRight', L = k === 'ArrowLeft', U = k === 'ArrowUp', D = k === 'ArrowDown';
@@ -220,7 +219,7 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     if (st.pz === 'btns') { if (U && rows.length) mv({ pz: 'list' }); return; }
     if (D) { if (st.mi < rows.length - 1) mv({ mi: st.mi + 1 }); else mv({ pz: 'btns' }); }
     else if (U) { if (st.mi > 0) mv({ mi: st.mi - 1 }); else if (sp === 'cat') { sfx.play('ok'); searchRef.current?.focus(); } }
-  });
+  }, !(view?.kind === 'cat' || game));
 
   const onMove = (e: React.MouseEvent) => {
     const r = rootRef.current?.getBoundingClientRect(); if (!r) return;

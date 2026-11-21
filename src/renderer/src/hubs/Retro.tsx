@@ -128,7 +128,6 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
   };
 
   useKeys((k: Key) => {
-    if (game || tk === 'disc') return;
     if (k === 'Escape') return back();
     if (k === 'Enter') return enter();
     if (k === 'LB' || k === 'RB' || k === 'Tab') return goTab(k === 'LB' ? -1 : 1);
@@ -151,7 +150,7 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
     if (st.achOpen) { if (D && st.ai2 < achList.length - 1) mv({ ai2: st.ai2 + 1 }); else if (U && st.ai2 > 0) mv({ ai2: st.ai2 - 1 }); return; }
     if (D && st.li < rows.length - 1) mv({ li: st.li + 1 }); else if (U && st.li > 0) mv({ li: st.li - 1 });
     else if (k === 'RT') mv({ li: Math.min(rows.length - 1, st.li + VISIBLE) }); else if (k === 'LT') mv({ li: Math.max(0, st.li - VISIBLE) });
-  });
+  }, !(game || tk === 'disc'));
 
   const hints: Hint[] = tk === 'games'
     ? (g ? [['ok', options(g)[0]!.l], ['x', 'Página do jogo'], ['y', 'Buscar'], ['rb', 'Seção'], ['back', 'Sair']] : [['ok', 'Descobrir jogos'], ['rb', 'Seção'], ['back', 'Sair']])

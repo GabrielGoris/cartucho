@@ -229,7 +229,6 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
   };
 
   useKeys((k: Key) => {
-    if ((tk === 'cat' && !game && !st.menu) || game) return;
     if (k === 'Escape') return back();
     const R = k === 'ArrowRight', L = k === 'ArrowLeft', U = k === 'ArrowUp', D = k === 'ArrowDown';
     const mv = (p: Partial<St>) => { sfx.play('move'); up(p); };
@@ -267,7 +266,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
     if (U) return mv({ zone: 'tabs' });
     if (R) { sfx.play('move'); return goTab(st.tab + 1, { zone: 'tiles' }); }
     if (L) { sfx.play('move'); return goTab(st.tab - 1, { zone: 'tiles' }); }
-  });
+  }, !((tk === 'cat' && !game && !st.menu) || game));
 
   const hints: Hint[] = st.menu ? [['ok', 'Selecionar'], ['back', 'Fechar']]
     : !tiles ? [['ok', 'Selecionar'], ['back', 'Voltar'], ['rb', 'Abas']]

@@ -170,7 +170,6 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
   };
 
   useKeys((k: Key) => {
-    if ((sec === 'cat' && !game && !st.menu) || game) return;
     if (k === 'Escape') return back();
     const R = k === 'ArrowRight', L = k === 'ArrowLeft', U = k === 'ArrowUp', D = k === 'ArrowDown';
     const mv = (p: Partial<St>) => { sfx.play('move'); up(p); };
@@ -199,7 +198,7 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
       return;
     }
     if (D && st.li < rows.length - 1) mv({ li: st.li + 1 }); else if (U && st.li > 0) mv({ li: st.li - 1 }); else if (L) mv({ zone: 'side' });
-  });
+  }, !((sec === 'cat' && !game && !st.menu) || game));
 
   const hints: Hint[] = st.menu ? [['ok', 'Confirmar'], ['back', 'Fechar']]
     : st.zone === 'side' ? [['ud', 'Seção'], ['ok', 'Abrir'], ['back', 'Sair']]

@@ -161,7 +161,6 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
   };
 
   useKeys((k: Key) => {
-    if (st.page === 'cat' || st.page === 'game') return;
     if (launch) return;
     if (k === 'Escape') return back();
     if (k === 'Enter') return enter();
@@ -194,7 +193,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     else if (k === 'ArrowRight' && cols > 1 && st.mi < n - 1) mv({ mi: st.mi + 1 });
     else if (k === 'ArrowDown' && st.mi + cols < n) mv({ mi: st.mi + cols });
     else if (k === 'ArrowUp' && st.mi - cols >= 0) mv({ mi: st.mi - cols });
-  });
+  }, !(st.page === 'cat' || st.page === 'game'));
 
   const hints: [Parameters<typeof Glyph>[0]['a'], string][] = (() => {
     if (st.page === 'home') {

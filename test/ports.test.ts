@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,7 +9,7 @@ import { AchievementService } from '../src/main/achievements/service';
 import { createGitHub, guessAsset, parseRepo, type Asset } from '../src/main/ports/github';
 import { Ports } from '../src/main/ports/installer';
 import { listCatalog, listRadar, perConsole } from '../src/main/catalog';
-import { Player } from '../src/main/play';
+import { FOLLOW, Player } from '../src/main/play';
 import { buildZip } from './fixtures';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'cartucho-'));
@@ -194,6 +194,7 @@ describe('instalar, atualizar e desinstalar', () => {
 });
 
 describe.skipIf(process.platform === 'win32')('jogar e contar o tempo', () => {
+  beforeAll(() => { Object.assign(FOLLOW, { every: 100, tries: 3 }); });
   it('abre, acompanha até fechar e soma a sessão', async () => {
     const db = openDb(':memory:'), dir = tmp();
     const exe = join(dir, 'jogo.sh');
@@ -214,6 +215,22 @@ describe.skipIf(process.platform === 'win32')('jogar e contar o tempo', () => {
     expect(st.days[13]).toBeGreaterThan(0);
     expect(ach.getGame(g.id)).toMatchObject({ running: false, lastPlayed: expect.any(Number) });
     expect(ach.getGame(g.id).playMs).toBeGreaterThanOrEqual(300);
+  });
+  it('launcher que fecha logo: segue o jogo que ele abriu na mesma pasta', async () => {
+    const db = openDb(':memory:'), dir = tmp();
+    const exe = join(dir, 'launcher.sh'), real = join(dir, 'jogo-real');
+    copyFileSync('/bin/sleep', real); chmodSync(real, 0o755);
+    writeFileSync(exe, `#!/bin/sh\n"${real}" 1.6 &\nsleep 0.1\n`); chmodSync(exe, 0o755);
+    const ach = new AchievementService(db, tmp());
+    const g = await ach.addGame(dir, { exe });
+    const player = new Player(db, ach, async () => '');
+    ach.isRunning = player.isRunning;
+    const ended = new Promise<number>(ok => player.events.on('play', e => { if (!e.running) ok(e.sessionMs ?? 0); }));
+    await player.play(g.id);
+    await new Promise(r => setTimeout(r, 700));
+    expect(ach.getGame(g.id).running).toBe(true);
+    expect(await ended).toBeGreaterThanOrEqual(1400);
+    expect(player.stats(g.id)).toMatchObject({ sessions: 1 });
   });
   it('sem .exe conhecido: explica', async () => {
     const db = openDb(':memory:'), ach = new AchievementService(db, tmp());

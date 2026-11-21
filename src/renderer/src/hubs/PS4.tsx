@@ -232,7 +232,6 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   }
 
   useKeys((k: Key) => {
-    if ((st.page === 'cat' && !st.game && !menu) || st.page === 'game') return;
     if (k === 'Escape') return back();
     const R = k === 'ArrowRight', L = k === 'ArrowLeft', U = k === 'ArrowUp', D = k === 'ArrowDown';
     const mv = (p: Partial<St>) => { sfx.play('move'); up(p); };
@@ -265,7 +264,7 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     if (D && st.mi < rows.length - 1) mv({ mi: st.mi + 1 }); else if (U && st.mi > 0) mv({ mi: st.mi - 1 });
     else if (U && p === 'cat' && sk === 'search') { sfx.play('ok'); searchRef.current?.focus(); }
     else if (L) mv({ zone: 'side' });
-  });
+  }, !((st.page === 'cat' && !st.game && !menu) || st.page === 'game'));
 
   const hints: Hint[] = menu ? [['ok', 'Confirmar'], ['back', 'Fechar']]
     : st.page === 'home' ? (st.zone === 'row' && g ? [['ok', primaryOf(g).l], ['x', 'Opções'], ['back', 'Sair']] : st.zone === 'cards' ? [['ok', 'Abrir'], ['back', 'Voltar']] : [['ok', 'Confirmar'], ['back', st.zone === 'row' ? 'Sair' : 'Voltar']])
