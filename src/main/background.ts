@@ -13,6 +13,7 @@ export const playArg = (argv: string[]) => { const i = argv.indexOf('--play'); r
 export class Background {
   private tray: Tray | null = null;
   quitting = false;
+  hiddenStart = false;
 
   constructor(private db: DB, private ctl: () => WinCtl | null, private player: Player, private games: AchievementService, private icon: string) {
     app.on('before-quit', () => { this.quitting = true; });
@@ -34,11 +35,23 @@ export class Background {
   apply() {
     const p = this.prefs();
     this.player.watchExternal(p.track);
-    if (p.tray && !this.tray) this.makeTray();
-    else if (!p.tray && this.tray) { this.tray.destroy(); this.tray = null; }
+    const want = p.tray || this.hiddenStart || p.autostart;
+    if (want && !this.tray) this.makeTray();
+    else if (!want && this.tray) { this.tray.destroy(); this.tray = null; }
   }
 
   shouldHideOnClose() { return !this.quitting && this.prefs().tray; }
+
+  hidden() {
+    if (!this.tray || kvGet(this.db, 'bg.hint') === '1' || process.platform !== 'win32') return;
+    kvSet(this.db, 'bg.hint', '1');
+    this.tray.displayBalloon({ iconType: 'info', title: 'O Cartucho continua aqui', content: 'Ele fica na bandeja para contar o tempo de jogo. Para fechar de vez, clique com o botão direito no ícone e escolha Sair.' });
+  }
+
+  gameClosed() {
+    const w = this.ctl()?.win;
+    if (w && !w.isDestroyed() && !w.isVisible() && !this.prefs().tray && !this.prefs().autostart) app.quit();
+  }
 
   show() { this.ctl()?.reveal(); }
 

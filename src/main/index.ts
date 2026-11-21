@@ -47,7 +47,7 @@ function createWindow(show = true) {
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true },
   });
   ctl.attach(win, show);
-  win.on('close', e => { if (bg?.shouldHideOnClose()) { e.preventDefault(); win?.hide(); } });
+  win.on('close', e => { if (bg?.shouldHideOnClose()) { e.preventDefault(); win?.hide(); bg.hidden(); } });
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) void shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e, url) => { if (!isOurPage(url)) e.preventDefault(); });
 
@@ -70,7 +70,7 @@ void app.whenReady().then(async () => {
 
   const db = openDb(join(app.getPath('userData'), 'cartucho.db'));
   const ach = new AchievementService(db, app.getPath('appData'));
-  const player = new Player(db, ach, p => shell.openPath(p), () => { if (win && !win.isDestroyed() && win.isVisible()) { if (win.isMinimized()) win.restore(); win.focus(); } });
+  const player = new Player(db, ach, p => shell.openPath(p), () => { if (win && !win.isDestroyed() && win.isVisible()) { if (win.isMinimized()) win.restore(); win.focus(); } else bg?.gameClosed(); });
   ach.isRunning = player.isRunning;
   const gh = createGitHub({ fetch: ((url, init) => net.fetch(url, init as RequestInit)) as Fetch, ...(process.env.CARTUCHO_GITHUB_API ? { api: process.env.CARTUCHO_GITHUB_API } : {}) });
   const defaultPortsDir = join(app.getPath('home'), 'Games', 'Cartucho');
@@ -95,8 +95,9 @@ void app.whenReady().then(async () => {
   });
   bg = new Background(db, () => ctl, player, ach, appIcon() ?? '');
   upd = new Updater(() => { if (bg) bg.quitting = true; });
+  bg.hiddenStart = startHidden(process.argv) || !!playArg(process.argv);
   bg.apply();
-  createWindow(!startHidden(process.argv) && !playArg(process.argv));
+  createWindow(!bg.hiddenStart);
   void bg.handleArgs(process.argv);
   void ach.start();
   refreshCatalog(db).catch(e => console.warn('[catálogo]', e instanceof Error ? e.message : e));
