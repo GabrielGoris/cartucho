@@ -269,7 +269,7 @@ function Detail({ g, self }: { g: HubGame; self: boolean }) {
       <h3>{g.title}</h3>
       <p className="meta">{[g.catalog?.year, g.catalog?.developer].filter(Boolean).join(' · ') || g.platformName}</p>
       <div className="pills">
-        {score && <span className={`pill score ${score.value >= 75 ? 'hi' : score.value >= 50 ? 'mid' : 'lo'}`} title={`Nota do ${score.by}${score.platform ? ` · ${score.platform}` : ''}`}>{score.value}</span>}
+        {score && <span className={`pill score ${score.value >= 75 ? 'hi' : score.value >= 50 ? 'mid' : 'lo'}`} title={`${score.by === 'IGDB' ? 'Média da crítica (IGDB)' : `Nota do ${score.by}`}${score.platform ? ` · ${score.platform}` : ''}`}>{score.value}</span>}
         {g.status && <span className={`pill ${g.status}`}>{STATUS_LABEL[g.status]}</span>}
         {g.isNew && <span className="pill new">Novo</span>}
         {i && <span className="pill inst">{i.missing ? 'Pasta não encontrada' : i.playMs ? `${fmtPlay(i.playMs)} jogadas` : 'Instalado'}</span>}

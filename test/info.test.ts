@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../src/main/db';
-import { GameInfoService, parseScore, pickScore, steamAppId, type WdEntity } from '../src/main/artwork/info';
+import { GameInfoService, parseScore, pickIgdb, pickScore, steamAppId, type WdEntity } from '../src/main/artwork/info';
 import type { Artwork } from '../src/main/artwork/service';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'cartucho-'));
@@ -143,5 +143,20 @@ describe('notas prontas do catálogo', () => {
     const offline = new GameInfoService(db, (async () => { throw new Error('sem rede'); }) as never, a);
     await offline.startNotas();
     expect(offline.get({ console: 'n64', title: 'Super Mario 64', catalogId: 'recomps/sm64' }).score?.value).toBe(94);
+  });
+});
+
+describe('média da crítica do IGDB', () => {
+  const g = (name: string, rating: number | undefined, count: number, platforms: string[]) => ({ name, aggregated_rating: rating, aggregated_rating_count: count, url: `https://www.igdb.com/games/${name.toLowerCase().replace(/\W+/g, '-')}`, platforms: platforms.map(p => ({ name: p })) });
+
+  it('escolhe a versão da plataforma do console e arredonda', () => {
+    const r = pickIgdb('Banjo-Kazooie', 'n64', [g('Banjo-Kazooie: Nuts & Bolts', 79.4, 40, ['Xbox 360']), g('Banjo-Kazooie', 91.6, 12, ['Nintendo 64', 'Xbox 360'])]);
+    expect(r).toEqual({ value: 92, by: 'IGDB', url: 'https://www.igdb.com/games/banjo-kazooie', platform: 'Nintendo 64', via: 'IGDB' });
+  });
+
+  it('entende os nomes de plataforma do IGDB e ignora quem não tem nota da crítica', () => {
+    expect(pickIgdb('Sonic 3 A.I.R.', 'megadrive', [g('Sonic 3 & Knuckles', 90, 5, ['Sega Mega Drive/Genesis'])])?.platform).toBe('Sega Mega Drive/Genesis');
+    expect(pickIgdb('DOOM', 'pc', [g('Doom', 89, 9, ['PC (Microsoft Windows)'])])?.value).toBe(89);
+    expect(pickIgdb('Banjo-Kazooie', 'n64', [g('Banjo-Kazooie', undefined, 0, ['Nintendo 64'])])).toBeNull();
   });
 });

@@ -130,9 +130,9 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
                 <span className={`pill score ${tone} ${zone === 'score' ? 'on' : ''}`} onClick={openScore}>
                   {score.value}
                   <span className="gv-pop">
-                    <b>Nota do {score.by}</b>
+                    <b>{score.by === 'IGDB' ? 'Média da crítica' : `Nota do ${score.by}`}</b>
                     <span>{score.platform ? `Versão de ${score.platform}` : 'Média da crítica especializada'}</span>
-                    <small>Fonte: {score.via === 'Steam' ? 'loja da Steam' : 'Wikidata'}{score.url ? ' · abrir a página com OK ou clique' : ''}</small>
+                    <small>Fonte: {score.via === 'Steam' ? 'loja da Steam' : score.via === 'IGDB' ? 'IGDB.com' : 'Wikidata'}{score.url ? ' · abrir a página com OK ou clique' : ''}</small>
                   </span>
                 </span>
               )}

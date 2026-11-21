@@ -4,10 +4,10 @@ import { type DB, kvGet, kvSet } from '../db';
 import type { Fetch } from '../ports/github';
 import { type Artwork, artPlatform, cleanTitle, looseKey } from './service';
 
-export interface Score { value: number; by: 'Metacritic' | 'OpenCritic'; url: string | null; platform: string | null; via: 'Wikidata' | 'Steam' }
+export interface Score { value: number; by: 'Metacritic' | 'OpenCritic' | 'IGDB'; url: string | null; platform: string | null; via: 'Wikidata' | 'Steam' | 'IGDB' }
 export interface GameInfo { overview: string | null; lang: 'pt' | 'en' | null; developer: string | null; year: number | null; score: Score | null; lbPending?: boolean }
 export interface InfoInput { console: string; platformName?: string | null; title: string; installDir?: string | null; exe?: string | null; catalogId?: string | null }
-export interface Notas { gerado?: string; jogos?: Record<string, { n: Score | null; t: number }> }
+export interface Notas { gerado?: string; jogos?: Record<string, { n: Score | null; t: number; i?: 1 }> }
 
 export const infoKey = (console: string, platformName: string | null | undefined, title: string) => `${artPlatform(console, platformName) ?? console}:${looseKey(title)}`;
 
@@ -25,8 +25,8 @@ export const PLATFORM_LABEL: Record<string, RegExp> = {
   gb: /^game boy$/i, gbc: /^game boy color$/i, gba: /^game boy advance$/i, nds: /^nintendo ds$/i, '3ds': /^nintendo 3ds$/i,
   ps1: /^playstation( \(console\))?$/i, ps2: /^playstation 2$/i, ps3: /^playstation 3$/i, ps4: /^playstation 4$/i, ps5: /^playstation 5$/i,
   psp: /^playstation portable$/i, vita: /^playstation vita$/i, xbox: /^xbox( \(console\))?$/i, x360: /^xbox 360$/i,
-  pc: /^(microsoft windows|windows|personal computer|pc)$/i, megadrive: /^(sega )?(mega drive|genesis)$/i, dreamcast: /^(sega )?dreamcast$/i,
-  saturn: /^(sega )?saturn$/i, mastersystem: /^(sega )?master system$/i, arcade: /^arcade( game| video game)?$/i,
+  pc: /^(microsoft windows|windows|personal computer|pc|pc \(microsoft windows\))$/i, megadrive: /^(sega )?(mega drive|genesis|mega drive\/genesis)$/i, dreamcast: /^(sega )?dreamcast$/i,
+  saturn: /^(sega )?saturn$/i, mastersystem: /^(sega )?master system(\/mark iii)?$/i, arcade: /^arcade( game| video game)?$/i,
 };
 
 type Snak = { datavalue?: { value?: unknown } };
@@ -77,6 +77,20 @@ export function pickScore(title: string, platform: string | null, games: WdEntit
   opts.sort((a, b) => a.rank - b.rank);
   const best = opts[0];
   return best ? { value: best.value, by: best.by, url: best.url, platform: best.platform, via: 'Wikidata' } : null;
+}
+
+export interface IgdbGame { name?: string; aggregated_rating?: number; aggregated_rating_count?: number; url?: string; platforms?: { name?: string }[] }
+
+export function pickIgdb(title: string, platform: string | null, games: IgdbGame[]): Score | null {
+  const want = platform ? PLATFORM_LABEL[platform] : undefined, key = looseKey(title);
+  const rated = games.filter(g => g.aggregated_rating != null && (g.aggregated_rating_count ?? 0) > 0);
+  const plat = (g: IgdbGame) => !!want && (g.platforms ?? []).some(p => want.test(p.name ?? ''));
+  const same = (g: IgdbGame) => looseKey(g.name ?? '') === key;
+  const pool = want && rated.some(plat) ? rated.filter(plat) : rated.filter(same);
+  const g = [...pool].sort((a, b) => Number(same(b)) - Number(same(a)) || (b.aggregated_rating_count ?? 0) - (a.aggregated_rating_count ?? 0))[0];
+  if (!g) return null;
+  const p = want ? g.platforms?.find(x => want.test(x.name ?? ''))?.name ?? null : null;
+  return { value: Math.round(g.aggregated_rating!), by: 'IGDB', url: g.url ?? null, platform: p, via: 'IGDB' };
 }
 
 export function steamAppId(installDir?: string | null, exe?: string | null): string | null {

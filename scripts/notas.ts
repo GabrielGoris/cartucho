@@ -1,7 +1,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { toConsoleId } from '../src/shared/consoles';
 import { artPlatform } from '../src/main/artwork/service';
-import { type Notas, wikidataScore } from '../src/main/artwork/info';
+import { cleanTitle } from '../src/main/artwork/service';
+import { type IgdbGame, type Notas, pickIgdb, wikidataScore } from '../src/main/artwork/info';
 
 const [prevFile, outFile = 'notas.json'] = process.argv.slice(2);
 const CATALOG = process.env.CARTUCHO_CATALOG_URL || 'https://recompendium.com/unricopie/catalogo.json';
@@ -10,6 +11,31 @@ const DAY = 86400_000, KEEP_FOUND = 30 * DAY, KEEP_MISSING = 7 * DAY;
 const MAX = Number(process.env.NOTAS_MAX || 3000), PAUSE = Number(process.env.NOTAS_PAUSE ?? 150);
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const TWITCH_ID = process.env.TWITCH_CLIENT_ID ?? '', TWITCH_SECRET = process.env.TWITCH_CLIENT_SECRET ?? '';
+const IGDB = process.env.IGDB_API || 'https://api.igdb.com/v4', TWITCH_TOKEN = process.env.TWITCH_TOKEN_URL || 'https://id.twitch.tv/oauth2/token';
+let token: string | null = null, igdbAt = 0;
+
+async function igdbToken() {
+  if (!TWITCH_ID || !TWITCH_SECRET) return null;
+  const r = await fetch(`${TWITCH_TOKEN}?client_id=${encodeURIComponent(TWITCH_ID)}&client_secret=${encodeURIComponent(TWITCH_SECRET)}&grant_type=client_credentials`, { method: 'POST', signal: AbortSignal.timeout(30_000) });
+  if (!r.ok) throw new Error(`a Twitch recusou as credenciais do IGDB (${r.status})`);
+  return ((await r.json()) as { access_token?: string }).access_token ?? null;
+}
+
+async function igdb(title: string, platform: string | null) {
+  if (!token) return null;
+  const q = cleanTitle(title).replace(/["\\]/g, ' ');
+  const body = `search "${q}"; fields name,aggregated_rating,aggregated_rating_count,url,platforms.name; limit 10;`;
+  for (let tries = 1; ; tries++) {
+    const wait = igdbAt + 300 - Date.now(); if (wait > 0) await sleep(wait);
+    igdbAt = Date.now();
+    const r = await fetch(`${IGDB}/games`, { method: 'POST', body, headers: { 'Client-ID': TWITCH_ID, Authorization: `Bearer ${token}`, Accept: 'application/json', 'User-Agent': UA }, signal: AbortSignal.timeout(30_000) }).catch(e => e as Error);
+    if (!(r instanceof Error) && r.ok) return pickIgdb(title, platform, (await r.json()) as IgdbGame[]);
+    const busy = r instanceof Error || r.status === 429 || r.status >= 500;
+    if (!busy || tries >= 4) throw new Error(r instanceof Error ? r.message : `IGDB respondeu ${r.status}`);
+    await sleep(3000 * tries);
+  }
+}
 
 async function json<T>(url: string): Promise<T> {
   for (let tries = 1; ; tries++) {
@@ -28,20 +54,25 @@ interface Entry { entry?: string; nombre?: string; consola?: string | null; cons
 let prev: Notas = {};
 try { if (prevFile) prev = JSON.parse(readFileSync(prevFile, 'utf8')) as Notas; } catch { prev = {}; }
 
+token = await igdbToken().catch(e => { console.log(`::warning::${(e as Error).message}; seguindo só com o Wikidata`); return null; });
+if (token && process.env.GITHUB_ACTIONS) console.log(`::add-mask::${token}`);
+console.log(token ? 'IGDB ligado' : 'IGDB desligado (sem TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET)');
 const cat = await json<{ entradas?: Entry[] }>(CATALOG);
 const now = Date.now(), out: Required<Notas> = { gerado: new Date(now).toISOString(), jogos: {} };
-let asked = 0, found = 0, kept = 0, failed = 0;
+let asked = 0, found = 0, kept = 0, failed = 0, fromIgdb = 0;
 
 for (const e of cat.entradas ?? []) {
   if (!e.entry || !e.nombre || e.retirado) continue;
   const old = prev.jogos?.[e.entry];
-  if (old && now - old.t < (old.n ? KEEP_FOUND : KEEP_MISSING)) { out.jogos[e.entry] = old; kept++; continue; }
+  const retryIgdb = !!token && old && !old.n && !old.i;
+  if (old && !retryIgdb && now - old.t < (old.n ? KEEP_FOUND : KEEP_MISSING)) { out.jogos[e.entry] = old; kept++; continue; }
   if (asked >= MAX) { if (old) out.jogos[e.entry] = old; continue; }
   asked++;
   const cid = toConsoleId(e.consola), platform = artPlatform(cid, e.consola_nombre ?? e.consola ?? 'Outros');
   try {
-    const n = await wikidataScore(json, e.nombre, platform);
-    out.jogos[e.entry] = { n, t: now };
+    let n = await wikidataScore(json, e.nombre, platform);
+    if (!n && token) { n = await igdb(e.nombre, platform); if (n) fromIgdb++; }
+    out.jogos[e.entry] = token ? { n, t: now, i: 1 } : { n, t: now };
     if (n) found++;
   } catch (err) {
     failed++;
@@ -52,4 +83,4 @@ for (const e of cat.entradas ?? []) {
 
 writeFileSync(outFile, JSON.stringify(out));
 const total = Object.keys(out.jogos).length, withScore = Object.values(out.jogos).filter(v => v.n).length;
-console.log(`${total} jogos · ${withScore} com nota · ${asked} consultados agora (${found} com nota, ${failed} com erro) · ${kept} reaproveitados`);
+console.log(`${total} jogos · ${withScore} com nota · ${asked} consultados agora (${found} com nota, ${fromIgdb} pelo IGDB, ${failed} com erro) · ${kept} reaproveitados`);

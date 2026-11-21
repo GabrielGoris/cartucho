@@ -30,7 +30,10 @@ jobs:
           else
             echo '{}' > "$RUNNER_TEMP/antes.json"
           fi
-      - name: Buscar notas no Wikidata
+      - name: Buscar notas no Wikidata e no IGDB
+        env:
+          TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+          TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
         run: node --no-warnings --experimental-transform-types --import ./scripts/ts.mjs scripts/notas.ts "$RUNNER_TEMP/antes.json" "$RUNNER_TEMP/notas.json"
       - name: Publicar no ramo dados
         run: |
