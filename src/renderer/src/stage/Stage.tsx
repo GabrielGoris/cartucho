@@ -26,12 +26,18 @@ interface Props {
   pixel: boolean;
   onSelect: (i: number) => void;
   onEnter: (i: number) => void;
+  sleep?: boolean;
 }
 
 export function Stage(p: Props) {
+  const [gen, setGen] = useState(0);
   return (
     <div className={`stage stage-${p.mode}`} onWheel={e => { if (p.mode === 'stage') p.onSelect(p.sel + (e.deltaY > 0 ? 1 : -1)); }}>
-      <Canvas
+      {!p.sleep && <Canvas
+        key={gen}
+        onCreated={({ gl }) => {
+          gl.domElement.addEventListener('webglcontextlost', ev => { ev.preventDefault(); setTimeout(() => setGen(g => g + 1), 1200); }, { once: true });
+        }}
         flat
         gl={{ antialias: false, powerPreference: 'high-performance' }}
         camera={{ fov: 36, near: 0.1, far: 80, position: geometry(p.list.length).CAM_HOME.toArray() }}
@@ -39,7 +45,7 @@ export function Stage(p: Props) {
         aria-label="Consoles em 3D girando num palco"
       >
         <Scene {...p} />
-      </Canvas>
+      </Canvas>}
     </div>
   );
 }

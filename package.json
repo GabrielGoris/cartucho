@@ -1,7 +1,7 @@
 {
   "name": "cartucho",
   "productName": "Cartucho",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "engines": {
     "node": ">=22.13"
@@ -98,7 +98,10 @@
         "repo": "cartucho",
         "releaseType": "release"
       }
-    ]
+    ],
+    "releaseInfo": {
+      "releaseNotesFile": "build/release-notes.md"
+    }
   },
   "repository": {
     "type": "git",

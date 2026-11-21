@@ -1,22 +1,17 @@
-## Cartucho 1.0.0
+## Cartucho 1.0.1
 
-Primeira versão para instalar. O Cartucho é um hub de recomps e ports de PC, com um palco 3D de consoles e um hub com a cara de cada um.
+Correções depois dos primeiros testes da 1.0.0.
 
-### Destaques
+### Corrigido
 
-- **Palco 3D com 20 lugares**, do NES ao PS5, mais PC e Outros. Você escolhe quais consoles aparecem.
-- **Um hub para cada console**, todos com o mesmo jeito de usar: Meus jogos, Descobrir, Novidades, Conquistas, Tempo e Ajustes.
-- **Todos os jogos**: o catálogo inteiro numa tela só, com filtro por console.
-- **Instala e atualiza** recomps direto do GitHub, conferindo o arquivo e passando no Windows Defender.
-- **Tempo de jogo como na Steam**, inclusive de jogos abertos fora do Cartucho enquanto ele estiver na bandeja.
-- **Conquistas** lidas dos próprios recomps, com aviso na hora.
-- **Feito para o controle**: Xbox, PlayStation e Nintendo, com teclado na tela e seletor de pastas dentro do app.
-- **Atualização automática**: as próximas versões chegam sozinhas.
+- **Trocar a pasta de um jogo:** a página de todo jogo instalado tem a ação "Trocar a pasta", para quando você escolheu a pasta errada.
+- **Pasta que já é de outro jogo:** agora o Cartucho avisa de qual jogo ela é, em vez de não fazer nada.
+- **Travada ao abrir ou fechar um jogo:** o palco 3D é desligado enquanto o jogo roda e volta quando ele fecha, liberando a placa de vídeo. Se a placa de vídeo for reiniciada, o palco se recria sozinho.
+- **Controle durante o jogo:** o Cartucho não reage mais aos botões que você aperta dentro do jogo; ele só lê o controle quando está em foco.
+- **Abrir pelo Continuar:** o Cartucho não segura mais a tela enquanto abre o jogo.
 
-### Ao instalar
+### Novo
 
-O instalador não tem assinatura digital. Se o Windows mostrar "O Windows protegeu o computador", clique em **Mais informações** e depois em **Executar assim mesmo**.
-
-O Cartucho não contém nem distribui jogos, ROMs, chaves ou firmware: os recomps precisam da sua própria cópia do jogo.
+- **Registro do Cartucho** em Configurações › Sobre: abre a pasta do `cartucho.log`. Se algo travar ou der erro, mande esse arquivo junto com o relato.
 
 Gostou? Dá para apoiar em [buymeacoffee.com/goris](https://buymeacoffee.com/goris).

@@ -1,4 +1,4 @@
-import { type ChildProcess, execFile, spawn, spawnSync } from 'node:child_process';
+import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { existsSync } from 'node:fs';
 import { basename, dirname, normalize } from 'node:path';
@@ -19,10 +19,10 @@ export class Player {
 
   isRunning = (id: string) => this.running.has(id) || this.external.has(id);
 
-  private env() {
+  private async env() {
     if (process.platform !== 'win32') return process.env;
-    const r = spawnSync('tasklist', ['/FI', 'IMAGENAME eq steam.exe', '/NH'], { windowsHide: true, encoding: 'utf8' });
-    return (r.stdout || '').toLowerCase().includes('steam.exe') ? { ...process.env, SDL_JOYSTICK_HIDAPI_STEAM: '0' } : process.env;
+    const out = await run('tasklist', ['/FI', 'IMAGENAME eq steam.exe', '/NH']).catch(() => '');
+    return out.toLowerCase().includes('steam.exe') ? { ...process.env, SDL_JOYSTICK_HIDAPI_STEAM: '0' } : process.env;
   }
 
   async play(gameId: string) {
@@ -41,8 +41,9 @@ export class Player {
       return;
     }
 
+    const env = await this.env();
     await new Promise<void>((ok, fail) => {
-      const child = spawn(g.exe!, [], { cwd: dirname(g.exe!), env: this.env(), detached: true, stdio: 'ignore' });
+      const child = spawn(g.exe!, [], { cwd: dirname(g.exe!), env, detached: true, stdio: 'ignore' });
       child.once('error', e => fail(new Error(`Não consegui abrir o jogo: ${e.message}`)));
       child.once('spawn', () => {
         const start = Date.now();

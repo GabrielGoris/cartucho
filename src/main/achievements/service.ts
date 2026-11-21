@@ -82,8 +82,8 @@ export class AchievementService {
 
   relocate(id: string, dir: string, p: { exe?: string | null; release?: InstalledRelease | null; manifest?: Record<string, number> | null; managed?: boolean } = {}) {
     dir = resolve(dir);
-    const other = this.db.prepare('SELECT id FROM installed_game WHERE install_dir = ? AND id != ?').get(dir, id) as { id: string } | undefined;
-    if (other) throw new Error('Essa pasta já é de outro jogo da biblioteca.');
+    const other = this.db.prepare('SELECT id, title FROM installed_game WHERE install_dir = ? AND id != ?').get(dir, id) as { id: string; title: string } | undefined;
+    if (other) throw new Error(`Essa pasta já é de ${other.title}. Escolha outra pasta, ou troque a pasta de ${other.title} antes.`);
     const r = this.row(id);
     let exe = p.exe ?? null;
     if (!exe) try { exe = findGameExe(dir) ?? guessProgram(dir, r.source_repo); } catch { exe = null; }
@@ -97,7 +97,8 @@ export class AchievementService {
 
   async addGame(dir: string, extra: AddExtra = {}): Promise<InstalledGame> {
     dir = resolve(dir);
-    const dup = this.db.prepare('SELECT id FROM installed_game WHERE install_dir = ?').get(dir) as { id: string } | undefined;
+    const dup = this.db.prepare('SELECT id, title, catalog_id FROM installed_game WHERE install_dir = ?').get(dir) as { id: string; title: string; catalog_id: string | null } | undefined;
+    if (dup && extra.catalogId && dup.catalog_id !== extra.catalogId) throw new Error(`Essa pasta já é de ${dup.title}. Escolha outra pasta, ou troque a pasta de ${dup.title} antes.`);
     if (dup) return this.toGame(this.row(dup.id));
     const lost = extra.catalogId ? (this.db.prepare('SELECT id, install_dir FROM installed_game WHERE catalog_id = ?').all(extra.catalogId) as { id: string; install_dir: string }[]).find(x => !existsSync(x.install_dir)) : undefined;
     if (lost) return this.relocate(lost.id, dir, { exe: extra.exe, release: extra.release, manifest: extra.manifest, managed: extra.managed });

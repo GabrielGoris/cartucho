@@ -19,6 +19,7 @@ import type { Artwork } from './artwork/service';
 import type { Translator } from './translate';
 import type { WinCtl, WinState } from './window';
 import type { Background } from './background';
+import { logFile } from './log';
 import type { Updater, UpdState } from './updater';
 
 export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; tr: Translator; defaultPortsDir: string; win?: () => WinCtl | null; bg?: () => Background | null; upd?: () => Updater | null }
@@ -109,6 +110,7 @@ export function createRouter(deps: RouterDeps) {
 
     system: t.router({
       user: t.procedure.query(() => { try { return userInfo().username; } catch { return ''; } }),
+      openLog: t.procedure.mutation(() => { const f = logFile(); if (f) shell.showItemInFolder(f); }),
       quit: t.procedure.mutation(() => { const b = deps.bg?.(); if (b) b.quitting = true; setTimeout(() => app.quit(), 120); }),
     }),
 

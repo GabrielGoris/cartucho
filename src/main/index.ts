@@ -16,9 +16,11 @@ import { Translator } from './translate';
 import { WinCtl } from './window';
 import { Background, playArg, startHidden } from './background';
 import { Updater } from './updater';
+import { initLog, log } from './log';
 
 if (process.env.CARTUCHO_USER_DATA) app.setPath('userData', process.env.CARTUCHO_USER_DATA);
 if (!app.requestSingleInstanceLock()) app.quit();
+app.commandLine.appendSwitch('disable-gpu-process-crash-limit');
 
 const APP_ORIGIN = 'app://cartucho';
 protocol.registerSchemesAsPrivileged([
@@ -47,6 +49,10 @@ function createWindow(show = true) {
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true },
   });
   ctl.attach(win, show);
+  const w = win;
+  w.on('unresponsive', () => log('janela sem resposta'));
+  w.on('responsive', () => log('janela voltou a responder'));
+  w.webContents.on('render-process-gone', (_e, d) => { log('a tela caiu:', d.reason, d.exitCode); if (d.reason !== 'clean-exit' && !w.isDestroyed()) w.reload(); });
   win.on('close', e => { if (bg?.shouldHideOnClose()) { e.preventDefault(); win?.hide(); bg.hidden(); } });
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) void shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e, url) => { if (!isOurPage(url)) e.preventDefault(); });
@@ -59,7 +65,11 @@ app.on('second-instance', (_e, argv) => { void bg?.handleArgs(argv).then(played 
 
 if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'app.cartucho' : process.execPath);
 
+app.on('child-process-gone', (_e, d) => log('processo do Electron caiu:', d.type, d.reason, d.exitCode, d.name ?? ''));
+
 void app.whenReady().then(async () => {
+  initLog(app.getPath('userData'));
+  log(`Cartucho ${app.getVersion()} abriu`, process.platform, process.arch);
   const root = join(__dirname, '../renderer');
   protocol.handle('app', req => {
     const { pathname } = new URL(req.url);
@@ -72,6 +82,7 @@ void app.whenReady().then(async () => {
   const ach = new AchievementService(db, app.getPath('appData'));
   const player = new Player(db, ach, p => shell.openPath(p), () => { if (win && !win.isDestroyed() && win.isVisible()) { if (win.isMinimized()) win.restore(); win.focus(); } else bg?.gameClosed(); });
   ach.isRunning = player.isRunning;
+  player.events.on('play', e => log(`jogo ${e.running ? 'aberto' : 'fechado'}:`, e.title, e.sessionMs ? `${Math.round(e.sessionMs / 60000)} min` : ''));
   const gh = createGitHub({ fetch: ((url, init) => net.fetch(url, init as RequestInit)) as Fetch, ...(process.env.CARTUCHO_GITHUB_API ? { api: process.env.CARTUCHO_GITHUB_API } : {}) });
   const defaultPortsDir = join(app.getPath('home'), 'Games', 'Cartucho');
   const art = new Artwork(join(app.getPath('userData'), 'media'), ((url, init) => net.fetch(url, init as RequestInit)) as Fetch, {

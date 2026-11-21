@@ -71,7 +71,7 @@ export function usePadKind(): PadKind {
   return useSyncExternalStore(f => { padSubs.add(f); return () => padSubs.delete(f); }, padKind);
 }
 
-let prev: boolean[] = [], axisAt = 0, held: Key | null = null, heldAt = 0;
+let prev: boolean[] = [], axisAt = 0, held: Key | null = null, heldAt = 0, away = false;
 const DIRS = new Set<Key>(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 function activePad() {
   const all = [...(navigator.getGamepads?.() ?? [])].filter((x): x is Gamepad => !!x);
@@ -81,7 +81,9 @@ function activePad() {
   return p;
 }
 function poll() {
+  if (!document.hasFocus() || document.hidden) { away = true; held = null; return; }
   const p = activePad();
+  if (p && away) { away = false; prev = p.buttons.map(x => x.pressed || x.value > 0.5); axisAt = performance.now() + 400; return; }
   if (p) {
     const now = performance.now();
     const b = p.buttons.map(x => x.pressed || x.value > 0.5), old = prev; prev = b;

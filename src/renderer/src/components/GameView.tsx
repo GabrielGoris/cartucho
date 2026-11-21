@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTRPC } from '../trpc';
 import { SELF_INSTALL_NOTE, STATUS_LABEL } from '@shared/consoles';
 import { Glyph, useKeys, type Key } from '../lib/input';
@@ -25,7 +25,16 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
   const trpc = useTRPC();
   const [note, setNote] = useState<string | null>(null);
   const lnk = useMutation(trpc.background.shortcut.mutationOptions({ onSuccess: () => setNote('Atalho criado na Área de Trabalho. Ele abre o jogo pelo Cartucho e conta o tempo.'), onError: e => setNote(e.message) }));
-  const opts: DOpt[] = inst && !inst.missing && inst.exe && navigator.userAgent.includes('Windows') ? [...base, { k: '__lnk', l: 'Atalho na Área de Trabalho' }] : base;
+  const qc = useQueryClient();
+  const dir = useMutation(trpc.games.relink.mutationOptions({
+    onSuccess: r => { if (r) { setNote(`Pasta trocada para ${r.installDir}.`); void qc.invalidateQueries(); } },
+    onError: e => setNote(e.message),
+  }));
+  const opts: DOpt[] = [
+    ...base,
+    ...(inst && !inst.missing && !base.some(o => o.k === 'relink') ? [{ k: '__dir', l: 'Trocar a pasta' }] : []),
+    ...(inst && !inst.missing && inst.exe && navigator.userAgent.includes('Windows') ? [{ k: '__lnk', l: 'Atalho na Área de Trabalho' }] : []),
+  ];
   const [zone, setZone] = useState<Zone>('acts');
   const [ai, setAi] = useState(0);
   const [si, setSi] = useState(0);
@@ -44,7 +53,7 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
   useEffect(() => { strip.current?.children[si]?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); }, [si]);
 
   const mv = (f: () => void) => { sfx.play('move'); f(); };
-  const act = (j: number) => { const o = opts[j]; if (!o) return; if (o.k === '__lnk') { sfx.play('ok'); lnk.mutate({ id: inst!.id }); } else run(o.k, g); };
+  const act = (j: number) => { const o = opts[j]; if (!o) return; if (o.k === '__lnk') { sfx.play('ok'); lnk.mutate({ id: inst!.id }); } else if (o.k === '__dir') { sfx.play('ok'); dir.mutate({ id: inst!.id }); } else run(o.k, g); };
 
   useKeys((k: Key) => {
     const R = k === 'ArrowRight', L = k === 'ArrowLeft', U = k === 'ArrowUp', D = k === 'ArrowDown';

@@ -56,6 +56,7 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
   const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => qc.setQueryData(trpc.settings.portsDir.queryKey(), d) }));
   const me = useProfile();
   const quit = useMutation(trpc.system.quit.mutationOptions());
+  const openLog = useMutation(trpc.system.openLog.mutationOptions());
   const nameRef = useRef<HTMLInputElement>(null);
   const win = useQuery(trpc.win.state.queryOptions());
   useSubscription(trpc.win.onState.subscriptionOptions(undefined, { onData: d => qc.setQueryData(trpc.win.state.queryKey(), d) }));
@@ -171,6 +172,10 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
             <span className="c"><span className="st-pick"><b style={{ minWidth: 0 }}>⏻</b>›</span></span>
           </button>
           <div className="st-sec">SOBRE</div>
+          <button className="st-r" data-hf onClick={() => { sfx.play('ok'); openLog.mutate(); }}>
+            <span><span className="t">Registro do Cartucho</span><span className="d">Abre a pasta do arquivo cartucho.log. Se algo travar ou der erro, mande esse arquivo junto com o relato.</span></span>
+            <span className="c"><span className="st-pick"><b style={{ minWidth: 0 }}>Abrir pasta</b>›</span></span>
+          </button>
           <p className="st-credits">
             Catálogo: Recompendium (recompendium.com). Imagens: LaunchBox Games Database. Modelos 3D do Sketchfab, de: Laser Design (SNES, CC BY-NC), Joseph Rohm (N64, CC BY),
             Jeffrey fan 2000 (GameCube, CC BY), elouisetrewartha (Wii, CC BY-NC), Smoggybeard (Switch, CC BY-NC-SA), NAIT Studio (Switch 2, CC BY),
