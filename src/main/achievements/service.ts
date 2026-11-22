@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { existsSync, unwatchFile, watchFile } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { basename, resolve } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { isSelfInstall } from '@shared/consoles';
 import type { ConsoleId, GameAchievements, InstalledGame, InstalledRelease, RecentUnlock, UnlockEvent } from '@shared/types';
@@ -60,6 +60,14 @@ export class AchievementService {
     const r = this.db.prepare('SELECT release_json, manifest_json FROM installed_game WHERE id = ?').get(id) as { release_json: string | null; manifest_json: string | null } | undefined;
     return { release: r?.release_json ? JSON.parse(r.release_json) as InstalledRelease : null, manifest: r?.manifest_json ? JSON.parse(r.manifest_json) as Record<string, number> : null };
   }
+  addEmulated({ title, console, exe }: { title: string; console: string; exe: string }) {
+    const id = randomUUID();
+    this.db.prepare(`INSERT INTO installed_game (id, catalog_id, title, console, install_dir, adapter, added_at, exe, source_repo, release_json, version, managed, manifest_json)
+      VALUES (?, NULL, ?, ?, ?, NULL, ?, ?, NULL, NULL, NULL, 0, NULL)`).run(id, title, console, dirname(exe), Date.now(), exe);
+    this.events.emit('changed', id);
+    return this.toGame(this.row(id));
+  }
+
   patchGame(id: string, p: { exe?: string | null; sourceRepo?: string | null; release?: InstalledRelease | null; manifest?: Record<string, number> | null; title?: string; console?: string }) {
     const sets: string[] = [], args: (string | null)[] = [];
     if (p.exe !== undefined) { sets.push('exe = ?'); args.push(p.exe); }

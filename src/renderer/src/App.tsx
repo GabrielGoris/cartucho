@@ -9,7 +9,7 @@ import { getSettings, reduceMotion, setSettings, useSettings } from './lib/setti
 import { applyPalette, paletteById, PALETTES } from './lib/palettes';
 import { setGameRunning, setGlobalKeys, setShortcutHandler } from './lib/input';
 import { useConfirmReq } from './lib/dialogs';
-import { CartuchoMenu, ConfirmHost, PickerHost, PlatformHost } from './views/GlobalUI';
+import { CartuchoMenu, ConfirmHost, PadSetupHost, PickerHost, PlatformHost } from './views/GlobalUI';
 import { MeOverlay, RadarOverlay, SupportOverlay } from './views/Overlays';
 import { askConfirm } from './lib/dialogs';
 import { CONSOLES } from './stage/consoles';
@@ -92,7 +92,7 @@ export function App() {
   gk.current = { booting, picker, confirmReq, inside, leaveConsole, all, closeAll };
   useEffect(() => setGlobalKeys(k => {
     const g = gk.current;
-    if (g.booting || g.picker || g.confirmReq || document.querySelector('.osk-ov, .gl-pick, .gl-plat')) return false;
+    if (g.booting || g.picker || g.confirmReq || document.querySelector('.osk-ov, .gl-pick, .gl-plat, .gl-padset')) return false;
     if (k === 'Start') { sfx.play(menu ? 'back' : 'ok'); setMenu(m => !m); return true; }
     if (k === 'Home') { setMenu(false); setGov(null); setSettingsOpen(false); if (g.inside) g.leaveConsole(); else if (g.all) g.closeAll(); else setPage('stage'); sfx.play('back'); return true; }
     return false;
@@ -165,6 +165,7 @@ export function App() {
       <ConfirmHost />
       <PickerHost />
       <PlatformHost />
+      <PadSetupHost />
       {settingsOpen && <Settings onSupport={() => { setSettingsOpen(false); setGov('support'); }} onClose={() => setSettingsOpen(false)} onPickConsoles={() => { setSettingsOpen(false); setPicker(true); }} />}
       {askPicker && <ConsolePicker first={!s.picked} onClose={() => setPicker(false)} />}
       {booting && <Boot summary={summary.data} onDone={() => setBooting(false)} />}

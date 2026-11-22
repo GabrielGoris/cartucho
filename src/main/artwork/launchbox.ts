@@ -230,6 +230,11 @@ export function createLaunchBox({ folder, key, download, onStatus = () => {}, me
     return [];
   }
 
-  return { find, info, load, building: () => !!building };
+  async function has(platformKey: string, names: string[]) {
+    const platform = PLATFORMS[platformKey]; if (!platform) return false;
+    return idsFor(await load({ offline: true }), platform, names).length > 0;
+  }
+
+  return { find, info, has, load, building: () => !!building };
 }
 export type LaunchBox = ReturnType<typeof createLaunchBox>;

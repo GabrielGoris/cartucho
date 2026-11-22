@@ -198,7 +198,7 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
       return;
     }
     if (D && st.li < rows.length - 1) mv({ li: st.li + 1 }); else if (U && st.li > 0) mv({ li: st.li - 1 }); else if (L) mv({ zone: 'side' });
-  }, !((sec === 'cat' && !game && !st.menu) || game));
+  }, !((sec === 'cat' && !game && !st.menu && st.zone !== 'side') || game));
 
   const hints: Hint[] = st.menu ? [['ok', 'Confirmar'], ['back', 'Fechar']]
     : st.zone === 'side' ? [['ud', 'Seção'], ['ok', 'Abrir'], ['back', 'Sair']]
@@ -212,7 +212,8 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
         {sec === 'cat' && !game && (
           <Discover theme="d-pc" cname={c.name} games={data.catalog} extra={data.lib.filter(x => !x.catalog)} self={self} st={dst} set={setDst}
             options={x => options(x).filter(o => o.k !== 'info').map(o => ({ k: o.k, l: o.l, icon: <Ic n={o.ic} /> }))}
-            run={run} onOpen={openGame} onBack={() => goSec(0, { zone: 'side' })} />
+            run={run} onOpen={openGame} onBack={() => { sfx.play('back'); up({ zone: 'side' }); }}
+            onSection={d => goSec((st.si + (d > 0 ? 1 : SIDE.length - 1)) % SIDE.length, { zone: 'main' })} active={st.zone !== 'side'} />
         )}
         <aside className="pc-side">
           <div className="brand"><i><Ic n="pad" /></i>{c.name}</div>

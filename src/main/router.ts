@@ -1,8 +1,8 @@
 import { EventEmitter, on } from 'node:events';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { homedir, userInfo } from 'node:os';
-import { dirname, extname, join, parse } from 'node:path';
-import { app, BrowserWindow, dialog, shell } from 'electron';
+import { dirname, extname, join, parse, resolve } from 'node:path';
+import { app, BrowserWindow, clipboard, dialog, shell } from 'electron';
 import { initTRPC } from '@trpc/server';
 import superjson from 'superjson';
 import { z } from 'zod';
@@ -27,7 +27,7 @@ import type { Updater, UpdState } from './updater';
 export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; info?: GameInfoService; tr: Translator; defaultPortsDir: string; win?: () => WinCtl | null; bg?: () => Background | null; upd?: () => Updater | null }
 export const portsDirOf = (d: Pick<RouterDeps, 'db' | 'defaultPortsDir'>) => kvGet(d.db, 'portsDir') || d.defaultPortsDir;
 
-export interface PickRequest { id: number; title: string; kind: 'dir' | 'exe'; start: string }
+export interface PickRequest { id: number; title: string; kind: 'dir' | 'exe'; start: string; explicit: boolean }
 const pickBus = new EventEmitter();
 const pending = new Map<number, (v: string | null) => void>();
 let pickSeq = 0;
@@ -69,7 +69,7 @@ async function pick(title: string, props: ('openDirectory' | 'openFile' | 'creat
   if (!pickBus.listenerCount('pick')) return nativePick(title, props, extra);
   const id = ++pickSeq;
   const start = typeof extra.defaultPath === 'string' && existsSync(extra.defaultPath) ? extra.defaultPath : homedir();
-  const res = await new Promise<string | null>(resolve => { pending.set(id, resolve); pickBus.emit('pick', { id, title, kind: props.includes('openFile') ? 'exe' : 'dir', start } satisfies PickRequest); });
+  const res = await new Promise<string | null>(resolve => { pending.set(id, resolve); pickBus.emit('pick', { id, title, kind: props.includes('openFile') ? 'exe' : 'dir', start, explicit: start !== homedir() } satisfies PickRequest); });
   return res === '\u0000native' ? nativePick(title, props, extra) : res;
 }
 
@@ -131,6 +131,7 @@ export function createRouter(deps: RouterDeps) {
       user: t.procedure.query(() => { try { return userInfo().username; } catch { return ''; } }),
       openLog: t.procedure.mutation(() => { const f = logFile(); if (f) shell.showItemInFolder(f); }),
       quit: t.procedure.mutation(() => { const b = deps.bg?.(); if (b) b.quitting = true; setTimeout(() => app.quit(), 120); }),
+      clipboard: t.procedure.mutation(() => clipboard.readText()),
     }),
 
     background: t.router({
@@ -151,6 +152,12 @@ export function createRouter(deps: RouterDeps) {
 
     fs: t.router({
       onPick: t.procedure.subscription(async function* ({ signal }) { for await (const [r] of on(pickBus, 'pick', { signal })) yield r as PickRequest; }),
+      stat: t.procedure.input(z.object({ path: z.string() })).mutation(({ input }) => {
+        const raw = input.path.trim().replace(/^["']+|["']+$/g, '').replace(/^~(?=$|[\\/])/, homedir());
+        if (!raw) return { path: '', exists: false, dir: false };
+        const full = resolve(raw);
+        try { return { path: full, exists: true, dir: statSync(full).isDirectory() }; } catch { return { path: full, exists: false, dir: false }; }
+      }),
       answer: t.procedure.input(z.object({ id: z.number(), path: z.string().nullable(), native: z.boolean().optional() })).mutation(({ input }) => {
         const f = pending.get(input.id); pending.delete(input.id);
         f?.(input.native ? '\u0000native' : input.path);

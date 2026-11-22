@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useSubscription } from '@trpc/tanstack-react-query';
 import { useTRPC } from '../trpc';
-import { Glyph, PAD_NAMES, useKeys, usePadKind } from '../lib/input';
+import { cancelPadSetup, Glyph, PAD_NAMES, SETUP_STEPS, useKeys, usePadKind, usePadSetup } from '../lib/input';
 import { useSpatialNav } from '../lib/spatial';
 import { getSettings, setSettings, useSettings } from '../lib/settings';
 import { sfx } from '../lib/sfx';
 import { askConfirm, setMenuOpen, useConfirmReq } from '../lib/dialogs';
 import { CONSOLES } from '../stage/consoles';
+import { SearchBox } from '../components/SearchBox';
 
 export function ConfirmHost() {
   const req = useConfirmReq();
@@ -23,6 +24,24 @@ export function ConfirmHost() {
           <button className="btn" data-hf data-main onClick={() => { sfx.play('back'); req.resolve(false); }}>{req.cancel ?? 'Cancelar'}</button>
           <button className={`btn ${req.danger ? 'danger' : 'acc'}`} data-hf onClick={() => { sfx.play('ok'); req.resolve(true); }}>{req.ok ?? 'Confirmar'}</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+export function PadSetupHost() {
+  const st = usePadSetup();
+  useKeys(k => { if (k === 'Escape') { sfx.play('back'); cancelPadSetup(); } }, !!st);
+  if (!st) return null;
+  const [, name, hint] = SETUP_STEPS[st.step]!;
+  return (
+    <div className="ov gl-ov">
+      <div className="gl-box gl-padset">
+        <h3>Configurar o controle</h3>
+        <p>Aperte no controle o botão que você quer para cada ação.</p>
+        <div className="gl-padstep"><b>{name}</b><span>{hint}</span></div>
+        <div className="gl-padprog">{SETUP_STEPS.map((x, i) => <i key={x[0]} className={i < st.step ? 'done' : i === st.step ? 'cur' : ''} />)}</div>
+        <p className="gl-padnote">{st.step >= 2 ? 'Para pular esta ação, aperte o botão de Confirmar.' : 'O direcional e o analógico esquerdo já funcionam sozinhos.'} Esc no teclado cancela.</p>
       </div>
     </div>
   );
@@ -59,56 +78,129 @@ export function PlatformHost() {
   );
 }
 
-interface Req { id: number; title: string; kind: 'dir' | 'exe'; start: string }
+interface Req { id: number; title: string; kind: 'dir' | 'exe'; start: string; explicit?: boolean }
+const LAST_DIR = 'cartucho.lastDir';
 
 export function PickerHost() {
   const trpc = useTRPC();
+  const pad = usePadKind();
   const [req, setReq] = useState<Req | null>(null);
   const [path, setPath] = useState('');
+  const [typed, setTyped] = useState('');
+  const [err, setErr] = useState<string | null>(null);
   const [sel, setSel] = useState(0);
+  const [col, setCol] = useState<'path' | 'list' | 'side'>('list');
+  const [si, setSi] = useState(0);
+  const addr = useRef<HTMLInputElement>(null);
   const answer = useMutation(trpc.fs.answer.mutationOptions());
-  useSubscription(trpc.fs.onPick.subscriptionOptions(undefined, { onData: r => { setReq(r); setPath(r.start); setSel(0); } }));
+  const stat = useMutation(trpc.fs.stat.mutationOptions());
+  const clip = useMutation(trpc.system.clipboard.mutationOptions());
+  const go = (p: string) => { setPath(p); setTyped(p); setSel(0); setErr(null); setCol('list'); };
+  useSubscription(trpc.fs.onPick.subscriptionOptions(undefined, {
+    onData: r => {
+      let start = r.start;
+      if (!r.explicit) { try { start = localStorage.getItem(`${LAST_DIR}.${r.kind}`) || r.start; } catch { } }
+      setReq(r); go(start); setSi(0);
+    },
+  }));
   const q = useQuery(trpc.fs.list.queryOptions({ path, kind: req?.kind ?? 'dir' }, { enabled: !!req && !!path }));
   const listRef = useRef<HTMLDivElement>(null);
-  const done = (p: string | null, native = false) => { if (!req) return; answer.mutate({ id: req.id, path: p, native }); setReq(null); };
+  const done = (p: string | null, native = false) => {
+    if (!req) return;
+    if (p) { try { localStorage.setItem(`${LAST_DIR}.${req.kind}`, req.kind === 'dir' ? p : (q.data?.path ?? path)); } catch { } }
+    answer.mutate({ id: req.id, path: p, native }); setReq(null);
+  };
+  const goTyped = async (text: string) => {
+    const t = text.trim();
+    if (!t || t === path) { setTyped(path); setCol('list'); return; }
+    const r = await stat.mutateAsync({ path: t });
+    if (!r.exists) { setErr('Não encontrei esse endereço.'); setCol('path'); setTimeout(() => addr.current?.focus(), 0); return; }
+    if (r.dir) { sfx.play('ok'); go(r.path); return; }
+    if (req?.kind === 'exe') { sfx.play('ok'); done(r.path); return; }
+    setErr('Esse endereço é de um arquivo. Escolha uma pasta.'); setCol('path'); setTimeout(() => addr.current?.focus(), 0);
+  };
+  const paste = () => void clip.mutateAsync().then(t => { const s = (t ?? '').split(/\r?\n/)[0]!.trim(); if (s) { setTyped(s); void goTyped(s); } else setErr('A área de transferência está vazia.'); });
+  const up = () => { if (q.data?.parent) { sfx.play('back'); go(q.data.parent); } };
   const entries = q.data?.entries ?? [];
   const places = q.data?.places ?? [];
-  const rows: { k: string; label: string; act: () => void; kind: 'use' | 'up' | 'dir' | 'file' | 'place' | 'native' }[] = req ? [
+  const rows: { k: string; label: string; act: () => void; kind: 'use' | 'up' | 'dir' | 'file' }[] = req ? [
     ...(req.kind === 'dir' ? [{ k: 'use', label: 'Usar esta pasta', act: () => { sfx.play('ok'); done(path); }, kind: 'use' as const }] : []),
-    ...(q.data?.parent ? [{ k: 'up', label: '.. (voltar uma pasta)', act: () => { sfx.play('back'); setPath(q.data!.parent!); setSel(0); }, kind: 'up' as const }] : []),
-    ...entries.map(e => ({ k: e.path, label: e.name, act: () => { sfx.play('ok'); if (e.dir) { setPath(e.path); setSel(0); } else done(e.path); }, kind: e.dir ? 'dir' as const : 'file' as const })),
+    ...(q.data?.parent ? [{ k: 'up', label: '.. (voltar uma pasta)', act: up, kind: 'up' as const }] : []),
+    ...entries.map(e => ({ k: e.path, label: e.name, act: () => { sfx.play('ok'); if (e.dir) go(e.path); else done(e.path); }, kind: e.dir ? 'dir' as const : 'file' as const })),
   ] : [];
-  const side = req ? [...places.map(p => ({ k: p.path, label: p.name, act: () => { sfx.play('move'); setPath(p.path); setSel(0); } })), { k: 'native', label: 'Janela do Windows…', act: () => { sfx.play('ok'); done(null, true); } }] : [];
-  const [col, setCol] = useState<'list' | 'side'>('list');
-  const [si, setSi] = useState(0);
+  const side = req ? [
+    { k: 'paste', label: 'Colar endereço', act: () => { sfx.play('ok'); paste(); } },
+    ...places.map(p => ({ k: p.path, label: p.name, act: () => { sfx.play('move'); go(p.path); } })),
+    { k: 'native', label: 'Janela do Windows…', act: () => { sfx.play('ok'); done(null, true); } },
+  ] : [];
   useEffect(() => { listRef.current?.querySelector('.on')?.scrollIntoView({ block: 'nearest' }); }, [sel, col, si]);
+  useEffect(() => { if (col !== 'path' && document.activeElement === addr.current) addr.current?.blur(); }, [col]);
+
+  const ahead = useRef({ text: '', at: 0 });
+  useEffect(() => {
+    if (!req) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || document.querySelector('.osk-ov')) return;
+      const stop = () => { e.preventDefault(); e.stopImmediatePropagation(); };
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') { stop(); paste(); return; }
+      if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'l') || e.key === 'F4') { stop(); setCol('path'); addr.current?.focus(); addr.current?.select(); return; }
+      if (e.key === 'Backspace') { stop(); up(); return; }
+      if (e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        stop();
+        const now = Date.now(), a = ahead.current;
+        a.text = now - a.at > 900 ? e.key.toLowerCase() : a.text + e.key.toLowerCase(); a.at = now;
+        const j = rows.findIndex(r => (r.kind === 'dir' || r.kind === 'file') && r.label.toLowerCase().startsWith(a.text));
+        if (j >= 0) { sfx.play('move'); setCol('list'); setSel(j); }
+      }
+    };
+    addEventListener('keydown', onKey, true);
+    return () => removeEventListener('keydown', onKey, true);
+  });
+
   useKeys(k => {
     if (!req) return;
+    if (col === 'path') {
+      if (k === 'Enter') { sfx.play('ok'); addr.current?.focus(); }
+      else if (k === 'ArrowDown') { sfx.play('move'); setCol('list'); }
+      else if (k === 'Escape') { sfx.play('back'); done(null); }
+      return;
+    }
     const n = col === 'list' ? rows.length : side.length, cur = col === 'list' ? sel : si, set = col === 'list' ? setSel : setSi;
     if (k === 'ArrowDown' && cur < n - 1) { sfx.play('move'); set(cur + 1); }
-    else if (k === 'ArrowUp' && cur > 0) { sfx.play('move'); set(cur - 1); }
+    else if (k === 'ArrowUp') { if (cur > 0) { sfx.play('move'); set(cur - 1); } else { sfx.play('move'); setCol('path'); } }
     else if (k === 'RT') { sfx.play('move'); set(Math.min(n - 1, cur + 8)); }
     else if (k === 'LT') { sfx.play('move'); set(Math.max(0, cur - 8)); }
-    else if (k === 'ArrowLeft' && col === 'list') { sfx.play('move'); setCol('side'); }
+    else if (k === 'ArrowLeft' && col === 'list') { if (q.data?.parent && pad !== 'kb') up(); else { sfx.play('move'); setCol('side'); } }
     else if (k === 'ArrowRight' && col === 'side') { sfx.play('move'); setCol('list'); }
+    else if (k === 'ArrowRight' && col === 'list') { const r = rows[sel]; if (r?.kind === 'dir') r.act(); }
     else if (k === 'Enter') (col === 'list' ? rows[sel] : side[si])?.act();
     else if (k === 'Y' && req.kind === 'dir') { sfx.play('ok'); done(path); }
-    else if (k === 'X' && q.data?.parent) { sfx.play('back'); setPath(q.data.parent); setSel(0); }
+    else if (k === 'X') up();
+    else if (k === 'LB') { sfx.play('move'); setCol('side'); }
     else if (k === 'Escape') { sfx.play('back'); done(null); }
   }, !!req);
   if (!req) return null;
+  const kb = pad === 'kb';
   return (
     <div className="ov gl-ov">
       <div className="gl-pick">
         <h3>{req.title}</h3>
-        <div className="gl-path">{path}</div>
+        <div className={`gl-addr ${col === 'path' ? 'f' : ''}`}>
+          <SearchBox ref={addr} className="gl-path" nav={false} placeholder="Endereço da pasta" value={typed}
+            onChange={v => { setTyped(v); setErr(null); }} onDone={() => void goTyped(typed)} />
+          <button className="btn" onClick={() => void goTyped(typed)}>Ir</button>
+          <button className="btn" onClick={paste} title="Colar endereço (Ctrl+V)">Colar</button>
+        </div>
+        {err && <div className="gl-err">{err}</div>}
         <div className="gl-cols">
           <div className={`gl-side ${col === 'side' ? 'f' : ''}`}>{side.map((p, j) => (
-            <button key={p.k} className={col === 'side' && j === si ? 'on' : ''} onClick={p.act}>{p.label}</button>
+            <button key={p.k} className={`${col === 'side' && j === si ? 'on' : ''} ${p.k === 'paste' ? 'paste' : ''}`} onClick={p.act}>{p.label}</button>
           ))}</div>
           <div className={`gl-list ${col === 'list' ? 'f' : ''}`} ref={listRef}>
             {q.isLoading ? <div className="gl-empty">Lendo…</div> : rows.map((r, j) => (
-              <button key={r.k} className={`${r.kind} ${col === 'list' && j === sel ? 'on' : ''}`} onClick={r.act}>
+              <button key={r.k} className={`${r.kind} ${col === 'list' && j === sel ? 'on' : ''}`}
+                onClick={() => { if (r.kind === 'use' || r.kind === 'up') r.act(); else { setCol('list'); setSel(j); } }} onDoubleClick={() => { if (r.kind !== 'use' && r.kind !== 'up') r.act(); }}>
                 <span className="ic">{r.kind === 'use' ? '✔' : r.kind === 'up' ? '↰' : r.kind === 'dir' ? '▸' : '◆'}</span>{r.label}
               </button>
             ))}
@@ -116,9 +208,13 @@ export function PickerHost() {
           </div>
         </div>
         <div className="gl-h">
-          <span><Glyph a="ok" />Abrir</span>
-          {req.kind === 'dir' && <span><Glyph a="y" />Usar esta pasta</span>}
-          <span><Glyph a="x" />Pasta acima</span><span><Glyph a="lr" />Locais</span><span><Glyph a="back" />Cancelar</span>
+          {kb ? <>
+            <span><Glyph a="ok" />Abrir</span><span><b className="gp kb">⌫</b>Pasta acima</span><span><b className="gp kb">Ctrl+L</b>Endereço</span>
+            <span><b className="gp kb">Ctrl+V</b>Colar</span><span>Digite para pular para uma pasta</span><span><Glyph a="back" />Cancelar</span>
+          </> : <>
+            <span><Glyph a="ok" />Abrir</span>{req.kind === 'dir' && <span><Glyph a="y" />Usar esta pasta</span>}
+            <span><Glyph a="x" />Pasta acima</span><span><Glyph a="ud" />Endereço no topo</span><span><Glyph a="lb" />Locais</span><span><Glyph a="back" />Cancelar</span>
+          </>}
         </div>
       </div>
     </div>

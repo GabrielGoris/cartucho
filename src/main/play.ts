@@ -5,6 +5,7 @@ import { basename, dirname, normalize } from 'node:path';
 import type { PlayEvent, PlayStats } from '@shared/types';
 import type { DB } from './db';
 import type { AchievementService } from './achievements/service';
+import { emulatorFor } from './emulators';
 
 export class Player {
   readonly events = new EventEmitter<{ play: [PlayEvent] }>();
@@ -17,7 +18,11 @@ export class Player {
     db.prepare('UPDATE play_session SET ended_at = started_at WHERE ended_at IS NULL').run();
   }
 
-  isRunning = (id: string) => this.running.has(id) || this.external.has(id);
+  private emu = new Map<number, { title: string; gameId: string | null; session: number; start: number }>();
+  private resolveEmu: ((exe: string, title: string) => Promise<string | null>) | null = null;
+  setEmulatorResolver(f: (exe: string, title: string) => Promise<string | null>) { this.resolveEmu = f; }
+
+  isRunning = (id: string) => this.running.has(id) || this.external.has(id) || [...this.emu.values()].some(e => e.gameId === id);
 
   private async env() {
     if (process.platform !== 'win32') return process.env;
@@ -118,7 +123,7 @@ export class Player {
   watchExternal(on: boolean) {
     if (process.platform !== 'win32') return;
     if (on && !this.scanTimer) { this.scanTimer = setInterval(() => void this.scan(), 5000); void this.scan(); }
-    else if (!on && this.scanTimer) { clearInterval(this.scanTimer); this.scanTimer = null; this.endExternal(); }
+    else if (!on && this.scanTimer) { clearInterval(this.scanTimer); this.scanTimer = null; this.endExternal(); for (const pid of [...this.emu.keys()]) this.endEmu(pid); }
   }
 
   private async scan() {
@@ -128,7 +133,7 @@ export class Player {
       const procs = await listProcesses();
       const seen = new Set<string>();
       for (const g of this.games.listGames()) {
-        if (!g.exe || !/\.exe$/i.test(g.exe) || this.running.has(g.id)) continue;
+        if (!g.exe || !/\.exe$/i.test(g.exe) || this.running.has(g.id) || emulatorFor(g.exe)) continue;
         const pids = procs.get(basename(g.exe).toLowerCase());
         if (!pids?.length) continue;
         const cur = this.external.get(g.id);
@@ -145,7 +150,45 @@ export class Player {
         this.events.emit('play', { gameId: g.id, title: g.title, running: true });
       }
       for (const id of [...this.external.keys()]) if (!seen.has(id)) this.endExternal(id);
+      await this.scanEmulators(procs);
     } catch { } finally { this.scanning = false; }
+  }
+
+  private async scanEmulators(procs: Map<string, number[]>) {
+    const list = [...procs.entries()].filter(([n]) => emulatorFor(n)).flatMap(([, pids]) => pids);
+    const launched = new Set([...this.running.values()].map(r => r.child?.pid).filter((p): p is number => !!p));
+    const live = new Set<number>();
+    if (list.length && this.resolveEmu) {
+      const wins = await windowTitles(list);
+      for (const pid of list) {
+        const w = wins.get(pid);
+        if (!w || launched.has(pid)) continue;
+        live.add(pid);
+        const cur = this.emu.get(pid);
+        if (cur && cur.title === w.title) continue;
+        const gameId = w.title ? await this.resolveEmu(w.path, w.title) : null;
+        if (cur && cur.gameId === gameId) { cur.title = w.title; continue; }
+        if (cur) this.endEmu(pid);
+        if (gameId && !this.running.has(gameId) && !this.external.has(gameId) && ![...this.emu.values()].some(e => e.gameId === gameId)) {
+          const start = Date.now();
+          const session = Number(this.db.prepare('INSERT INTO play_session (game_id, started_at) VALUES (?, ?)').run(gameId, start).lastInsertRowid);
+          this.emu.set(pid, { title: w.title, gameId, session, start });
+          let title = ''; try { title = this.games.getGame(gameId).title; } catch { }
+          this.events.emit('play', { gameId, title, running: true });
+        } else this.emu.set(pid, { title: w.title, gameId: null, session: 0, start: 0 });
+      }
+    }
+    for (const pid of [...this.emu.keys()]) if (!live.has(pid)) this.endEmu(pid);
+  }
+
+  private endEmu(pid: number) {
+    const r = this.emu.get(pid); if (!r) return;
+    this.emu.delete(pid);
+    if (!r.gameId) return;
+    const end = Date.now();
+    this.db.prepare('UPDATE play_session SET ended_at = ? WHERE id = ?').run(end, r.session);
+    let title = ''; try { title = this.games.getGame(r.gameId).title; } catch { }
+    this.events.emit('play', { gameId: r.gameId, title, running: false, sessionMs: end - r.start });
   }
 
   private endExternal(only?: string) {
@@ -160,6 +203,8 @@ export class Player {
   }
 
   quit(gameId: string) {
+    const em = [...this.emu.entries()].find(([, e]) => e.gameId === gameId);
+    if (em) { killTree(em[0]); return true; }
     const ext = this.external.get(gameId);
     if (ext) { try { spawn('taskkill', ['/pid', String(ext.pid), '/t', '/f'], { windowsHide: true, stdio: 'ignore' }); } catch { } return true; }
     const r = this.running.get(gameId);
@@ -184,6 +229,8 @@ export class Player {
     if (this.scanTimer) { clearInterval(this.scanTimer); this.scanTimer = null; }
     for (const r of this.external.values()) this.db.prepare('UPDATE play_session SET ended_at = ? WHERE id = ?').run(now, r.session);
     this.external.clear();
+    for (const r of this.emu.values()) if (r.gameId) this.db.prepare('UPDATE play_session SET ended_at = ? WHERE id = ?').run(now, r.session);
+    this.emu.clear();
   }
 
   stats(gameId?: string): PlayStats {
@@ -241,7 +288,7 @@ export function parseProcTable(out: string): Proc[] {
 
 async function processTable(): Promise<Proc[]> {
   if (process.platform === 'win32') {
-    return parseProcTable(await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId)|$($_.ParentProcessId)|$($_.ExecutablePath)|$($_.Name)" }']));
+    return parseProcTable(await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', PS_UTF8 + 'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId)|$($_.ParentProcessId)|$($_.ExecutablePath)|$($_.Name)" }']));
   }
   const L: Proc[] = [];
   for (const d of readdirSync('/proc')) {
@@ -261,6 +308,23 @@ function killTree(pid: number) {
     if (process.platform === 'win32') spawn('taskkill', ['/pid', String(pid), '/t', '/f'], { windowsHide: true, stdio: 'ignore' });
     else process.kill(pid, 'SIGTERM');
   } catch { }
+}
+
+const PS_UTF8 = '[Console]::OutputEncoding = [Text.Encoding]::UTF8; ';
+
+export function parseWindows(out: string) {
+  const m = new Map<number, { path: string; title: string }>();
+  for (const line of out.split(/\r?\n/)) {
+    const f = line.match(/^(\d+)\|([^|]*)\|(.*)$/);
+    if (f) m.set(Number(f[1]), { path: f[2]!.trim(), title: f[3]!.trim() });
+  }
+  return m;
+}
+
+async function windowTitles(pids: number[]) {
+  const ids = pids.filter(p => Number.isInteger(p) && p > 0).slice(0, 32);
+  if (!ids.length) return new Map<number, { path: string; title: string }>();
+  return parseWindows(await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `${PS_UTF8}Get-Process -Id ${ids.join(',')} -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Id)|$($_.Path)|$($_.MainWindowTitle)" }`]));
 }
 
 const run = (cmd: string, args: string[], timeout = 8000) => new Promise<string>((ok, fail) => {
@@ -286,7 +350,7 @@ async function processPaths(pids: number[]) {
   const m = new Map<number, string>();
   const ids = pids.filter(p => Number.isInteger(p) && p > 0).slice(0, 32);
   if (!ids.length) return m;
-  const out = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Get-Process -Id ${ids.join(',')} -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Id)|$($_.Path)" }`]);
+  const out = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `${PS_UTF8}Get-Process -Id ${ids.join(',')} -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Id)|$($_.Path)" }`]);
   for (const line of out.split(/\r?\n/)) {
     const i = line.indexOf('|'); if (i < 0) continue;
     const path = line.slice(i + 1).trim();

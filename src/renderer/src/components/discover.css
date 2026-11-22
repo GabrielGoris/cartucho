@@ -206,3 +206,5 @@
 .dsc.d-app .dsc-row h3 { font-size: 17px; letter-spacing: 1px; }
 .dsc.d-app .gv-sec h3 { font-size: 20px; }
 .sk-all { background: var(--bg0); --toast-bg: var(--bg2); --toast-fg: var(--ink); }
+
+.dsc.idle .on { box-shadow: none !important; outline: none !important; transform: none !important; }

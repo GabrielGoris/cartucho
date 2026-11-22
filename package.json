@@ -1,7 +1,7 @@
 {
   "name": "cartucho",
   "productName": "Cartucho",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "private": true,
   "engines": {
     "node": ">=22.13"
@@ -97,7 +97,7 @@
         "provider": "github",
         "owner": "GabrielGoris",
         "repo": "cartucho",
-        "releaseType": "release"
+        "releaseType": "draft"
       }
     ],
     "releaseInfo": {

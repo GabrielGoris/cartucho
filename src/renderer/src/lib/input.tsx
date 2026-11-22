@@ -1,7 +1,9 @@
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { getSettings, useSettings } from './settings';
+import { sfx } from './sfx';
 
-export type Key = 'Enter' | 'Escape' | 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown' | 'Tab' | 'LB' | 'RB' | 'LT' | 'RT' | 'X' | 'Y' | 'Start' | 'Select' | 'Home';
+import { keyMapFor as mapFor, type Key, type PadMap } from '@shared/padmap';
+export { padUsbId, type Key } from '@shared/padmap';
 type Handler = (k: Key) => void;
 
 const stack: { current: Handler }[] = [];
@@ -71,9 +73,52 @@ export function usePadKind(): PadKind {
   return useSyncExternalStore(f => { padSubs.add(f); return () => padSubs.delete(f); }, padKind);
 }
 
-let prev: boolean[] = [], axisAt = 0, held: Key | null = null, heldAt = 0, away = false;
+const MAP_KEY = 'cartucho.padmap';
+let maps: Record<string, PadMap> = (() => { try { return JSON.parse(localStorage.getItem(MAP_KEY) || '{}') as Record<string, PadMap>; } catch { return {}; } })();
+const saveMap = (id: string, m: PadMap) => { maps = { ...maps, [id]: m }; try { localStorage.setItem(MAP_KEY, JSON.stringify(maps)); } catch { } };
+export const hasCustomMap = (id: string) => !!maps[id];
+export const resetPadMap = (id: string) => { const { [id]: _, ...rest } = maps; maps = rest; try { localStorage.setItem(MAP_KEY, JSON.stringify(maps)); } catch { } };
+
+export const SETUP_STEPS: [Key, string, string][] = [
+  ['Enter', 'Confirmar', 'A no Xbox · ✕ no PlayStation'], ['Escape', 'Voltar', 'B no Xbox · ○ no PlayStation'],
+  ['X', 'Opções', 'X no Xbox · □ no PlayStation'], ['Y', 'Buscar', 'Y no Xbox · △ no PlayStation'],
+  ['LB', 'Seção anterior', 'LB · L1'], ['RB', 'Próxima seção', 'RB · R1'], ['LT', 'Rolar para cima', 'LT · L2'], ['RT', 'Rolar para baixo', 'RT · R2'],
+  ['Select', 'Select', 'Back · Select · Create'], ['Start', 'Menu do Cartucho', 'Start · Options'],
+];
+export interface PadSetup { id: string; step: number; map: PadMap }
+let setup: PadSetup | null = null;
+const setupSubs = new Set<() => void>();
+const setupEmit = () => setupSubs.forEach(f => f());
+export const usePadSetup = () => useSyncExternalStore(f => { setupSubs.add(f); return () => setupSubs.delete(f); }, () => setup);
+export function startPadSetup(): boolean {
+  const p = activePad(); if (!p) return false;
+  setup = { id: p.id, step: 0, map: {} }; prev = p.buttons.map(x => x.pressed || x.value > 0.5); setupEmit(); return true;
+}
+export const cancelPadSetup = () => { setup = null; setupEmit(); };
+function setupPress(i: number) {
+  const s = setup!; const [k] = SETUP_STEPS[s.step]!;
+  if (s.step >= 2 && i === s.map.Enter) setup = { ...s, step: s.step + 1 };
+  else if (Object.values(s.map).includes(i)) return;
+  else setup = { ...s, step: s.step + 1, map: { ...s.map, [k]: i } };
+  sfx.play('ok');
+  if (setup.step >= SETUP_STEPS.length) { saveMap(setup.id, setup.map); setup = null; }
+  setupEmit();
+}
+
+const hatAxis = new Map<string, number>();
+const HAT: (Key | null)[] = ['ArrowUp', 'ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowUp'];
+function hatDir(p: Gamepad): Key | null {
+  const seen = p.axes.findIndex(v => Math.abs(v) > 1.05);
+  if (seen >= 0) hatAxis.set(p.id, seen);
+  const h = hatAxis.get(p.id); if (h == null) return null;
+  const v = p.axes[h] ?? 2;
+  return Math.abs(v) > 1.01 ? null : HAT[Math.round((v + 1) * 3.5) & 7] ?? null;
+}
+
+let prev: boolean[] = [], axisAt = 0, held: Key | null = null, heldAt = 0, away = false, prevHat: Key | null = null;
 let gameRunning = false;
 export const setGameRunning = (v: boolean) => { gameRunning = v; };
+export const keyMapFor = (p: { id: string; mapping: string }, nin: boolean) => mapFor(p, nin, maps[p.id]);
 const DIRS = new Set<Key>(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 function activePad() {
   const all = [...(navigator.getGamepads?.() ?? [])].filter((x): x is Gamepad => !!x);
@@ -90,12 +135,16 @@ function poll() {
     const now = performance.now();
     const b = p.buttons.map(x => x.pressed || x.value > 0.5), old = prev; prev = b;
     const hit = (i: number) => !!b[i] && !old[i];
-    const nin = padKind() === 'nin';
-    const map: Record<number, Key> = { 12: 'ArrowUp', 13: 'ArrowDown', 14: 'ArrowLeft', 15: 'ArrowRight', [nin ? 1 : 0]: 'Enter', [nin ? 0 : 1]: 'Escape', 2: 'X', 3: 'Y', 4: 'LB', 5: 'RB', 6: 'LT', 7: 'RT', 8: 'Select', 9: 'Start', 16: 'Home' };
-    if (b.some((v, i) => v && !old[i])) setLast('pad');
+    const pressed = b.findIndex((v, i) => v && !old[i]);
+    if (setup) { if (p.id === setup.id && pressed >= 0) setupPress(pressed); return; }
+    const map = keyMapFor(p, padKind() === 'nin');
+    if (pressed >= 0) setLast('pad');
     for (const i in map) if (hit(+i)) { send(map[i]!); if (DIRS.has(map[i]!)) { held = map[i]!; heldAt = now + 250; } }
-    const dpad = [12, 13, 14, 15].find(i => b[i]);
-    if (dpad == null) held = null;
+    const hat = hatDir(p);
+    if (hat && hat !== prevHat) { setLast('pad'); send(hat); held = hat; heldAt = now + 250; }
+    prevHat = hat;
+    const dpad = Object.keys(map).some(i => b[+i] && DIRS.has(map[+i]!)) || !!hat;
+    if (!dpad) held = null;
     else if (held && now > heldAt) { send(held); heldAt = now + 110; }
     const [ax = 0, ay = 0] = p.axes;
     if (Math.abs(ax) > 0.6 || Math.abs(ay) > 0.6) {

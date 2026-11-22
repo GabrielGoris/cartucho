@@ -69,6 +69,11 @@ export class Artwork {
     return this.lb.info(platform, names, { offline }).catch(() => null);
   }
 
+  knows(console: string, names: string[]) {
+    if (!PLATFORMS[console] || this.lb.building()) return Promise.resolve(false);
+    return this.lb.has(console, names).catch(() => false);
+  }
+
   indexReady() { return this.lb.building() ? Promise.resolve(false) : this.lb.load({ offline: true }).then(() => true, () => false); }
 
   notify() { this.changed(); }

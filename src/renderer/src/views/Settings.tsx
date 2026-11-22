@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSubscription } from '@trpc/tanstack-react-query';
 import { useState } from 'react';
 import { useTRPC } from '../trpc';
-import { Glyph, PAD_NAMES, type Key } from '../lib/input';
+import { Glyph, PAD_NAMES, startPadSetup, type Key } from '../lib/input';
 import { PALETTES, paletteById } from '../lib/palettes';
 import { setSettings, useSettings, type Settings as S } from '../lib/settings';
 import { useSpatialNav } from '../lib/spatial';
@@ -57,6 +57,7 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
   const me = useProfile();
   const quit = useMutation(trpc.system.quit.mutationOptions());
   const openLog = useMutation(trpc.system.openLog.mutationOptions());
+  const [padNote, setPadNote] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const win = useQuery(trpc.win.state.queryOptions());
   useSubscription(trpc.win.onState.subscriptionOptions(undefined, { onData: d => qc.setQueryData(trpc.win.state.queryKey(), d) }));
@@ -67,7 +68,7 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
   const u = upd.data;
   const updText = !u ? '' : u.status === 'dev' ? 'Rodando pelo código: a atualização automática só funciona na versão instalada.'
     : u.status === 'checking' ? 'Procurando versão nova…' : u.status === 'downloading' ? `Baixando a versão ${u.version} · ${u.pct}%`
-    : u.status === 'ready' ? `Versão ${u.version} baixada. Enter reinicia e instala.` : u.status === 'error' ? `Não deu para verificar: ${u.error}`
+    : u.status === 'ready' ? `Versão ${u.version} baixada. Enter reinicia e instala.` : u.status === 'error' ? u.error ?? 'Não deu para verificar agora.'
     : u.status === 'none' ? 'Você está na versão mais nova.' : 'O Cartucho procura versões novas sozinho, a cada 6 horas.';
   const bg = useQuery(trpc.background.get.queryOptions());
   const setBg = useMutation(trpc.background.set.mutationOptions({ onSuccess: d => qc.setQueryData(trpc.background.get.queryKey(), d) }));
@@ -171,13 +172,18 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
             <span><span className="t">Sair do Cartucho</span><span className="d">Fecha o app de vez. Também fica no menu do Start/≡ do controle.</span></span>
             <span className="c"><span className="st-pick"><b style={{ minWidth: 0 }}>⏻</b>›</span></span>
           </button>
+          <div className="st-sec">CONTROLE</div>
+          <button className="st-r" data-hf onClick={() => { sfx.play('ok'); setPadNote(startPadSetup() ? null : 'Conecte um controle e aperte qualquer botão nele antes.'); }}>
+            <span><span className="t">Configurar os botões do controle</span><span className="d">{padNote ?? 'Opcional. Controles genéricos já funcionam no layout do Xbox; use só se algum botão ficar trocado.'}</span></span>
+            <span className="c"><span className="st-pick"><b style={{ minWidth: 0 }}>Configurar</b>›</span></span>
+          </button>
           <div className="st-sec">SOBRE</div>
           <button className="st-r" data-hf onClick={() => { sfx.play('ok'); openLog.mutate(); }}>
             <span><span className="t">Registro do Cartucho</span><span className="d">Abre a pasta do arquivo cartucho.log. Se algo travar ou der erro, mande esse arquivo junto com o relato.</span></span>
             <span className="c"><span className="st-pick"><b style={{ minWidth: 0 }}>Abrir pasta</b>›</span></span>
           </button>
           <p className="st-credits">
-            Catálogo: Recompendium (recompendium.com). Imagens: LaunchBox Games Database. Modelos 3D do Sketchfab, de: Laser Design (SNES, CC BY-NC), Joseph Rohm (N64, CC BY),
+            Catálogo: Recompendium (recompendium.com). Imagens: LaunchBox Games Database e loja da Steam. Notas da crítica: Metacritic e OpenCritic via Wikidata, e IGDB.com. Modelos 3D do Sketchfab, de: Laser Design (SNES, CC BY-NC), Joseph Rohm (N64, CC BY),
             Jeffrey fan 2000 (GameCube, CC BY), elouisetrewartha (Wii, CC BY-NC), Smoggybeard (Switch, CC BY-NC-SA), NAIT Studio (Switch 2, CC BY),
             ecjhr0awipso (PS1, CC BY), barbi0526 (PS2, CC BY), Ilya Ostrovsky (PSP, CC BY), Vasily (PS3, CC BY), Laxity (PS4, CC BY), DatSketch (PS5, CC BY-ND),
             A.stark (NES, CC BY), danny_p3d (Game Boy, CC BY-NC), Cianon (DS Lite, CC BY), rubikreef (Xbox, CC BY), synthetic worlds (Mega Drive, CC BY),

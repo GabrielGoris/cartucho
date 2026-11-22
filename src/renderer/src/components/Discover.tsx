@@ -33,12 +33,12 @@ function sorter(s: DSort) {
   };
 }
 
-export function Discover({ theme, cname, games: all, extra: allExtra = [], self, st, set, options, run, onOpen, onBack, hints, shape = 'tall', onTab, groupOf, groupLabel = 'Plataforma', allLabel = 'Todas', title = 'Descobrir', place }: {
+export function Discover({ theme, cname, games: all, extra: allExtra = [], self, st, set, options, run, onOpen, onBack, hints, shape = 'tall', onTab, groupOf, groupLabel = 'Plataforma', allLabel = 'Todas', title = 'Descobrir', place, active = true, onSection }: {
   theme: string; cname: string; games: HubGame[]; extra?: HubGame[]; self: boolean;
   st: DState; set: (f: (s: DState) => DState) => void;
   options: (g: HubGame) => DOpt[]; run: (k: string, g: HubGame) => void; onOpen: (g: HubGame) => void; onBack: () => void;
   hints?: boolean; shape?: 'tall' | 'wide' | 'square'; onTab?: (d: 1 | -1) => void;
-  groupOf?: (g: HubGame) => string; groupLabel?: string; allLabel?: string; title?: string; place?: string;
+  groupOf?: (g: HubGame) => string; groupLabel?: string; allLabel?: string; title?: string; place?: string; active?: boolean; onSection?: (d: 1 | -1) => void;
 }) {
   const groups = useMemo(() => {
     if (!groupOf) return [] as [string, number][];
@@ -120,7 +120,7 @@ export function Discover({ theme, cname, games: all, extra: allExtra = [], self,
       return;
     }
     if (k === 'Y') return focusSearch();
-    if ((k === 'LB' || k === 'RB') && onTab) return onTab(k === 'RB' ? 1 : -1);
+    if ((k === 'LB' || k === 'RB') && (onTab || onSection)) return (onTab ?? onSection)!(k === 'RB' ? 1 : -1);
     if (k === 'LB' || k === 'RB') { const i = FILTERS.findIndex(f => f[0] === st.filter); const n = (i + (k === 'RB' ? 1 : -1) + FILTERS.length) % FILTERS.length; sfx.play('move'); up({ filter: FILTERS[n]![0], chip: n, q: '', row: 0, col: 0 }); return; }
     if (st.zone === 'search') {
       if (k === 'Enter') { sfx.play('ok'); searchRef.current?.focus(); }
@@ -169,7 +169,7 @@ export function Discover({ theme, cname, games: all, extra: allExtra = [], self,
     else if (k === 'ArrowUp') { if (st.row > 0) mv({ row: st.row - 1 }); else mv(hasGroups ? { zone: 'groups' } : { zone: 'chips', chip: FILTERS.findIndex(f => f[0] === st.filter) }); }
     else if (k === 'RT') { const r = Math.min(Math.floor((n - 1) / COLS), st.row + 2); mv({ row: r, col: Math.min(st.col, n - 1 - r * COLS) }); }
     else if (k === 'LT') mv({ row: Math.max(0, st.row - 2) });
-  });
+  }, active);
 
   const focusBody = st.zone === 'body' && !st.menu;
   const card = (x: HubGame, on: boolean, click: () => void) => (
@@ -182,7 +182,7 @@ export function Discover({ theme, cname, games: all, extra: allExtra = [], self,
   const visRows = 2, rowTop = shelves ? Math.max(0, Math.min(st.row, rows.length - visRows)) : Math.max(0, st.row - 1);
 
   return (
-    <div className={`dsc ${theme} ${shape} ${onTab ? 'in-tabs' : ''} ${hasGroups ? 'has-groups' : ''}`}>
+    <div className={`dsc ${theme} ${shape} ${onTab ? 'in-tabs' : ''} ${hasGroups ? 'has-groups' : ''} ${active ? '' : 'idle'}`}>
       <div className="dsc-hd">
         <h2>{title}<small>{cname}</small></h2>
         <div className={`dsc-q ${st.zone === 'search' ? 'f' : ''}`} onClick={focusSearch}>

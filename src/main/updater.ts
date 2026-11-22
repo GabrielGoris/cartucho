@@ -5,7 +5,13 @@ import electronUpdater from 'electron-updater';
 export type UpdStatus = 'dev' | 'idle' | 'checking' | 'none' | 'downloading' | 'ready' | 'error';
 export interface UpdState { status: UpdStatus; current: string; version: string | null; pct: number; error: string | null; checkedAt: number | null }
 
-const SIX_HOURS = 6 * 3600_000;
+const SIX_HOURS = 6 * 3600_000, SOON = 10 * 60_000;
+
+export function friendlyUpdError(m: string) {
+  if (/latest\.yml|\b404\b/i.test(m)) return { text: 'A versão nova ainda está sendo publicada no GitHub. O Cartucho tenta de novo em alguns minutos.', soon: true };
+  if (/ENOTFOUND|ECONNRE|ETIMEDOUT|EAI_AGAIN|net::ERR|socket hang up/i.test(m)) return { text: 'Sem conexão com o GitHub agora. O Cartucho tenta de novo mais tarde.', soon: true };
+  return { text: `Não deu para verificar: ${(m.split('\n')[0] ?? m).slice(0, 160)}`, soon: false };
+}
 
 export class Updater {
   readonly events = new EventEmitter();
@@ -21,18 +27,25 @@ export class Updater {
     u.on('update-available', i => this.set({ status: 'downloading', version: i.version, pct: 0, checkedAt: Date.now() }));
     u.on('download-progress', p => this.set({ status: 'downloading', pct: Math.round(p.percent) }));
     u.on('update-downloaded', i => this.set({ status: 'ready', version: i.version, pct: 100 }));
-    u.on('error', e => this.set({ status: 'error', error: e?.message ?? String(e) }));
+    u.on('error', e => this.fail(e));
     setTimeout(() => void this.check(), 15_000);
     setInterval(() => void this.check(), SIX_HOURS);
   }
 
   state() { return this.s; }
 
+  private retry: NodeJS.Timeout | undefined;
+  private fail(e: unknown) {
+    const f = friendlyUpdError(e instanceof Error ? e.message : String(e));
+    this.set({ status: 'error', error: f.text, checkedAt: Date.now() });
+    if (f.soon) { clearTimeout(this.retry); this.retry = setTimeout(() => void this.check(), SOON); }
+  }
+
   private set(p: Partial<UpdState>) { this.s = { ...this.s, ...p }; this.events.emit('state', this.s); }
 
   async check() {
     if (!app.isPackaged || this.s.status === 'downloading' || this.s.status === 'ready') return this.s;
-    try { await electronUpdater.autoUpdater.checkForUpdates(); } catch (e) { this.set({ status: 'error', error: e instanceof Error ? e.message : String(e) }); }
+    try { await electronUpdater.autoUpdater.checkForUpdates(); } catch (e) { this.fail(e); }
     return this.s;
   }
 

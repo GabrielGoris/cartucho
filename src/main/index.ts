@@ -13,6 +13,7 @@ import { Player } from './play';
 import { portsDirOf } from './router';
 import { Artwork } from './artwork/service';
 import { GameInfoService } from './artwork/info';
+import { createEmulatorResolver } from './emulators';
 import { Translator } from './translate';
 import { WinCtl } from './window';
 import { Background, playArg, startHidden } from './background';
@@ -90,6 +91,7 @@ void app.whenReady().then(async () => {
     ...(process.env.CARTUCHO_LAUNCHBOX_METADATA ? { metadataUrl: process.env.CARTUCHO_LAUNCHBOX_METADATA } : {}),
     ...(process.env.CARTUCHO_LAUNCHBOX_IMAGES ? { imageUrl: process.env.CARTUCHO_LAUNCHBOX_IMAGES } : {}),
   });
+  player.setEmulatorResolver(createEmulatorResolver(ach, art));
   const info = new GameInfoService(db, ((url, init) => net.fetch(url, init as RequestInit)) as Fetch, art);
   void info.startNotas();
   setTimeout(() => info.warm(ach.listGames().filter(g => !g.missing).map(g => ({ console: g.console, platformName: g.platformName, title: g.title, installDir: g.installDir, exe: g.exe, catalogId: g.catalogId }))), 20_000);
