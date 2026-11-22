@@ -137,10 +137,10 @@ input { user-select: text; }
 @media (prefers-reduced-motion: reduce) { #boot *, #boot { animation-duration: 0s !important; animation-delay: 0s !important; } }
 
 .home { position: absolute; inset: 100px 90px 70px; z-index: 4; }
-.hm2-hero { position: absolute; left: 0; top: 6%; display: flex; gap: 48px; align-items: center; }
-.hm2-hero > .cv { height: min(560px, 34vh); width: calc(min(560px, 34vh) * .82); border-radius: 10px; flex: 0 0 auto; box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--line), 0 20px 50px rgba(0,0,0,.6); }
+.hm2-hero { --hc: max(240px, min(760px, 50vh, calc(76vh - 360px))); position: absolute; left: 0; top: 6%; display: flex; gap: 48px; align-items: center; }
+.hm2-hero > .cv { height: var(--hc); width: calc(var(--hc) * .82); border-radius: 10px; flex: 0 0 auto; box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--line), 0 20px 50px rgba(0,0,0,.6); }
 .hm2-hero > .cv.has-img { width: auto; height: auto; padding: 0; background: none; }
-.hm2-hero > .cv.has-img > img { position: static; display: block; width: auto; height: auto; min-width: 240px; max-width: max(460px, 40vh); max-height: min(620px, 34vh); }
+.hm2-hero > .cv.has-img > img { position: static; display: block; width: auto; height: var(--hc); min-width: 0; max-width: calc(var(--hc) * 1.4); object-fit: contain; }
 .hm2-hero > .cv .ini { font-size: 40px; top: 20px; left: 20px; } .hm2-hero > .cv .ct { font-size: 10px; line-height: 1.6; padding: 6px; }
 .hm2-txt { display: flex; flex-direction: column; gap: 14px; max-width: 640px; }
 .hm2-txt .k { font-family: var(--font-display); font-size: 11px; letter-spacing: 1px; }
