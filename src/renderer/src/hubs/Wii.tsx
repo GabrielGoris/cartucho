@@ -15,7 +15,7 @@ import { SearchBox } from '../components/SearchBox';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
-import { useHubActions, useHubData, type HubGame } from './data';
+import { useFeed, useHubActions, useHubData, type HubGame } from './data';
 
 type Sp = 'cat' | 'news' | 'ach' | 'time' | 'cfg';
 type View = { kind: 'game'; key: string } | { kind: Sp };
@@ -98,6 +98,7 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     : sp === 'cfg' ? CFG.map(r => ({ ...r, v: r.id === 'snd' ? (s.snd ? 'Ligados' : 'Desligados') : '' }))
     : [];
   const row = rows[st.mi];
+  const feed = useFeed(data.feed, sp === 'news');
   const ach = useQuery(trpc.achievements.forGame.queryOptions({ id: row?.g?.installed?.id ?? '' }, { enabled: sp === 'ach' && !!row?.g?.installed?.adapter }));
   const statQ = useQueries({ queries: (sp === 'time' ? byPlay : []).map(x => trpc.play.stats.queryOptions({ id: x.installed!.id })) });
   const stats = new Map(byPlay.map((x, i) => [x.key, statQ[i]?.data] as const));
@@ -187,6 +188,7 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       if (row.id === 'off') return onBack();
       return show('O radar confere o catálogo do Recompendium toda vez que o Cartucho abre');
     }
+    if (row.feed) feed.done(row.feed);
     if (row.g) return open({ kind: 'game', key: row.g.key });
   };
   const back = () => {
@@ -216,6 +218,11 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       if (D) { if (st.ci + COLS < pageChans.length) mv({ ci: st.ci + COLS }); else mv({ zone: 'bar', bi: col < 2 ? 0 : 1 }); }
       return;
     }
+    if (sp === 'news' && (k === 'X' || k === 'Y')) {
+      if (k === 'X' && st.pz === 'list' && feed.drop(row?.feed)) up({ mi: Math.max(0, Math.min(st.mi, rows.length - 2)) });
+      if (k === 'Y') void feed.clear();
+      return;
+    }
     if (st.pz === 'btns') { if (U && rows.length) mv({ pz: 'list' }); return; }
     if (D) { if (st.mi < rows.length - 1) mv({ mi: st.mi + 1 }); else mv({ pz: 'btns' }); }
     else if (U) { if (st.mi > 0) mv({ mi: st.mi - 1 }); else if (sp === 'cat') { sfx.play('ok'); searchRef.current?.focus(); } }
@@ -226,7 +233,8 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     setPtr(p => ({ x: ((e.clientX - r.left) / r.width) * 1920, y: ((e.clientY - r.top) / r.height) * 1080, down: p?.down ?? false }));
   };
 
-  const hints: Hint[] = view ? [['ok', sp === 'cfg' ? 'Confirmar' : 'Abrir'], ['ud', 'Escolher'], ['back', 'Menu']]
+  const hints: Hint[] = view && sp === 'news' && rows.length ? [['ok', 'Abrir'], ['x', 'Dispensar'], ['y', 'Limpar tudo'], ['back', 'Menu']]
+    : view ? [['ok', sp === 'cfg' ? 'Confirmar' : 'Abrir'], ['ud', 'Escolher'], ['back', 'Menu']]
     : [['ok', 'Abrir'], ...(curChan?.g ? [['x', 'Opções'] as Hint] : []), ...(pages > 1 ? [['rb', 'Página'] as Hint] : []), ['back', 'Cartucho']];
   const date = new Date().toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'numeric' });
 

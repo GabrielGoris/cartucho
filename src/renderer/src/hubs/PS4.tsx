@@ -15,7 +15,7 @@ import { SearchBox } from '../components/SearchBox';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
-import { useGameProgress, useHubActions, useHubData, type HubGame } from './data';
+import { useFeed, useGameProgress, useHubActions, useHubData, type HubGame } from './data';
 
 type Page = 'home' | 'cat' | 'news' | 'ach' | 'time' | 'cfg' | 'game';
 type Zone = 'fn' | 'row' | 'cards' | 'side' | 'main' | 'gacts' | 'gshots' | 'gtext';
@@ -24,7 +24,7 @@ interface St { page: Page; zone: Zone; di: number; idx: number; ci: number; si: 
 type Opt = { k: string; l: string; ic: IconName };
 type Hint = [Parameters<typeof Glyph>[0]['a'], string];
 type Side = { k: string; l: string; ic?: IconName; g?: HubGame; v?: string | number };
-type Row = { key: string; g?: HubGame; md?: 'got' | 'lock'; icon?: string | null; t: string; s: string; rt: ReactNode; isNew?: boolean };
+type Row = { key: string; g?: HubGame; md?: 'got' | 'lock'; icon?: string | null; t: string; s: string; rt: ReactNode; isNew?: boolean; f?: RadarEvent };
 
 const FN: [string, string, IconName][] = [
   ['news', 'Novidades', 'bell'], ['ach', 'Conquistas', 'medal'], ['time', 'Tempo de jogo', 'clock'], ['cat', 'Descobrir', 'compass'],
@@ -130,9 +130,10 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       s: [x.catalog?.developer, x.catalog?.year, x.platformName].filter(Boolean).join(' · ') || (x.repo ?? ''),
       rt: <>{x.status ? STATUS_LABEL[x.status] : ''}<br />{x.installed ? 'Instalado' : self ? 'Você instala' : x.repo ? 'Disponível' : ''}</>,
     }))
-    : st.page === 'news' ? feedList.map(f => { const x = feedGame(f); return { key: String(f.id), g: x ?? undefined, t: f.title, s: f.kind === 'new' ? (self ? '' : x?.repo ?? '') : f.detail, rt: <>{TAGS[f.kind]}<br />{ago(f.at)}</>, isNew: f.kind === 'new' }; })
+    : st.page === 'news' ? feedList.map(f => { const x = feedGame(f); return { key: String(f.id), f, g: x ?? undefined, t: f.title, s: f.kind === 'new' ? (self ? '' : x?.repo ?? '') : f.detail, rt: <>{TAGS[f.kind]}<br />{ago(f.at)}</>, isNew: f.kind === 'new' }; })
     : st.page === 'ach' ? achList.map((a): Row => ({ key: String(a.id), md: a.unlockedAt != null ? 'got' : 'lock', icon: a.icon, t: a.name, s: a.description ?? '', rt: <>{a.points != null ? `${a.points} pontos` : ''}<br />{a.unlockedAt != null ? fmtDate(a.unlockedAt) : 'Bloqueada'}</> }))
     : [];
+  const feed = useFeed(feedList, st.page === 'news');
 
   const options = (x: HubGame, home: boolean): Opt[] => {
     const inst = x.installed;
@@ -220,6 +221,7 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       return toMain();
     }
     const r = rows[st.mi];
+    if (p === 'news' && r?.f) feed.done(r.f);
     if (r?.g && (p === 'cat' || p === 'news')) { sfx.play('ok'); openGame(r.g); return; }
     sfx.play('move');
   };
@@ -244,6 +246,11 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       return;
     }
     const p = st.page, z = st.zone;
+    if (p === 'news' && z === 'main' && (k === 'X' || k === 'Y')) {
+      if (k === 'X' && feed.drop(rows[st.mi]?.f)) up({ mi: Math.max(0, Math.min(st.mi, rows.length - 2)) });
+      if (k === 'Y') void feed.clear();
+      return;
+    }
     if (k === 'X' || k === 'Y') {
       if (p === 'home' && g) { sfx.play('ok'); setMenu({ g, mi: 0 }); }
       else if (z === 'main' && rows[st.mi]?.g && (p === 'cat' || p === 'news')) { sfx.play('ok'); setMenu({ g: rows[st.mi]!.g!, mi: 0 }); }
@@ -269,7 +276,8 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
 
   const hints: Hint[] = menu ? [['ok', 'Confirmar'], ['back', 'Fechar']]
     : st.page === 'home' ? (st.zone === 'row' && g ? [['ok', primaryOf(g).l], ['x', 'Opções'], ['back', 'Sair']] : st.zone === 'cards' ? [['ok', 'Abrir'], ['back', 'Voltar']] : [['ok', 'Confirmar'], ['back', st.zone === 'row' ? 'Sair' : 'Voltar']])
-    : st.zone === 'main' && (st.page === 'cat' || st.page === 'news') ? [['ok', 'Ver jogo'], ['x', 'Opções'], ['back', 'Voltar']]
+    : st.zone === 'main' && st.page === 'news' ? [['ok', 'Ver jogo'], ['x', 'Dispensar'], ['y', 'Limpar tudo'], ['back', 'Voltar']]
+    : st.zone === 'main' && st.page === 'cat' ? [['ok', 'Ver jogo'], ['x', 'Opções'], ['back', 'Voltar']]
     : st.page === 'cat' && sk === 'search' && st.zone === 'side' ? [['ok', 'Digitar'], ['back', 'Voltar']]
     : st.page === 'time' || (st.page === 'ach' && (st.zone === 'main' || !rows.length)) ? [['ud', 'Escolher'], ['back', 'Voltar']]
     : st.page === 'cfg' ? [['ok', sk === 'dir' ? 'Trocar pasta' : sk === 'snd' ? (s.snd ? 'Desligar' : 'Ligar') : sk === 'off' ? 'Sair' : 'Confirmar'], ['back', 'Voltar']]

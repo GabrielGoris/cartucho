@@ -14,6 +14,7 @@ import { portsDirOf } from './router';
 import { Artwork } from './artwork/service';
 import { GameInfoService } from './artwork/info';
 import { createEmulatorResolver } from './emulators';
+import { WebPane } from './web';
 import { InGame } from './ingame';
 import { Translator } from './translate';
 import { WinCtl } from './window';
@@ -24,6 +25,7 @@ import { initLog, log } from './log';
 if (process.env.CARTUCHO_USER_DATA) app.setPath('userData', process.env.CARTUCHO_USER_DATA);
 if (!app.requestSingleInstanceLock()) app.quit();
 app.commandLine.appendSwitch('disable-gpu-process-crash-limit');
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 
 const APP_ORIGIN = 'app://cartucho';
@@ -110,7 +112,7 @@ void app.whenReady().then(async () => {
   });
   const ports = new Ports(db, ach, gh, () => portsDirOf({ db, defaultPortsDir }), player.isRunning);
   createIPCHandler({
-    router: createRouter({ db, ach, ports, player, art, info, ingame, win: () => ctl, bg: () => bg, upd: () => upd, tr: new Translator(db, ((url, init) => net.fetch(url, init as RequestInit)) as ConstructorParameters<typeof Translator>[1]), defaultPortsDir }),
+    router: createRouter({ db, ach, ports, player, art, info, ingame, web: new WebPane(() => win), win: () => ctl, bg: () => bg, upd: () => upd, tr: new Translator(db, ((url, init) => net.fetch(url, init as RequestInit)) as ConstructorParameters<typeof Translator>[1]), defaultPortsDir }),
     preload: false,
     allow: e => isOurPage(e.senderFrame?.url ?? ''),
   });

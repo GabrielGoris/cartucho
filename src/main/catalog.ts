@@ -1,15 +1,9 @@
-/**
- * Catálogo do Recompendium (https://recompendium.com/), o mesmo que o Harbour usa.
- * Não há API documentada; é o JSON que o próprio site gera todo dia. Pedimos com ETag para não baixar
- * à toa, guardamos uma cópia no banco e funcionamos offline com a última versão.
- */
 import { z } from 'zod';
 import { isSelfInstall, SELF_INSTALL, toConsoleId, toStatus } from '@shared/consoles';
 import type { CatalogGame, RadarEvent } from '@shared/types';
 import { type DB, kvGet, kvSet, tx } from './db';
 
 export const CATALOG_URL = process.env.CARTUCHO_CATALOG_URL || 'https://recompendium.com/unricopie/catalogo.json';
-/** As capas podem vir com caminho relativo ao catálogo. */
 export const absUrl = (u: string | null) => { if (!u) return null; try { return new URL(u, 'https://recompendium.com/unricopie/catalogo.json').href; } catch { return null; } };
 const UA = { 'User-Agent': 'Cartucho/0.1 (+https://github.com/)' };
 
@@ -66,8 +60,6 @@ export async function refreshCatalog(db: DB, opts: { force?: boolean } = {}): Pr
   let added = 0, statusChanged = 0, updated = 0;
   tx(db, () => {
     for (const e of entries) {
-      // "retirado": o projeto acabou ou sumiu. "sin_enlace": o Recompendium lista mas prefere não pôr link
-      // (acontece com jogos atuais, como os de Switch 2). Esses continuam aparecendo, marcados.
       const retired = e.retirado ? 1 : 0, noLink = e.sin_enlace ? 1 : 0;
       const row = {
         id: e.entry, title: e.nombre, repo: e.repo ?? null, console: toConsoleId(e.consola), platformName: e.consola_nombre ?? e.consola ?? 'Outros',
@@ -77,12 +69,11 @@ export async function refreshCatalog(db: DB, opts: { force?: boolean } = {}): Pr
       };
       upsert.run(row);
       const p = prev.get(e.entry);
-      if (firstSync || retired) continue;   // na primeira sincronização tudo seria "novo": não avisamos
+      if (firstSync || retired) continue;
       if (!p || p.retired) { event.run(e.entry, 'new', e.repo ?? '', now); added++; }
       else if (p.status !== row.status) { event.run(e.entry, 'up', `${p.status}→${row.status}`, now); statusChanged++; }
       else if (row.version && p.version !== row.version && installed.has(e.entry)) { event.run(e.entry, 'upd', `${p.version ?? '?'}→${row.version}`, now); updated++; }
     }
-    // jogo da biblioteca ligado ao catálogo segue o console de lá (ex.: quando um console ganha lugar próprio no palco)
     db.exec('UPDATE installed_game SET console = (SELECT c.console FROM catalog_game c WHERE c.id = installed_game.catalog_id) WHERE catalog_id IN (SELECT id FROM catalog_game)');
   });
 
@@ -93,17 +84,11 @@ export async function refreshCatalog(db: DB, opts: { force?: boolean } = {}): Pr
 }
 
 type Row = { id: string; title: string; repo: string | null; console: string; platform_name: string; status: string; version: string | null; date: string | null; stars: number; year: number | null; developer: string | null; needs: string | null; description: string | null; cover_url: string | null; no_link: number; first_seen_at: number };
-// consoles em que o usuário instala sozinho: o projeto não sai daqui (nem nome, nem link); ele pesquisa por conta própria
 const toGame = (r: Row): CatalogGame => ({
   id: r.id, title: r.title, repo: isSelfInstall(r.console) ? null : r.repo, console: r.console as CatalogGame['console'], platformName: r.platform_name, status: r.status as CatalogGame['status'],
   version: r.version, date: r.date, stars: r.stars, year: r.year, developer: r.developer, needs: r.needs, description: r.description, coverUrl: absUrl(r.cover_url), noLink: !!r.no_link, firstSeenAt: r.first_seen_at,
 });
 
-/**
- * Nos consoles em que o usuário instala sozinho, vários projetos do mesmo jogo viram um item só: o Cartucho não
- * oferece nenhum deles, então só importa que o jogo tem recomp. Devolve id → id que representa o grupo (o que o
- * usuário já ligou a uma pasta, senão o de melhor status) e o melhor status de cada grupo.
- */
 const RANK: Record<string, number> = { full: 3, play: 2, wip: 1 };
 export const titleKey = (t: string) => t.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 function selfGroups(db: DB) {
@@ -132,16 +117,31 @@ export function listCatalog(db: DB, filter: { console?: string; consoles?: strin
     .map(r => ({ ...toGame(r), ...(best.has(r.id) ? { status: best.get(r.id) as CatalogGame['status'], firstSeenAt: r.first_seen_at } : {}) }));
 }
 
-export function listRadar(db: DB, limit = 50): RadarEvent[] {
-  return (db.prepare(`SELECT r.id, r.game_id, r.kind, r.detail, r.at, c.title, c.console FROM radar_event r JOIN catalog_game c ON c.id = r.game_id ORDER BY r.at DESC, r.id DESC LIMIT ?`).all(limit) as
-    { id: number; game_id: string; kind: RadarEvent['kind']; detail: string; at: number; title: string; console: RadarEvent['console'] }[])
-    .map(r => ({ id: r.id, gameId: r.game_id, title: r.title, console: r.console, kind: r.kind, detail: r.kind === 'new' && isSelfInstall(r.console) ? '' : r.detail, at: r.at }))
-    .filter(seenOnce(selfGroups(db).rep));
+export const RADAR_KEEP = 14 * 86400_000;
+
+export function listRadar(db: DB, limit = 50, now = Date.now()): RadarEvent[] {
+  return (db.prepare(`SELECT r.id, r.game_id, r.kind, r.detail, r.at, r.dismissed, r.seen_at, c.title, c.console FROM radar_event r JOIN catalog_game c ON c.id = r.game_id ORDER BY r.at DESC, r.id DESC LIMIT ?`).all(limit * 4) as
+    { id: number; game_id: string; kind: RadarEvent['kind']; detail: string; at: number; dismissed: number; seen_at: number | null; title: string; console: RadarEvent['console'] }[])
+    .map(r => ({ id: r.id, gameId: r.game_id, title: r.title, console: r.console, kind: r.kind, detail: r.kind === 'new' && isSelfInstall(r.console) ? '' : r.detail, at: r.at, gone: !!r.dismissed || (r.seen_at != null && now - r.seen_at > RADAR_KEEP) }))
+    .filter(seenOnce(selfGroups(db).rep))
+    .filter(r => !r.gone)
+    .slice(0, limit)
+    .map(({ gone: _, ...r }) => r);
 }
-/** Um aviso por jogo (não por projeto) nos consoles agrupados: o mais recente de cada tipo fica. */
+
+export function dismissRadar(db: DB, ids: number[]) {
+  if (!ids.length) return;
+  db.prepare(`UPDATE radar_event SET dismissed = 1 WHERE id IN (${ids.map(() => '?').join(',')})`).run(...ids);
+}
+
+export function seeRadar(db: DB, ids: number[], now = Date.now()) {
+  if (!ids.length) return;
+  db.prepare(`UPDATE radar_event SET seen_at = ? WHERE seen_at IS NULL AND id IN (${ids.map(() => '?').join(',')})`).run(now, ...ids);
+}
+
 function seenOnce(rep: Map<string, string>) {
   const seen = new Set<string>();
-  return (e: RadarEvent) => {
+  return <E extends RadarEvent>(e: E) => {
     if (!rep.has(e.gameId)) return true;
     e.gameId = rep.get(e.gameId)!;
     const k = e.gameId + ':' + e.kind;
@@ -150,18 +150,16 @@ function seenOnce(rep: Map<string, string>) {
   };
 }
 
-/** Novidades do radar desde a última vez que o usuário abriu o radar. */
 export function radarCounts(db: DB) {
   const seen = Number(kvGet(db, 'radar.seenAt') ?? 0);
   return db.prepare(`SELECT
       SUM(CASE WHEN at > ? THEN 1 ELSE 0 END) unseen,
       SUM(CASE WHEN kind = 'new' AND at > ? THEN 1 ELSE 0 END) fresh,
       SUM(CASE WHEN kind = 'upd' AND at > ? THEN 1 ELSE 0 END) updates
-    FROM radar_event`).get(seen, seen, seen) as { unseen: number | null; fresh: number | null; updates: number | null };
+    FROM radar_event WHERE dismissed = 0`).get(seen, seen, seen) as { unseen: number | null; fresh: number | null; updates: number | null };
 }
 export const markRadarSeen = (db: DB) => kvSet(db, 'radar.seenAt', String(Date.now()));
 
-/** Por console: quantos recomps, quantos instalados e quantos chegaram nos últimos 14 dias. */
 export function perConsole(db: DB) {
   const since = Date.now() - 14 * 86400_000;
   const out: Record<string, { recomps: number; installed: number; fresh: number; platforms: number }> = {};
@@ -170,7 +168,6 @@ export function perConsole(db: DB) {
     out[r.console] = { recomps: r.n, installed: 0, fresh: r.fresh ?? 0, platforms: r.p };
   for (const r of db.prepare('SELECT console, COUNT(*) n FROM installed_game GROUP BY console').all() as { console: string; n: number }[])
     (out[r.console] ??= { recomps: 0, installed: 0, fresh: 0, platforms: 0 }).installed = r.n;
-  // consoles agrupados: conta jogos, não projetos
   const { rep } = selfGroups(db);
   const freshIds = new Set((db.prepare("SELECT game_id FROM radar_event WHERE kind = 'new' AND at > ?").all(since) as { game_id: string }[]).map(r => rep.get(r.game_id) ?? r.game_id));
   for (const c of SELF_INSTALL) {

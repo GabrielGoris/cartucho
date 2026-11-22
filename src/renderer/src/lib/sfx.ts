@@ -1,4 +1,3 @@
-/** Sons sintetizados na hora (nada de áudio copiado de console nenhum). */
 import { getSettings } from './settings';
 
 type Kind = 'move' | 'ok' | 'back' | 'boot';
@@ -28,7 +27,6 @@ function noise(d: number, v = 0.04, hp = 3000) {
 }
 const arp = (ns: number[], type: OscillatorType, v: number, gap: number, d: number) => ns.forEach((f, i) => tone(f, d, type, v, i * gap));
 
-// Cada console tem o seu jeito de soar; fora deles o Cartucho usa o "soft".
 type Profile = Record<Kind, () => void>;
 const PROFILES: Record<string, Profile> = {
   square: { move: () => tone(1200, 0.04, 'square', 0.025), ok: () => arp([784, 1175], 'square', 0.03, 0.06, 0.08), back: () => tone(392, 0.09, 'square', 0.03, 0, 260), boot: () => arp([523, 659, 784, 1047, 1319], 'square', 0.025, 0.08, 0.14) },
@@ -39,16 +37,19 @@ const PROFILES: Record<string, Profile> = {
   click: { move: () => noise(0.025, 0.05, 4000), ok: () => { noise(0.03, 0.06, 2500); tone(1600, 0.05, 'triangle', 0.03); }, back: () => tone(700, 0.06, 'triangle', 0.04, 0, 500), boot: () => { noise(0.05, 0.05); tone(1046, 0.12, 'triangle', 0.04, 0.08); tone(1568, 0.2, 'triangle', 0.04, 0.16); } },
 };
 let profile = 'soft';
-/** O hub de cada console troca o perfil de som enquanto está aberto. */
 export const setSfxProfile = (p: string) => { profile = PROFILES[p] ? p : 'soft'; };
 
 export const sfx = {
   play(k: Kind) { PROFILES[profile]![k](); },
-  /** Vinheta da abertura: arpejo de 8 bits + "clique" do cartucho entrando. */
+  insert() {
+    if (!getSettings().bootSnd) return;
+    initAudio();
+    noise(0.05, 0.06, 1200); tone(110, 0.16, 'square', 0.035, 0, 70); tone(1568, 0.05, 'square', 0.015, 0.06);
+  },
   jingle() {
     if (!getSettings().bootSnd) return;
     initAudio();
     arp([523, 659, 784, 1047, 1319], 'square', 0.025, 0.08, 0.14);
-    tone(2093, 0.35, 'square', 0.02, 0.55); noise(0.04, 0.05, 1500);
+    tone(2093, 0.35, 'square', 0.02, 0.55);
   },
 };

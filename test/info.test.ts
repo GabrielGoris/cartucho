@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../src/main/db';
-import { GameInfoService, matchIgdb, parseScore, pickIgdb, pickScore, steamAppId, ttbHours, type WdEntity } from '../src/main/artwork/info';
+import { GameInfoService, igdbHasExact, matchIgdb, parseScore, pickIgdb, pickScore, steamAppId, ttbHours, tidyTtb, type WdEntity } from '../src/main/artwork/info';
 import type { Artwork } from '../src/main/artwork/service';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'cartucho-'));
@@ -166,6 +166,24 @@ describe('tempo para zerar', () => {
     const games = [{ id: 3, name: 'Super Mario 64 DS', platforms: [{ name: 'Nintendo DS' }] }, { id: 2, name: 'Super Mario 64', platforms: [{ name: 'Nintendo 64' }] }];
     expect(matchIgdb('Super Mario 64', 'n64', games)?.id).toBe(2);
     expect(matchIgdb('Outro', 'snes', games)).toBeNull();
+  });
+
+  it('não pega outro jogo só porque é da mesma plataforma', () => {
+    const games = [{ id: 5, name: 'Castlevania Chronicles', platforms: [{ name: 'PlayStation' }] }, { id: 6, name: 'Metal Gear Solid', platforms: [{ name: 'PlayStation' }] }];
+    expect(matchIgdb('Silent Hill', 'ps1', games)).toBeNull();
+    expect(matchIgdb('Castlevania: Symphony of the Night', 'ps1', games)).toBeNull();
+    expect(matchIgdb('Zelda: Majora\'s Mask', 'n64', [{ id: 8, name: 'The Legend of Zelda: Majora\'s Mask', platforms: [{ name: 'Nintendo 64' }] }])?.id).toBe(8);
+    expect(matchIgdb('Final Fantasy VII', 'ps1', [{ id: 9, name: 'Final Fantasy VIII', platforms: [{ name: 'PlayStation' }] }])).toBeNull();
+    expect(matchIgdb('007 Everything or Nothing', 'xbox', [{ id: 10, name: 'James Bond 007: Everything or Nothing', platforms: [{ name: 'Xbox' }] }])?.id).toBe(10);
+    expect(igdbHasExact('Silent Hill', 'ps1', games)).toBe(false);
+    expect(igdbHasExact('Silent Hill', 'ps1', [...games, { id: 7, name: 'Silent Hill', platforms: [{ name: 'PlayStation' }] }])).toBe(true);
+  });
+
+  it('descarta tempos que não fazem sentido', () => {
+    expect(tidyTtb({ h: 3, n: 7, c: 33340 })).toEqual({ h: 3, n: 7 });
+    expect(tidyTtb({ n: 16, c: 8.5 })).toEqual({ n: 16 });
+    expect(tidyTtb({ h: 20, n: 9, c: 30 })).toEqual({ h: 20, c: 30 });
+    expect(tidyTtb({})).toBeNull();
   });
 
   it('converte segundos em horas, de meia em meia', () => {

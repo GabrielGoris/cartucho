@@ -16,12 +16,12 @@ import { SearchBox } from '../components/SearchBox';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useDeviceStatus, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
-import { useGameProgress, useHubActions, useHubData, type HubGame } from './data';
+import { useFeed, useGameProgress, useHubActions, useHubData, type HubGame } from './data';
 
 type Cat = 'games' | 'cat' | 'news' | 'ach' | 'time' | 'cfg';
 type Kind = 'game' | 'search' | 'disc' | 'empty' | 'ach' | 'sum' | 'time' | 'theme' | 'dir' | 'snd' | 'radar' | 'off';
 type Tag = 'new' | 'upd' | 'up';
-interface It { key: string; kind: Kind; g?: HubGame; ic?: IconName; t: string; s: string; tag?: Tag }
+interface It { key: string; kind: Kind; g?: HubGame; ic?: IconName; t: string; s: string; tag?: Tag; f?: RadarEvent }
 type Zone = 'gacts' | 'gshots' | 'gtext';
 interface St { ci: number; ii: number[]; opt: boolean; oi: number; list: boolean; li: number; dir: 'up' | 'down'; game: string | null; zone: Zone; ai: number; gs: number }
 type Opt = { k: string; l: string; ic: IconName };
@@ -172,7 +172,7 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
         ...data.catalog.filter(x => x.isNew).slice(0, 8).map(g => ({ key: g.key, kind: 'game' as Kind, g, t: g.title, s: `Novo no catálogo${g.status ? ` · ${STATUS_LABEL[g.status]}` : ''}`, tag: 'new' as Tag }))];
     }
     if (k === 'news') {
-      L = data.feed.map(f => { const g = feedGame(f); return { key: String(f.id), kind: 'game' as Kind, g: g ?? undefined, ic: 'bell' as IconName, t: f.title, s: `${FEED[f.kind]}${f.detail && !(self && f.kind === 'new') ? ` · ${f.detail}` : ''} · ${ago(f.at)}`, tag: f.kind }; });
+      L = data.feed.map(f => { const g = feedGame(f); return { key: String(f.id), f, kind: 'game' as Kind, g: g ?? undefined, ic: 'bell' as IconName, t: f.title, s: `${FEED[f.kind]}${f.detail && !(self && f.kind === 'new') ? ` · ${f.detail}` : ''} · ${ago(f.at)}`, tag: f.kind }; });
       if (!L.length) L = [{ key: 'empty', kind: 'empty', ic: 'bell', t: 'Nada novo por aqui', s: 'O Cartucho confere o Recompendium toda vez que abre' }];
     }
     if (k === 'ach') {
@@ -200,6 +200,7 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   const sel = Math.min(st.ii[st.ci] ?? 0, items.length - 1);
   const it = items[sel]!;
   const g = it.g ?? null;
+  const feed = useFeed(data.feed, cat === 'news' && !st.game);
 
   const ach = useQuery(trpc.achievements.forGame.queryOptions({ id: g?.installed?.id ?? '' }, { enabled: cat === 'ach' && !!g?.installed?.adapter }));
   const achList = ach.data ? [...ach.data.list].sort((a, b) => (b.unlockedAt ?? -1) - (a.unlockedAt ?? -1)) : [];
@@ -266,7 +267,7 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   const enter = () => {
     if (st.opt && g) { const o = options(g)[st.oi]; if (o) run(o.k, g); return; }
     switch (it.kind) {
-      case 'game': if (g) run(primaryOf(g).k, g); return;
+      case 'game': if (it.f) { feed.done(it.f); if (g) { sfx.play('ok'); openGame(g); } return; } if (g) run(primaryOf(g).k, g); return;
       case 'search': sfx.play('ok'); searchRef.current?.focus(); return;
       case 'disc': sfx.play('ok'); if (it.key === 'search') focusSearch(); else setDisc(true); return;
       case 'empty': if (cat === 'games' && data.catalog.length) goCat(1); return;
@@ -302,6 +303,7 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       if (D && st.li < achList.length - 1) mv({ li: st.li + 1 }); else if (U && st.li > 0) mv({ li: st.li - 1 });
       return;
     }
+    if (cat === 'news' && (k === 'X' || k === 'Y')) { if (k === 'X') feed.drop(it.f); else void feed.clear(); return; }
     if (k === 'X' || k === 'Y') { if (g && it.kind !== 'ach') { sfx.play('ok'); up({ opt: true, oi: 0 }); } return; }
     if (R && sel < items.length - 1) return mv({ ii: st.ii.map((v, j) => (j === st.ci ? sel + 1 : v)) });
     if (L && sel > 0) return mv({ ii: st.ii.map((v, j) => (j === st.ci ? sel - 1 : v)) });
@@ -310,6 +312,7 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   }, !(disc || game));
 
   const hints: Hint[] = st.opt || st.list ? [['ud', 'Escolher'], ['ok', st.list ? 'Fechar lista' : 'Confirmar'], ['back', 'Fechar']]
+    : cat === 'news' && it.f ? [['ok', 'Ver jogo'], ['x', 'Dispensar'], ['y', 'Limpar tudo'], ['lr', 'Item'], ['ud', 'Categoria'], ['back', 'Sair']]
     : [['lr', 'Item'], ['ud', 'Categoria'], ['back', 'Sair']];
   const theme = THEMES[themeIdx]!;
   const date = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'numeric' });

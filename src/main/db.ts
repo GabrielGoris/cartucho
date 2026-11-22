@@ -96,6 +96,10 @@ const MIGRATIONS: string[] = [
   `
   CREATE TABLE game_info (key TEXT PRIMARY KEY, json TEXT NOT NULL, fetched_at INTEGER NOT NULL);
   `,
+  `
+  ALTER TABLE radar_event ADD COLUMN dismissed INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE radar_event ADD COLUMN seen_at INTEGER;
+  `,
 ];
 
 export function openDb(file: string): DB {

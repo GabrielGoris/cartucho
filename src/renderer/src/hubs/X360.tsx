@@ -16,7 +16,7 @@ import { GameArt } from '../components/GameArt';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
-import { useHubActions, useHubData, type HubGame } from './data';
+import { useFeed, useHubActions, useHubData, type HubGame } from './data';
 
 type Tab = 'home' | 'games' | 'cat' | 'news' | 'ach' | 'time' | 'cfg';
 type Zone = 'tabs' | 'tiles' | 'list' | 'gacts' | 'gshots' | 'gtext';
@@ -130,6 +130,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
   const paged = tk === 'games' || tk === 'cat' || tk === 'news';
   const loc = paged ? st.fi % per : st.fi;
   const cur = tiles ? tiles[loc] ?? null : null;
+  const feed = useFeed(data.feed, tk === 'news' && !st.game);
 
   const rows: Row[] = tk === 'ach' ? lib.map(g => ({ key: g.key, g, l: g.title, v: g.installed?.achievements?.total ? `${g.installed.achievements.unlocked}/${g.installed.achievements.total}` : '—' }))
     : tk === 'time' ? [{ key: 'sum', l: 'Resumo', ic: 'chart', v: fmtPlay(data.playMs) || '0m' }, ...byPlay.map(g => ({ key: g.key, g, l: g.title, v: fmtPlay(g.installed?.playMs ?? 0) || '0m' }))]
@@ -205,7 +206,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
     if (tiles) {
       if (!cur) return;
       if (cur.go) { sfx.play('ok'); return goTab(TABS.findIndex(t => t[0] === cur.go), { zone: cur.go === 'ach' ? 'list' : 'tiles' }); }
-      if (cur.feed) { if (cur.g) { sfx.play('ok'); openGame(cur.g); } return; }
+      if (cur.feed) { feed.done(cur.feed); if (cur.g) { sfx.play('ok'); openGame(cur.g); } return; }
       if (cur.g) { if (tk === 'cat') { sfx.play('ok'); return openGame(cur.g); } return run(primaryOf(cur.g).k, cur.g); }
       return;
     }
@@ -239,6 +240,11 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
       return;
     }
     if (k === 'LB' || k === 'RB' || k === 'Tab') { sfx.play('move'); return goTab(st.tab + (k === 'LB' ? -1 : 1)); }
+    if (tk === 'news' && st.zone !== 'tabs' && (k === 'X' || k === 'Y')) {
+      if (k === 'X' && feed.drop(cur?.feed)) up({ fi: Math.max(0, Math.min(st.fi, data.feed.length - 2)) });
+      if (k === 'Y') void feed.clear();
+      return;
+    }
     if (k === 'Y') { sfx.play('ok'); if (tk !== 'cat') goTab(2, { zone: 'tiles' }); focusSearch(); return; }
     if (k === 'X') { if (cur?.g) { sfx.play('ok'); up({ menu: true, mi: 0 }); } return; }
     if (st.zone === 'tabs') {
@@ -270,6 +276,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
 
   const hints: Hint[] = st.menu ? [['ok', 'Selecionar'], ['back', 'Fechar']]
     : !tiles ? [['ok', 'Selecionar'], ['back', 'Voltar'], ['rb', 'Abas']]
+    : tk === 'news' && cur?.feed ? [['ok', 'Ver jogo'], ['x', 'Dispensar'], ['y', 'Limpar tudo'], ['back', 'Voltar']]
     : cur?.g ? [['ok', tk === 'cat' || cur.feed ? 'Ver jogo' : primaryOf(cur.g).l], ['x', 'Opções'], ['y', 'Buscar'], ['back', st.tab ? 'Voltar' : 'Sair']]
     : [['ok', 'Selecionar'], ['y', 'Buscar'], ['back', st.tab ? 'Voltar' : 'Sair']];
   const tabsRef = useRef<HTMLElement>(null);

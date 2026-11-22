@@ -33,12 +33,12 @@ function sorter(s: DSort) {
   };
 }
 
-export function Discover({ theme, cname, games: all, extra: allExtra = [], self, st, set, options, run, onOpen, onBack, hints, shape = 'tall', onTab, groupOf, groupLabel = 'Plataforma', allLabel = 'Todas', title = 'Descobrir', place, active = true, onSection }: {
+export function Discover({ theme, cname, games: all, extra: allExtra = [], self, st, set, options, run, onOpen, onBack, hints, shape = 'tall', onTab, groupOf, groupLabel = 'Plataforma', allLabel = 'Todas', title = 'Descobrir', place, active = true, onSection, onTopEdge }: {
   theme: string; cname: string; games: HubGame[]; extra?: HubGame[]; self: boolean;
   st: DState; set: (f: (s: DState) => DState) => void;
   options: (g: HubGame) => DOpt[]; run: (k: string, g: HubGame) => void; onOpen: (g: HubGame) => void; onBack: () => void;
   hints?: boolean; shape?: 'tall' | 'wide' | 'square'; onTab?: (d: 1 | -1) => void;
-  groupOf?: (g: HubGame) => string; groupLabel?: string; allLabel?: string; title?: string; place?: string; active?: boolean; onSection?: (d: 1 | -1) => void;
+  groupOf?: (g: HubGame) => string; groupLabel?: string; allLabel?: string; title?: string; place?: string; active?: boolean; onSection?: (d: 1 | -1) => void; onTopEdge?: () => void;
 }) {
   const groups = useMemo(() => {
     if (!groupOf) return [] as [string, number][];
@@ -126,6 +126,7 @@ export function Discover({ theme, cname, games: all, extra: allExtra = [], self,
       if (k === 'Enter') { sfx.play('ok'); searchRef.current?.focus(); }
       else if (k === 'ArrowDown') mv({ zone: onTab ? below : 'chips' });
       else if (k === 'ArrowRight' && onTab) mv({ zone: 'chips', chip: Math.max(0, FILTERS.findIndex(f => f[0] === st.filter)) });
+      else if (k === 'ArrowUp' && onTopEdge) onTopEdge();
       else if (k === 'Escape') { if (st.q) { sfx.play('back'); up({ q: '' }); } else mv({ zone: 'body' }); }
       return;
     }
@@ -262,7 +263,8 @@ export function Discover({ theme, cname, games: all, extra: allExtra = [], self,
 function Detail({ g, self }: { g: HubGame; self: boolean }) {
   const needs = useTranslated(g.catalog?.needs);
   const i = g.installed;
-  const score = useInfo(g.console, g.title, g.platformName, i?.id, g.catalog?.id)?.score ?? null;
+  const info = useInfo(g.console, g.title, g.platformName, i?.id, g.catalog?.id), score = info?.score ?? null;
+  const ttb = info?.ttb?.h ?? info?.ttb?.n ?? info?.ttb?.c ?? null;
   return (
     <div className="dsc-d" key={g.key}>
       <span className="cv-w"><GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant="cover" /></span>
@@ -270,6 +272,7 @@ function Detail({ g, self }: { g: HubGame; self: boolean }) {
       <p className="meta">{[g.catalog?.year, g.catalog?.developer].filter(Boolean).join(' · ') || g.platformName}</p>
       <div className="pills">
         {score && <span className={`pill score ${score.value >= 75 ? 'hi' : score.value >= 50 ? 'mid' : 'lo'}`} title={`${score.by === 'IGDB' ? 'Média da crítica (IGDB)' : `Nota do ${score.by}`}${score.platform ? ` · ${score.platform}` : ''}`}>{score.value}</span>}
+        {ttb && <span className="pill ttb" title="Tempo para zerar, média de jogadores no IGDB.com">{Math.floor(ttb)}h{ttb % 1 ? '30' : ''}</span>}
         {g.status && <span className={`pill ${g.status}`}>{STATUS_LABEL[g.status]}</span>}
         {g.isNew && <span className="pill new">Novo</span>}
         {i && <span className="pill inst">{i.missing ? 'Pasta não encontrada' : i.playMs ? `${fmtPlay(i.playMs)} jogadas` : 'Instalado'}</span>}

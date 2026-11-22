@@ -75,6 +75,7 @@
 .s2 .nr .cv { width: 110px; height: 110px; border-radius: 12px; padding: 0; }
 .s2 .nr .cv .ini { font-size: 18px; top: 50%; left: 50%; transform: translate(-50%, -50%); }
 .s2 .nr .cv .ct { display: none; }
+.s2 .nr.on { border-radius: 14px; border-color: transparent; background: #fff; box-shadow: 0 0 0 5px var(--ac), 0 8px 20px rgba(0,0,0,.08); }
 .s2 .nr small { display: block; font-size: 24px; color: #7b7b86; margin-top: 4px; }
 .s2 .nr .r { text-align: right; font-size: 24px; color: #7b7b86; display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
 .s2 .desc { display: grid; grid-template-columns: 90px 1fr; gap: 28px; align-items: start; font-size: 30px; line-height: 1.45; padding: 10px 0 34px; border-bottom: 2px solid #d9d9de; }
@@ -135,7 +136,6 @@
 .s2.v1 .si.on { border-radius: 4px; box-shadow: 0 0 0 5px var(--ac); }
 .s2.v1 .si.on::after { content: ''; position: absolute; left: 14px; top: 20px; bottom: 20px; width: 5px; background: var(--ac); border-radius: 3px; }
 .s2.v1 .card, .s2.v1 .card .cv { border-radius: 4px; }
-
 
 .sk-wave { --sf: 'Saira', system-ui, sans-serif; --toast-bg: rgba(255,255,255,.92); --toast-fg: #1a1530; background: #0c0a18; }
 

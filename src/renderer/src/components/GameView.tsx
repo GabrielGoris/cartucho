@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTRPC } from '../trpc';
 import { SELF_INSTALL_NOTE, STATUS_LABEL } from '@shared/consoles';
 import { Glyph, useKeys, type Key } from '../lib/input';
+import { openWeb } from '../lib/web';
 import { sfx } from '../lib/sfx';
 import { fmtPlay } from '../lib/format';
 import { useArt, useInfo, useShots } from '../lib/art';
@@ -27,7 +28,8 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
   const aboutText = about.text || (info?.lang === 'pt' ? info.overview ?? '' : '');
   const score = info?.score ?? null;
   const hrs = (h: number) => `${Math.floor(h)}h${h % 1 ? '30' : ''}`;
-  const ttbText = info?.ttb ? [info.ttb.h && `Para zerar: ${hrs(info.ttb.h)}`, info.ttb.n && `Com extras: ${hrs(info.ttb.n)}`, info.ttb.c && `100%: ${hrs(info.ttb.c)}`].filter(Boolean).join(' · ') : '';
+  const ttb = info?.ttb ?? null;
+  const ttbMain: [string, number] | null = ttb ? (ttb.h ? ['Campanha', ttb.h] : ttb.n ? ['Com extras', ttb.n] : ttb.c ? ['100%', ttb.c] : null) : null;
   const needs = useTranslated(g.catalog?.needs);
   const p = useGameProgress(g);
   const inst = g.installed;
@@ -53,7 +55,11 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
   const [more, setMore] = useState(false);
   const [mi, setMi] = useState(0);
   const tone = score ? (score.value >= 75 ? 'hi' : score.value >= 50 ? 'mid' : 'lo') : '';
+  const tops = [score ? 'score' : null, 'ttb'].filter((x): x is 'score' | 'ttb' => !!x);
+  const [pi, setPi] = useState(0);
+  const topNow = tops[Math.min(pi, tops.length - 1)];
   const openScore = () => { if (!score?.url) return; sfx.play('ok'); window.open(score.url); };
+  const openTtb = () => { sfx.play('ok'); openWeb(`https://howlongtobeat.com/?q=${encodeURIComponent(g.title)}`, `${g.title} · HowLongToBeat`); };
   const [zone, setZone] = useState<Zone>('acts');
   const [ai, setAi] = useState(0);
   const [si, setSi] = useState(0);
@@ -62,7 +68,7 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
   const strip = useRef<HTMLDivElement>(null);
   useEffect(() => { setNote(null); setZone('acts'); setAi(0); setSi(0); setView(null); setMore(false); scroll.current?.scrollTo({ top: 0 }); }, [g.key]);
   useEffect(() => { if (ai >= shown.length && shown.length) setAi(shown.length - 1); }, [shown.length]);
-  useEffect(() => { if (zone === 'score' && !score) setZone('acts'); }, [zone, score]);
+  useEffect(() => { if (zone === 'score' && !tops.length) setZone('acts'); }, [zone, tops.length]);
 
   useEffect(() => {
     const el = scroll.current; if (!el) return;
@@ -92,8 +98,10 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
       return;
     }
     if (zone === 'score') {
-      if (k === 'Enter') return openScore();
-      if (D || k === 'Escape') mv(() => setZone('acts'));
+      if (k === 'Enter') return topNow === 'ttb' ? openTtb() : openScore();
+      if (R && pi < tops.length - 1) mv(() => setPi(pi + 1));
+      else if (L && pi > 0) mv(() => setPi(pi - 1));
+      else if (D || k === 'Escape') mv(() => setZone('acts'));
       return;
     }
     if (k === 'Escape') { sfx.play('back'); return onBack(); }
@@ -101,7 +109,7 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
       if (k === 'Enter') return act(ai);
       if (R && ai < shown.length - 1) mv(() => setAi(ai + 1));
       else if (L && ai > 0) mv(() => setAi(ai - 1));
-      else if (U && score) mv(() => setZone('score'));
+      else if (U && tops.length) mv(() => { setPi(0); setZone('score'); });
       else if (D) mv(() => setZone(shots.length ? 'shots' : 'text'));
       return;
     }
@@ -134,10 +142,9 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
           <div className="gv-head">
             {logo && art.logo ? <img className="gv-logo" src={art.logo} alt={g.title} /> : <h1>{g.title}</h1>}
             {meta && <p className="gv-meta">{meta}</p>}
-            {ttbText && <p className="gv-ttb" title="Médias informadas por jogadores no IGDB.com">{ttbText}</p>}
             <div className="gv-pills">
               {score && (
-                <span className={`pill score ${tone} ${zone === 'score' ? 'on' : ''}`} onClick={openScore}>
+                <span className={`pill score ${tone} ${zone === 'score' && topNow === 'score' ? 'on' : ''}`} onClick={openScore}>
                   {score.value}
                   <span className="gv-pop">
                     <b>{score.by === 'IGDB' ? 'Média da crítica' : `Nota do ${score.by}`}</b>
@@ -146,6 +153,17 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
                   </span>
                 </span>
               )}
+              <span className={`pill ttb ${ttbMain ? '' : 'ask'} ${zone === 'score' && topNow === 'ttb' ? 'on' : ''}`} onClick={openTtb}>
+                {ttbMain ? `${ttbMain[0]}: ${hrs(ttbMain[1])}` : 'Ver tempo para zerar'}
+                <span className="gv-pop">
+                  <b>Tempo para zerar</b>
+                  {ttb?.h ? <span>Campanha: {hrs(ttb.h)}</span> : null}
+                  {ttb?.n ? <span>Campanha com extras: {hrs(ttb.n)}</span> : null}
+                  {ttb?.c ? <span>100%: {hrs(ttb.c)}</span> : null}
+                  {!ttbMain && <span>Ainda sem uma média confiável no IGDB.com.</span>}
+                  <small>{ttbMain ? 'Média de jogadores no IGDB.com · ' : ''}OK ou clique abre o HowLongToBeat aqui no Cartucho</small>
+                </span>
+              </span>
               {g.status && <span className={`pill ${g.status}`}>{STATUS_LABEL[g.status]}</span>}
               {g.isNew && <span className="pill new">Novo no catálogo</span>}
               {inst && !inst.missing && <span className="pill inst">{inst.running ? 'Jogando agora' : inst.playMs ? `${fmtPlay(inst.playMs)} jogadas` : 'Instalado · ainda não jogado'}</span>}
@@ -188,8 +206,8 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
       <div className="dsc-ft">
         {view != null ? [hint('lr', 'Imagem'), hint('back', 'Fechar')]
           : more ? [hint('ud', 'Escolher'), hint('ok', rest[mi]?.l ?? 'OK'), hint('back', 'Fechar')]
-          : zone === 'score' ? [hint('ok', 'Abrir a página'), hint('ud', 'Ações'), hint('back', 'Voltar')]
-          : zone === 'acts' ? [hint('ok', shown[ai]?.l ?? 'OK'), hint('lr', 'Ações'), hint('ud', score ? 'Nota, imagens e texto' : 'Imagens e texto'), hint('back', 'Voltar')]
+          : zone === 'score' ? [hint('ok', topNow === 'ttb' ? 'Abrir o HowLongToBeat' : 'Abrir a página'), ...(tops.length > 1 ? [hint('lr', 'Escolher')] : []), hint('ud', 'Ações'), hint('back', 'Voltar')]
+          : zone === 'acts' ? [hint('ok', shown[ai]?.l ?? 'OK'), hint('lr', 'Ações'), hint('ud', tops.length ? 'Nota, imagens e texto' : 'Imagens e texto'), hint('back', 'Voltar')]
           : zone === 'shots' ? [hint('ok', 'Ampliar'), hint('lr', 'Imagens'), hint('ud', 'Rolar'), hint('back', 'Voltar')]
           : [hint('ud', 'Rolar'), hint('back', 'Voltar')]}
       </div>

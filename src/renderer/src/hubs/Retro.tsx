@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AchievementView, ConsoleId } from '@shared/types';
+import type { AchievementView, ConsoleId, RadarEvent } from '@shared/types';
 import { CONSOLE_NAME, isSelfInstall } from '@shared/consoles';
 import { useTRPC } from '../trpc';
 import { Glyph, useKeys, type Key } from '../lib/input';
@@ -13,7 +13,7 @@ import { Discover, initialDiscover } from '../components/Discover';
 import { GameView } from '../components/GameView';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
-import { useHubData, type HubGame } from './data';
+import { useFeed, useHubData, type HubGame } from './data';
 import { useGameMenu } from './menu';
 import { otherConsoles } from '../stage/consoles';
 import { Obj, SHELLS, shellH, type Kind } from './shells';
@@ -22,7 +22,7 @@ type Tab = 'games' | 'disc' | 'news' | 'ach' | 'time' | 'cfg';
 interface Cfg { kind: Kind; sfx: string; boot: 'retro' | 'soft' | 'white' }
 interface St { tab: number; idx: number; li: number; game: string | null; achOpen: boolean; ai2: number }
 type Hint = [Parameters<typeof Glyph>[0]['a'], string];
-interface Row { key: string; g?: HubGame; t: string; v?: string; s?: string; id?: string; bar?: number }
+interface Row { key: string; g?: HubGame; t: string; v?: string; s?: string; id?: string; bar?: number; f?: RadarEvent }
 
 export const RETRO: Record<string, Cfg> = {
   snes: { kind: 'snes', sfx: 'square', boot: 'retro' },
@@ -80,12 +80,13 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
 
   const byPlay = useMemo(() => [...data.lib].sort((a, b) => (b.installed?.playMs ?? 0) - (a.installed?.playMs ?? 0)), [data.lib]);
   const maxPlay = Math.max(1, ...byPlay.map(x => x.installed?.playMs ?? 0));
-  const rows: Row[] = tk === 'news' ? data.feed.map(f => ({ key: String(f.id), g: data.catalog.find(y => y.catalog?.id === f.gameId), t: f.title, s: `${FEED[f.kind]}${f.detail && !(self && f.kind === 'new') ? ` · ${f.detail}` : ''}`, v: ago(f.at) }))
+  const rows: Row[] = tk === 'news' ? data.feed.map(f => ({ key: String(f.id), f, g: data.catalog.find(y => y.catalog?.id === f.gameId), t: f.title, s: `${FEED[f.kind]}${f.detail && !(self && f.kind === 'new') ? ` · ${f.detail}` : ''}`, v: ago(f.at) }))
     : tk === 'ach' ? data.lib.map(x => ({ key: x.key, g: x, t: x.title, v: x.installed?.achievements?.total ? `${x.installed.achievements.unlocked}/${x.installed.achievements.total}` : '—' }))
     : tk === 'time' ? byPlay.map(x => ({ key: x.key, g: x, t: x.title, v: fmtPlay(x.installed?.playMs ?? 0) || '0m', bar: (x.installed?.playMs ?? 0) / maxPlay }))
     : tk === 'cfg' ? CFG_ROWS.map(r => ({ ...r, v: r.id === 'snd' ? (s.snd ? 'Ligados' : 'Desligados') : '' }))
     : [];
   const row = rows[st.li];
+  const feed = useFeed(data.feed, tk === 'news' && !st.game);
   const achGame = tk === 'ach' ? row?.g ?? null : null;
   const ach = useQuery(trpc.achievements.forGame.queryOptions({ id: achGame?.installed?.id ?? '' }, { enabled: !!achGame?.installed?.adapter }));
   const achList = ach.data ? [...ach.data.list].sort((a, b) => (b.unlockedAt ?? -1) - (a.unlockedAt ?? -1)) : [];
@@ -118,6 +119,7 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
       return show('O radar confere o catálogo toda vez que o Cartucho abre');
     }
     if (tk === 'ach') { if (achList.length) { sfx.play('ok'); up({ achOpen: !st.achOpen, ai2: 0 }); } return; }
+    if (row.f) feed.done(row.f);
     if (row.g) openGame(row.g);
   };
   const back = () => {
@@ -147,6 +149,11 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
       else if (k === 'LT') mv({ idx: Math.max(0, i - cols * 2) });
       return;
     }
+    if (tk === 'news' && (k === 'X' || k === 'Y')) {
+      if (k === 'X' && feed.drop(row?.f)) up({ li: Math.max(0, Math.min(st.li, rows.length - 2)) });
+      if (k === 'Y') void feed.clear();
+      return;
+    }
     if (st.achOpen) { if (D && st.ai2 < achList.length - 1) mv({ ai2: st.ai2 + 1 }); else if (U && st.ai2 > 0) mv({ ai2: st.ai2 - 1 }); return; }
     if (D && st.li < rows.length - 1) mv({ li: st.li + 1 }); else if (U && st.li > 0) mv({ li: st.li - 1 });
     else if (k === 'RT') mv({ li: Math.min(rows.length - 1, st.li + VISIBLE) }); else if (k === 'LT') mv({ li: Math.max(0, st.li - VISIBLE) });
@@ -154,6 +161,7 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
 
   const hints: Hint[] = tk === 'games'
     ? (g ? [['ok', options(g)[0]!.l], ['x', 'Página do jogo'], ['y', 'Buscar'], ['rb', 'Seção'], ['back', 'Sair']] : [['ok', 'Descobrir jogos'], ['rb', 'Seção'], ['back', 'Sair']])
+    : tk === 'news' && rows.length ? [['ok', 'Ver jogo'], ['x', 'Dispensar'], ['y', 'Limpar tudo'], ['rb', 'Seção'], ['back', 'Voltar']]
     : [['ok', tk === 'cfg' ? 'OK' : tk === 'ach' ? (st.achOpen ? 'Fechar' : 'Ver lista') : 'Abrir'], ['ud', 'Mover'], ['rb', 'Seção'], ['back', 'Voltar']];
   const H = <div className="rh-ft">{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>;
   const off = Math.max(0, Math.min(st.li - 3, rows.length - VISIBLE));

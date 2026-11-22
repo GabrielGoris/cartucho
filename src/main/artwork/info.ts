@@ -8,7 +8,7 @@ export interface Score { value: number; by: 'Metacritic' | 'OpenCritic' | 'IGDB'
 export interface GameInfo { overview: string | null; lang: 'pt' | 'en' | null; developer: string | null; year: number | null; score: Score | null; ttb?: Ttb | null; lbPending?: boolean }
 export interface InfoInput { console: string; platformName?: string | null; title: string; installDir?: string | null; exe?: string | null; catalogId?: string | null }
 export interface Ttb { h?: number; n?: number; c?: number }
-export interface NotaJogo { n: Score | null; t: number; i?: 1; z?: Ttb | null; zt?: number }
+export interface NotaJogo { n: Score | null; t: number; i?: 1; z?: Ttb | null; zt?: number; zv?: number }
 export interface Notas { gerado?: string; jogos?: Record<string, NotaJogo> }
 
 export const infoKey = (console: string, platformName: string | null | undefined, title: string) => `${artPlatform(console, platformName) ?? console}:${looseKey(title)}`;
@@ -81,12 +81,23 @@ export function pickScore(title: string, platform: string | null, games: WdEntit
   return best ? { value: best.value, by: best.by, url: best.url, platform: best.platform, via: 'Wikidata' } : null;
 }
 
+const STOP = new Set(['the', 'and', 'of']);
+const tokens = (s: string) => cleanTitle(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\./g, '').split(/[^a-z0-9]+/).filter(Boolean);
+const related = (title: string, name: string) => {
+  if (looseKey(title) === looseKey(name)) return true;
+  const a = tokens(title), b = new Set(tokens(name));
+  if (a.some(w => (/^\d+$/.test(w) || /^[ivx]{2,5}$/.test(w)) && !b.has(w))) return false;
+  const big = a.filter(w => w.length >= 3 && !STOP.has(w));
+  return big.length > 0 && big.filter(w => b.has(w)).length / big.length >= 0.5;
+};
+const igdbOn = (platform: string | null) => { const want = platform ? PLATFORM_LABEL[platform] : undefined; return (g: IgdbGame) => !!want && (g.platforms ?? []).some(p => want.test(p.name ?? '')); };
+
 export interface IgdbGame { id?: number; name?: string; aggregated_rating?: number; aggregated_rating_count?: number; url?: string; platforms?: { name?: string }[] }
 
 export function pickIgdb(title: string, platform: string | null, games: IgdbGame[]): Score | null {
   const want = platform ? PLATFORM_LABEL[platform] : undefined, key = looseKey(title);
   const rated = games.filter(g => g.aggregated_rating != null && (g.aggregated_rating_count ?? 0) > 0);
-  const plat = (g: IgdbGame) => !!want && (g.platforms ?? []).some(p => want.test(p.name ?? ''));
+  const on = igdbOn(platform), plat = (g: IgdbGame) => on(g) && related(title, g.name ?? '');
   const same = (g: IgdbGame) => looseKey(g.name ?? '') === key;
   const pool = want && rated.some(plat) ? rated.filter(plat) : rated.filter(same);
   const g = [...pool].sort((a, b) => Number(same(b)) - Number(same(a)) || (b.aggregated_rating_count ?? 0) - (a.aggregated_rating_count ?? 0))[0];
@@ -95,9 +106,14 @@ export function pickIgdb(title: string, platform: string | null, games: IgdbGame
   return { value: Math.round(g.aggregated_rating!), by: 'IGDB', url: g.url ?? null, platform: p, via: 'IGDB' };
 }
 
+export function igdbHasExact(title: string, platform: string | null, games: IgdbGame[]): boolean {
+  const on = igdbOn(platform), key = looseKey(title);
+  return games.some(g => looseKey(g.name ?? '') === key && (!platform || !PLATFORM_LABEL[platform] || on(g)));
+}
+
 export function matchIgdb(title: string, platform: string | null, games: IgdbGame[]): IgdbGame | null {
   const want = platform ? PLATFORM_LABEL[platform] : undefined, key = looseKey(title);
-  const plat = (g: IgdbGame) => !!want && (g.platforms ?? []).some(p => want.test(p.name ?? ''));
+  const on = igdbOn(platform), plat = (g: IgdbGame) => on(g) && related(title, g.name ?? '');
   const same = (g: IgdbGame) => looseKey(g.name ?? '') === key;
   const pool = want && games.some(plat) ? games.filter(plat) : games.filter(same);
   return [...pool].sort((a, b) => Number(same(b)) - Number(same(a)) || (b.aggregated_rating_count ?? 0) - (a.aggregated_rating_count ?? 0))[0] ?? null;
@@ -106,9 +122,17 @@ export function matchIgdb(title: string, platform: string | null, games: IgdbGam
 export function ttbHours(t: { hastily?: number | null; normally?: number | null; completely?: number | null } | undefined): Ttb | null {
   if (!t) return null;
   const h = (s?: number | null) => (s && s > 0 ? Math.max(0.5, Math.round((s / 3600) * 2) / 2) : undefined);
+  return tidyTtb({ h: h(t.hastily), n: h(t.normally), c: h(t.completely) });
+}
+
+export function tidyTtb(t: Ttb | null | undefined): Ttb | null {
+  if (!t) return null;
   const out: Ttb = {};
-  const a = h(t.hastily), b = h(t.normally), c = h(t.completely);
-  if (a) out.h = a; if (b) out.n = b; if (c) out.c = c;
+  let last = 0;
+  for (const k of ['h', 'n', 'c'] as const) {
+    const v = t[k];
+    if (v && v > 0 && v <= 500 && v >= last) { out[k] = v; last = v; }
+  }
   return Object.keys(out).length ? out : null;
 }
 
@@ -179,7 +203,7 @@ export class GameInfoService {
 
   setNotas(n: Notas) {
     this.notas = new Map(Object.entries(n.jogos ?? {}).map(([id, v]) => [id, v?.n ?? null]));
-    this.ttb = new Map(Object.entries(n.jogos ?? {}).flatMap(([id, v]) => (v?.z ? [[id, v.z] as const] : [])));
+    this.ttb = new Map(Object.entries(n.jogos ?? {}).flatMap(([id, v]) => { const z = tidyTtb(v?.z); return z ? [[id, z] as const] : []; }));
     this.art.notify();
   }
 

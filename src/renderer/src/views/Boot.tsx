@@ -6,13 +6,14 @@ import { initAudio, sfx } from '../lib/sfx';
 import { fmtPlay, plural } from '../lib/format';
 import { CONSOLES } from '../stage/consoles';
 
-/** Abertura: o cartucho cai no console, o nome é "digitado" e aparece o resumo da biblioteca. */
 export function Boot({ summary, onDone }: { summary: LibrarySummary | undefined; onDone: () => void }) {
-  const [stage, setStage] = useState<0 | 1 | 2>(0);   // 0 animando, 1 esperando START, 2 saindo
+  const [stage, setStage] = useState<0 | 1 | 2>(0);
   const [skip, setSkip] = useState(false);
   const [shown, setShown] = useState(0);
   const pad = usePadKind();
   const timers = useRef<number[]>([]);
+  const jingled = useRef(false);
+  const snd = useRef<number[]>([]);
 
   const lines = summary ? [
     <>› catálogo: <b>{summary.catalogTotal} recomps</b> em {CONSOLES.length} consoles</>,
@@ -22,7 +23,12 @@ export function Boot({ summary, onDone }: { summary: LibrarySummary | undefined;
     <>› controle: <b>{PAD_NAMES[pad]}</b></>,
   ] : [<>› lendo a biblioteca…</>];
 
-  // as linhas aparecem uma a uma depois do logo
+  useEffect(() => {
+    initAudio();
+    if (reduceMotion()) { jingled.current = true; sfx.jingle(); return; }
+    snd.current = [window.setTimeout(() => sfx.insert(), 1950), window.setTimeout(() => { jingled.current = true; sfx.jingle(); }, 2200)];
+    return () => snd.current.forEach(clearTimeout);
+  }, []);
   useEffect(() => {
     if (stage !== 0 || skip) return;
     const reduce = reduceMotion(), base = reduce ? 0 : 3200;
@@ -33,9 +39,9 @@ export function Boot({ summary, onDone }: { summary: LibrarySummary | undefined;
   }, [lines.length, stage, skip]);
 
   const press = () => {
-    if (stage === 0) { timers.current.forEach(clearTimeout); setSkip(true); setShown(lines.length); setStage(1); return; }
+    if (stage === 0) { timers.current.forEach(clearTimeout); snd.current.forEach(clearTimeout); if (!jingled.current) sfx.jingle(); jingled.current = true; setSkip(true); setShown(lines.length); setStage(1); return; }
     if (stage !== 1) return;
-    setStage(2); initAudio(); sfx.jingle();
+    setStage(2); initAudio(); sfx.play('ok');
     window.setTimeout(onDone, reduceMotion() ? 0 : 460);
   };
   useKeys(() => press());

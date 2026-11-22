@@ -16,7 +16,7 @@ import { GameArt } from '../components/GameArt';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
-import { useGameProgress, useHubActions, useHubData, type HubGame } from './data';
+import { useFeed, useGameProgress, useHubActions, useHubData, type HubGame } from './data';
 
 type Page = 'home' | 'cat' | 'ach' | 'news' | 'cfg' | 'game';
 type Zone = 'top' | 'row' | 'acts' | 'cards' | 'tabs' | 'shelf' | 'side' | 'main' | 'gacts' | 'gshots' | 'gtext';
@@ -133,6 +133,7 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     if (k === 'search') { open('cat'); toSearch(); return; }
     open(k as Page, k === 'ach' ? { gi: 0 } : {});
   };
+  const feed = useFeed(data.feed, st.page === 'news');
   const enter = () => {
     if (menu) { const o = options(menu.g, st.page === 'home')[menu.mi]; if (o) run(o.k, menu.g); return; }
     const p = st.page, z = st.zone;
@@ -156,7 +157,7 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       if (k === 'off') return onBack();
       return show('O radar confere o catálogo do Recompendium toda vez que o Cartucho abre');
     }
-    if (p === 'news') { const f = data.feed[st.si]; const x = f && data.catalog.find(y => y.catalog?.id === f.gameId); if (x) { sfx.play('ok'); setMenu({ g: x, mi: 0 }); } }
+    if (p === 'news') { const f = data.feed[st.si]; feed.done(f); const x = f && data.catalog.find(y => y.catalog?.id === f.gameId); if (x) { sfx.play('ok'); setMenu({ g: x, mi: 0 }); } }
   };
   const closeGame = () => { const f = st.from; up({ page: f?.page ?? 'home', zone: f?.zone ?? 'row', si: f?.si ?? 0, game: null, from: null }); };
   const back = () => {
@@ -178,6 +179,11 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       const n = options(menu.g, st.page === 'home').length;
       if (D && menu.mi < n - 1) { sfx.play('move'); setMenu({ ...menu, mi: menu.mi + 1 }); }
       else if (U && menu.mi > 0) { sfx.play('move'); setMenu({ ...menu, mi: menu.mi - 1 }); }
+      return;
+    }
+    if (st.page === 'news' && (k === 'X' || k === 'Y')) {
+      if (k === 'X' && feed.drop(data.feed[st.si])) up({ si: Math.max(0, Math.min(st.si, data.feed.length - 2)) });
+      if (k === 'Y') void feed.clear();
       return;
     }
     if (k === 'X' || k === 'Y') {
@@ -202,6 +208,7 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
 
   const hints: Hint[] = menu ? [['ok', 'Confirmar'], ['back', 'Fechar']]
     : st.page === 'home' && st.zone === 'row' && g ? [['ok', primaryOf(g).l], ['x', 'Opções']]
+    : st.page === 'news' && data.feed.length ? [['ok', 'Abrir'], ['x', 'Dispensar'], ['y', 'Limpar tudo'], ['back', 'Voltar']]
     : [['ok', 'Confirmar'], ['back', 'Voltar']];
   const H = ({ className }: { className: string }) => <div className={className}>{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>;
 

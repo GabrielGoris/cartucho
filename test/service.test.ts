@@ -1,4 +1,3 @@
-/** Banco + catálogo + serviço de conquistas de ponta a ponta (node:sqlite em memória). */
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,7 +14,7 @@ const catalog = (entradas: unknown[]) => new Response(JSON.stringify({ formato: 
 
 describe('banco, catálogo e conquistas', async () => {
   const { openDb, kvGet } = await import('../src/main/db');
-  const { refreshCatalog, listCatalog, listRadar } = await import('../src/main/catalog');
+  const { refreshCatalog, listCatalog, listRadar, dismissRadar, seeRadar, RADAR_KEEP } = await import('../src/main/catalog');
   const { AchievementService } = await import('../src/main/achievements/service');
   afterEach(() => vi.unstubAllGlobals());
 
@@ -50,11 +49,17 @@ describe('banco, catálogo e conquistas', async () => {
 
     fetch.mockResolvedValueOnce(new Response(null, { status: 304 }));
     expect((await refreshCatalog(db)).changed).toBe(false);
+
+    const [a, b, c] = listRadar(db);
+    dismissRadar(db, [a!.id]);
+    expect(listRadar(db).map(e => e.id)).toEqual([b!.id, c!.id]);
+    seeRadar(db, [b!.id], 1000);
+    seeRadar(db, [b!.id], Date.now());
+    expect(listRadar(db, 50, 1000 + RADAR_KEEP + 1).map(e => e.id)).toEqual([c!.id]);
   });
 
   it('catálogo: Xbox, NES, Game Boy, Mega Drive e DS têm lugar próprio; a biblioteca acompanha', async () => {
     const db = openDb(':memory:');
-    // como estava antes desta versão: tudo em "Outros"
     db.prepare("INSERT INTO catalog_game (id, title, console, platform_name, status, first_seen_at, updated_at) VALUES ('recomps/halo', 'Halo', 'other', 'Xbox', 'play', 0, 0)").run();
     db.prepare("INSERT INTO installed_game (id, catalog_id, title, console, install_dir, added_at) VALUES ('g', 'recomps/halo', 'Halo', 'other', '/x', 0)").run();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(catalog([
@@ -90,7 +95,7 @@ describe('banco, catálogo e conquistas', async () => {
     svc.events.on('unlock', e => events.push(e.name));
     const g = await svc.addGame(dir);
     expect(g).toMatchObject({ title: 'Sonic Unleashed', console: 'x360', adapter: 'unleashed-recomp', catalogId: 'recomps/unleashed', achievements: { unlocked: 1, total: 3 } });
-    expect(events).toEqual([]);   // o que já estava desbloqueado não vira aviso
+    expect(events).toEqual([]);
 
     writeFileSync(join(save, 'ACH-DATA'), buildHedgeAch([{ id: 24, time: 1_700_000_000 }, { id: 26, time: 1_700_000_500 }, { id: 99, time: 1_700_000_600 }]));
     expect(await svc.syncUnlocks(g.id)).toEqual([26, 99]);
@@ -102,17 +107,15 @@ describe('banco, catálogo e conquistas', async () => {
     expect(view.list.find(a => a.id === 24)!.icon).toMatch(/^data:image\/png;base64,/);
     expect(view.list.at(-1)).toMatchObject({ id: 99, name: 'Conquista #99' });
 
-    // save apagado: o histórico fica
     writeFileSync(join(save, 'ACH-DATA'), buildHedgeAch([]));
     await svc.syncUnlocks(g.id);
     expect(svc.listGames()[0]!.achievements!.unlocked).toBe(3);
 
-    // arquivo corrompido: erro na tela, sem perder nada
     writeFileSync(join(save, 'ACH-DATA'), buildHedgeAch([{ id: 25, time: 1 }], 50, { badChecksum: true }));
     await svc.syncUnlocks(g.id);
     expect(svc.forGame(g.id).errors[0]).toMatch(/checksum/);
 
-    expect(await svc.addGame(dir)).toMatchObject({ id: g.id });   // mesma pasta não duplica
+    expect(await svc.addGame(dir)).toMatchObject({ id: g.id });
     svc.removeGame(g.id);
     expect(svc.listGames()).toEqual([]);
     expect(db.prepare('SELECT COUNT(*) n FROM achievement_unlock').get()).toEqual({ n: 0 });
@@ -124,7 +127,7 @@ describe('banco, catálogo e conquistas', async () => {
     const svc = new AchievementService(db, appData);
     const g = await svc.addGame(dir);
     expect(g).toMatchObject({ adapter: 'sonic3air', title: 'Sonic 3 A.I.R.', achievements: { unlocked: 0, total: 18 } });
-    expect(svc.forGame(g.id).errors).toEqual([]);   // ainda não jogou não é erro
+    expect(svc.forGame(g.id).errors).toEqual([]);
 
     const got = new Promise<string>(res => svc.events.once('unlock', e => res(e.name)));
     mkdirSync(join(appData, 'Sonic3AIR', 'storage'), { recursive: true });

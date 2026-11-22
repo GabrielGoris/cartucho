@@ -10,7 +10,8 @@ import type { InstallProgress, LibrarySummary, PlayEvent, UnlockEvent } from '@s
 import { CONSOLE_NAME } from '@shared/consoles';
 import type { DB } from './db';
 import { kvGet, kvSet } from './db';
-import { listCatalog, listRadar, markRadarSeen, perConsole, platformCount, radarCounts, refreshCatalog } from './catalog';
+import type { WebPane } from './web';
+import { dismissRadar, listCatalog, listRadar, markRadarSeen, seeRadar, perConsole, platformCount, radarCounts, refreshCatalog } from './catalog';
 import type { AchievementService } from './achievements/service';
 import { ADAPTERS } from './achievements/adapters';
 import type { Ports } from './ports/installer';
@@ -25,7 +26,7 @@ import type { Background } from './background';
 import { logFile } from './log';
 import type { Updater, UpdState } from './updater';
 
-export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; info?: GameInfoService; ingame?: InGame; tr: Translator; defaultPortsDir: string; win?: () => WinCtl | null; bg?: () => Background | null; upd?: () => Updater | null }
+export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; info?: GameInfoService; ingame?: InGame; web?: WebPane; tr: Translator; defaultPortsDir: string; win?: () => WinCtl | null; bg?: () => Background | null; upd?: () => Updater | null }
 export const portsDirOf = (d: Pick<RouterDeps, 'db' | 'defaultPortsDir'>) => kvGet(d.db, 'portsDir') || d.defaultPortsDir;
 
 export interface PickRequest { id: number; title: string; kind: 'dir' | 'exe'; start: string; explicit: boolean }
@@ -144,6 +145,17 @@ export function createRouter(deps: RouterDeps) {
       back: t.procedure.mutation(() => deps.win?.()?.minimize()),
     }),
 
+    web: t.router({
+      open: t.procedure.input(z.object({ url: z.string(), rect: z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }) })).mutation(({ input }) => deps.web?.open(input.url, input.rect) ?? false),
+      place: t.procedure.input(z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() })).mutation(({ input }) => { deps.web?.place(input); }),
+      scroll: t.procedure.input(z.object({ dy: z.number() })).mutation(({ input }) => { deps.web?.scroll(input.dy); }),
+      back: t.procedure.mutation(() => { deps.web?.back(); }),
+      external: t.procedure.mutation(() => { deps.web?.external(); deps.web?.close(); }),
+      close: t.procedure.mutation(() => { deps.web?.close(true); }),
+      onClosed: t.procedure.subscription(async function* ({ signal }) { if (!deps.web) return; for await (const _ of on(deps.web.events, 'closed', { signal })) yield Date.now(); }),
+      onState: t.procedure.subscription(async function* ({ signal }) { if (!deps.web) return; for await (const [s] of on(deps.web.events, 'state', { signal })) yield s as { loading: boolean; title: string; url: string }; }),
+    }),
+
     background: t.router({
       get: t.procedure.query(() => deps.bg?.()?.prefs() ?? { tray: false, track: false, autostart: false }),
       set: t.procedure.input(z.object({ tray: z.boolean().optional(), track: z.boolean().optional(), autostart: z.boolean().optional() })).mutation(({ input }) => {
@@ -236,6 +248,8 @@ export function createRouter(deps: RouterDeps) {
       refresh: t.procedure.input(z.object({ force: z.boolean().optional() }).optional())
         .mutation(({ input }) => refreshCatalog(db, input ?? {})),
       radar: t.procedure.query(() => listRadar(db)),
+      dismiss: t.procedure.input(z.object({ ids: z.array(z.number()) })).mutation(({ input }) => { dismissRadar(db, input.ids); }),
+      seen: t.procedure.input(z.object({ ids: z.array(z.number()) })).mutation(({ input }) => { seeRadar(db, input.ids); }),
       info: t.procedure.query(() => ({
         generatedAt: kvGet(db, 'catalog.generatedAt'),
         checkedAt: Number(kvGet(db, 'catalog.checkedAt') ?? 0) || null,

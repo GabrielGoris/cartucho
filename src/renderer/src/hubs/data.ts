@@ -1,9 +1,11 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CatalogGame, ConsoleId, InstalledGame, PlayStatus, RadarEvent, UpdateInfo } from '@shared/types';
 import { useTRPC } from '../trpc';
 import { useProgress } from '../lib/progress';
 import { isSelfInstall } from '@shared/consoles';
+import { askConfirm } from '../lib/dialogs';
+import { sfx } from '../lib/sfx';
 
 export interface HubGame {
   key: string;
@@ -101,3 +103,29 @@ export const useGameProgress = (g: HubGame | null | undefined) => {
   const a = useProgress(g?.installed?.id), b = useProgress(g?.catalog?.id);
   return a ?? b;
 };
+
+export function useFeed(feed: RadarEvent[], showing: boolean) {
+  const trpc = useTRPC(), qc = useQueryClient();
+  const again = () => void qc.invalidateQueries({ queryKey: trpc.catalog.radar.queryKey() });
+  const dismiss = useMutation(trpc.catalog.dismiss.mutationOptions({ onSuccess: again }));
+  const seen = useMutation(trpc.catalog.seen.mutationOptions());
+  const sent = useRef(new Set<number>());
+  const ids = feed.map(f => f.id).join();
+  useEffect(() => {
+    if (!showing) return;
+    const fresh = feed.filter(f => !sent.current.has(f.id)).map(f => f.id);
+    if (!fresh.length) return;
+    fresh.forEach(i => sent.current.add(i));
+    seen.mutate({ ids: fresh });
+  }, [showing, ids]);
+  return {
+    done: (f: RadarEvent | null | undefined) => { if (f) dismiss.mutate({ ids: [f.id] }); },
+    drop: (f: RadarEvent | null | undefined) => { if (!f) return false; sfx.play('back'); dismiss.mutate({ ids: [f.id] }); return true; },
+    clear: async (list: RadarEvent[] = feed) => {
+      if (!list.length) return;
+      if (await askConfirm({ title: 'Limpar as notificações?', text: `${list.length === 1 ? 'A notificação some' : `As ${list.length} notificações somem`} da lista. Jogos novos e versões novas que chegarem depois aparecem normalmente.`, ok: 'Limpar', cancel: 'Cancelar' })) {
+        sfx.play('back'); dismiss.mutate({ ids: list.map(f => f.id) });
+      }
+    },
+  };
+}

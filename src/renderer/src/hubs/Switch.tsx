@@ -1,7 +1,7 @@
 import { useProfile } from '../lib/profile';
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ConsoleId } from '@shared/types';
+import type { ConsoleId, RadarEvent } from '@shared/types';
 import { isSelfInstall, STATUS_LABEL } from '@shared/consoles';
 import { useTRPC } from '../trpc';
 import { Glyph, PAD_NAMES, useKeys, usePadKind, type Key } from '../lib/input';
@@ -16,7 +16,7 @@ import { Discover, initialDiscover, type DOpt } from '../components/Discover';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
-import { useGameProgress, useHubActions, useHubData, type HubGame } from './data';
+import { useFeed, useGameProgress, useHubActions, useHubData, type HubGame } from './data';
 
 type Page = 'home' | 'cat' | 'news' | 'time' | 'upd' | 'cfg' | 'game';
 type Zone = 'row' | 'dock' | 'side' | 'main';
@@ -90,6 +90,10 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     return data.catalog;
   })();
   const mainList = st.page === 'cat' ? catList : st.page === 'upd' && sk === 'all' ? data.withUpdate : [];
+  const newsList = st.page === 'news' ? data.feed.filter(f => sk === 'all' || f.kind === sk) : [];
+  const feed = useFeed(newsList, st.page === 'news');
+  useEffect(() => { if (st.page === 'news' && st.zone === 'main' && st.mi >= newsList.length) up(newsList.length ? { mi: newsList.length - 1 } : { zone: 'side', mi: 0 }); }, [st.page, st.zone, st.mi, newsList.length]);
+  const newsGame = (f: RadarEvent | undefined) => (f ? data.catalog.find(g => g.catalog?.id === f.gameId) ?? null : null);
   const wide = st.page === 'cat' && st.zone === 'main';
   const cols = st.page === 'cat' ? (wide ? 5 : 2) : 1;
 
@@ -113,6 +117,13 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     }
     if (p === 'cat' && st.zone === 'side' && sk === 'search') { sfx.play('ok'); searchRef.current?.focus(); return; }
     if (st.zone === 'side' && mainList.length && (p === 'cat' || (p === 'upd' && sk === 'all'))) { sfx.play('move'); return up({ zone: 'main', mi: 0 }); }
+    if (p === 'news' && st.zone === 'side' && newsList.length) { sfx.play('move'); return up({ zone: 'main', mi: 0 }); }
+    if (p === 'news' && st.zone === 'main') {
+      const f = newsList[st.mi], g = newsGame(f); if (!f) return;
+      feed.done(f);
+      if (g) return open('game', { game: g.key, from: 'news', fromSi: st.si });
+      return sfx.play('ok');
+    }
     if (st.zone === 'main') {
       const g = mainList[st.mi]; if (!g) return;
       if (p === 'cat') return open('game', { game: g.key, from: 'cat', fromSi: st.si });
@@ -165,6 +176,11 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     if (launch) return;
     if (k === 'Escape') return back();
     if (k === 'Enter') return enter();
+    if (st.page === 'news' && (k === 'X' || k === 'Y')) {
+      if (k === 'X' && st.zone === 'main' && feed.drop(newsList[st.mi])) up({ mi: Math.max(0, Math.min(st.mi, newsList.length - 2)) });
+      if (k === 'Y') void feed.clear();
+      return;
+    }
     if (k === 'X' || k === 'Y') {
       if (st.page === 'home' && st.zone === 'row' && row[st.idx]) return open('game', { game: row[st.idx]!.key, from: 'home', lastZone: 'row' });
       return;
@@ -186,10 +202,10 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     if (st.zone === 'side') {
       if (k === 'ArrowDown' && st.si < side.length - 1) mv({ si: st.si + 1, mi: 0 });
       else if (k === 'ArrowUp' && st.si > 0) mv({ si: st.si - 1, mi: 0 });
-      else if (k === 'ArrowRight' && mainList.length) mv({ zone: 'main', mi: 0 });
+      else if (k === 'ArrowRight' && (mainList.length || newsList.length)) mv({ zone: 'main', mi: 0 });
       return;
     }
-    const n = mainList.length;
+    const n = st.page === 'news' ? newsList.length : mainList.length;
     if (k === 'ArrowLeft') { if (st.mi % cols === 0) mv({ zone: 'side' }); else mv({ mi: st.mi - 1 }); }
     else if (k === 'ArrowRight' && cols > 1 && st.mi < n - 1) mv({ mi: st.mi + 1 });
     else if (k === 'ArrowDown' && st.mi + cols < n) mv({ mi: st.mi + cols });
@@ -203,6 +219,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
       if (!g) return [['ok', 'Descobrir']];
       return [['x', 'Detalhes'], ['ok', g.installed?.missing ? (g.repo && !self ? 'Instalar de novo' : 'Procurar a pasta') : g.installed?.running ? 'Fechar' : g.installed ? (v1 ? 'Iniciar' : 'Jogar') : 'Instalar']];
     }
+    if (st.zone === 'main' && st.page === 'news') return [['back', 'Voltar'], ['y', 'Limpar tudo'], ['x', 'Dispensar'], ['ok', 'Ver']];
     if (st.zone === 'main') return [['back', 'Voltar'], ['ok', st.page === 'cat' ? 'Ver' : 'Atualizar']];
     if (st.page === 'cat' && sk === 'search') return [['back', 'Voltar'], ['ok', 'Digitar']];
     return [['back', 'Voltar'], ['ok', 'OK']];
@@ -373,10 +390,10 @@ function Main({ page, k, st, cols, self, query, setQuery, searchRef, onSearchDon
     const L = data.feed.filter(f => k === 'all' || f.kind === k);
     if (!L.length) return <Empty>Nada novo por aqui. O Cartucho confere o Recompendium toda vez que abre.</Empty>;
     const byId = new Map(data.catalog.map(g => [g.catalog!.id, g]));
-    return <>{L.map(f => { const g = byId.get(f.gameId); return (
-      <div key={f.id} className="nr">{g ? <Art g={g} v="cover" /> : <div />}
+    return <div className="main-in" style={{ transform: `translateY(-${st.zone === 'main' ? Math.max(0, st.mi - 3) * 156 : 0}px)` }}>{L.map((f, i) => { const g = byId.get(f.gameId); return (
+      <div key={f.id} className={`nr ${st.zone === 'main' && i === st.mi ? 'on' : ''}`} onClick={() => onCard(i)}>{g ? <Art g={g} v="cover" /> : <div />}
         <div>{f.title}<small>{f.kind === 'new' ? (g?.repo ?? '') : f.detail}</small></div>
-        <div className="r"><span className={`pill ${f.kind}`}>{TAGS[f.kind]}</span>{ago(f.at)}</div></div>); })}</>;
+        <div className="r"><span className={`pill ${f.kind}`}>{TAGS[f.kind]}</span>{ago(f.at)}</div></div>); })}</div>;
   }
   if (page === 'time') {
     if (!timeList.length) return <Empty>Nenhuma sessão ainda. O tempo começa a contar quando você abre um jogo por aqui.</Empty>;

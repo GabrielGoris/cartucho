@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AchievementView, ConsoleId, PlayStats } from '@shared/types';
+import type { AchievementView, ConsoleId, PlayStats, RadarEvent } from '@shared/types';
 import { isSelfInstall, STATUS_LABEL } from '@shared/consoles';
 import { useTRPC } from '../trpc';
 import { Glyph, useKeys, type Key } from '../lib/input';
@@ -16,12 +16,12 @@ import { SearchBox } from '../components/SearchBox';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
-import { useHubActions, useHubData, type HubGame } from './data';
+import { useFeed, useHubActions, useHubData, type HubGame } from './data';
 
 type Sec = 'lib' | 'cat' | 'news' | 'ach' | 'time' | 'cfg';
-type Zone = 'side' | 'search' | 'main' | 'gacts' | 'gshots' | 'gtext';
+type Zone = 'tabs' | 'search' | 'main' | 'gacts' | 'gshots' | 'gtext';
 interface St { si: number; zone: Zone; fi: number; li: number; game: string | null; ai: number; gs: number; menu: boolean; mi: number }
-interface Row { key: string; g?: HubGame; ic?: IconName; t: string; s?: string; v?: string; id?: string }
+interface Row { key: string; g?: HubGame; ic?: IconName; t: string; s?: string; v?: string; id?: string; f?: RadarEvent }
 type Opt = { k: string; l: string; ic: IconName };
 type Hint = [Parameters<typeof Glyph>[0]['a'], string];
 
@@ -80,12 +80,14 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
     return q ? base.filter(x => matchesQuery(query, x.title, x.platformName, x.catalog?.developer)) : base;
   }, [sec, lib, data.catalog, data.lib, query]);
   const cur = grid[st.fi] ?? null;
-  const rows: Row[] = sec === 'news' ? data.feed.map(f => ({ key: String(f.id), g: data.catalog.find(y => y.catalog?.id === f.gameId), t: f.title, s: `${FEED[f.kind]}${f.detail && !(self && f.kind === 'new') ? ` · ${f.detail}` : ''}`, v: ago(f.at) }))
+  const rows: Row[] = sec === 'news' ? data.feed.map(f => ({ key: String(f.id), f, g: data.catalog.find(y => y.catalog?.id === f.gameId), t: f.title, s: `${FEED[f.kind]}${f.detail && !(self && f.kind === 'new') ? ` · ${f.detail}` : ''}`, v: ago(f.at) }))
     : sec === 'ach' ? lib.map(g => ({ key: g.key, g, t: g.title, v: g.installed?.achievements?.total ? `${g.installed.achievements.unlocked}/${g.installed.achievements.total}` : '—' }))
     : sec === 'time' ? [{ key: 'sum', ic: 'chart' as IconName, t: 'Resumo', v: fmtPlay(data.playMs) || '0m' }, ...byPlay.map(g => ({ key: g.key, g, t: g.title, v: fmtPlay(g.installed?.playMs ?? 0) || '0m' }))]
     : sec === 'cfg' ? CFG.map(r => ({ ...r, v: r.id === 'snd' ? (s.snd ? 'Ligados' : 'Desligados') : '' }))
     : [];
   const row = rows[st.li];
+  const feed = useFeed(data.feed, sec === 'news' && !st.game);
+  useEffect(() => { if (sec === 'news' && rows.length && st.li >= rows.length) up({ li: rows.length - 1 }); }, [sec, rows.length, st.li]);
   const ach = useQuery(trpc.achievements.forGame.queryOptions({ id: row?.g?.installed?.id ?? '' }, { enabled: sec === 'ach' && !!row?.g?.installed?.adapter }));
   const statQ = useQueries({ queries: (sec === 'time' ? byPlay : []).map(x => trpc.play.stats.queryOptions({ id: x.installed!.id })) });
   const stats = new Map(byPlay.map((x, i) => [x.key, statQ[i]?.data] as const));
@@ -148,7 +150,8 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
 
   const enter = () => {
     if (st.menu && cur) { const o = options(cur)[st.mi]; if (o) run(o.k, cur); return; }
-    if (st.zone === 'side') { sfx.play('ok'); return up({ zone: 'main' }); }
+    if (st.zone === 'tabs') { sfx.play('ok'); return up({ zone: 'main' }); }
+    if (st.zone === 'search') { sfx.play('ok'); searchRef.current?.focus(); return; }
     if (sec === 'lib' || sec === 'cat') { if (cur) { sfx.play('ok'); openGame(cur); } return; }
     if (!row) return;
     if (sec === 'cfg') {
@@ -158,14 +161,15 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
       if (row.id === 'off') return onBack();
       return show('O radar confere o catálogo do Recompendium toda vez que o Cartucho abre');
     }
+    if (row.f) feed.done(row.f);
     if (row.g) { sfx.play('ok'); openGame(row.g); }
   };
   const back = () => {
     sfx.play('back');
-    if (game) return up({ game: null });
+    if (game) return up({ game: null, zone: 'main' });
     if (st.menu) return up({ menu: false });
     if (query) { setQuery(''); return up({ fi: 0 }); }
-    if (st.zone !== 'side') return up({ zone: 'side' });
+    if (st.zone !== 'tabs') return up({ zone: 'tabs' });
     onBack();
   };
 
@@ -180,29 +184,35 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
       return;
     }
     if (k === 'LB' || k === 'RB' || k === 'Tab') return goSec((st.si + (k === 'LB' ? SIDE.length - 1 : 1)) % SIDE.length, { zone: 'main' });
-    if (k === 'Y') { sfx.play('ok'); if (sec !== 'lib' && sec !== 'cat') goSec(1); up({ zone: 'search' }); return focusSearch(); }
-    if (k === 'X') { if ((sec === 'lib' || sec === 'cat') && cur) { sfx.play('ok'); up({ menu: true, mi: 0 }); } return; }
-    if (st.zone === 'side') {
-      if (D && st.si < SIDE.length - 1) goSec(st.si + 1, { zone: 'side' }); else if (U && st.si > 0) goSec(st.si - 1, { zone: 'side' });
-      else if (R) mv({ zone: 'main' });
+    if (sec === 'news' && st.zone === 'main' && (k === 'X' || k === 'Y')) {
+      if (k === 'X' && feed.drop(row?.f)) up({ li: Math.max(0, Math.min(st.li, rows.length - 2)) });
+      if (k === 'Y') void feed.clear();
       return;
     }
-    if (st.zone === 'search') { if (D) mv({ zone: 'main' }); else if (L) mv({ zone: 'side' }); return; }
+    if (k === 'Y') { sfx.play('ok'); if (sec !== 'lib' && sec !== 'cat') goSec(1); up({ zone: 'search' }); return focusSearch(); }
+    if (k === 'X') { if ((sec === 'lib' || sec === 'cat') && cur) { sfx.play('ok'); up({ menu: true, mi: 0 }); } return; }
+    if (st.zone === 'tabs') {
+      if (R) goSec((st.si + 1) % SIDE.length, { zone: 'tabs' }); else if (L) goSec((st.si + SIDE.length - 1) % SIDE.length, { zone: 'tabs' });
+      else if (D) mv({ zone: 'main' });
+      return;
+    }
+    if (st.zone === 'search') { if (D) mv({ zone: 'main' }); else if (U) mv({ zone: 'tabs' }); return; }
     if (sec === 'lib' || sec === 'cat') {
       const col = st.fi % COLS;
       if (R && st.fi < grid.length - 1 && col < COLS - 1) mv({ fi: st.fi + 1 });
-      else if (L) { if (col > 0) mv({ fi: st.fi - 1 }); else mv({ zone: 'side' }); }
+      else if (L && col > 0) mv({ fi: st.fi - 1 });
       else if (D && st.fi + COLS < grid.length) mv({ fi: st.fi + COLS });
       else if (D && Math.floor(st.fi / COLS) < Math.floor((grid.length - 1) / COLS)) mv({ fi: grid.length - 1 });
-      else if (U) { if (st.fi >= COLS) mv({ fi: st.fi - COLS }); else { sfx.play('move'); up({ zone: 'search' }); focusSearch(); } }
+      else if (U) { if (st.fi >= COLS) mv({ fi: st.fi - COLS }); else mv({ zone: 'search' }); }
       return;
     }
-    if (D && st.li < rows.length - 1) mv({ li: st.li + 1 }); else if (U && st.li > 0) mv({ li: st.li - 1 }); else if (L) mv({ zone: 'side' });
-  }, !((sec === 'cat' && !game && !st.menu && st.zone !== 'side') || game));
+    if (D && st.li < rows.length - 1) mv({ li: st.li + 1 }); else if (U) { if (st.li > 0) mv({ li: st.li - 1 }); else mv({ zone: 'tabs' }); }
+  }, !((sec === 'cat' && !game && !st.menu && st.zone !== 'tabs') || game));
 
   const hints: Hint[] = st.menu ? [['ok', 'Confirmar'], ['back', 'Fechar']]
-    : st.zone === 'side' ? [['ud', 'Seção'], ['ok', 'Abrir'], ['back', 'Sair']]
+    : st.zone === 'tabs' ? [['lr', 'Seção'], ['ud', 'Entrar'], ['back', 'Sair']]
     : (sec === 'lib' || sec === 'cat') ? [['ok', 'Ver jogo'], ['x', 'Opções'], ['y', 'Buscar'], ['rb', 'Seção'], ['back', 'Voltar']]
+    : sec === 'news' && rows.length ? [['ok', 'Ver jogo'], ['x', 'Dispensar'], ['y', 'Limpar tudo'], ['rb', 'Seção'], ['back', 'Voltar']]
     : [['ok', sec === 'cfg' ? 'Confirmar' : 'Abrir'], ['rb', 'Seção'], ['back', 'Voltar']];
   const hero = sec === 'lib' ? cur ?? lib[0] ?? null : null;
 
@@ -212,27 +222,26 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
         {sec === 'cat' && !game && (
           <Discover theme="d-pc" cname={c.name} games={data.catalog} extra={data.lib.filter(x => !x.catalog)} self={self} st={dst} set={setDst}
             options={x => options(x).filter(o => o.k !== 'info').map(o => ({ k: o.k, l: o.l, icon: <Ic n={o.ic} /> }))}
-            run={run} onOpen={openGame} onBack={() => { sfx.play('back'); up({ zone: 'side' }); }}
-            onSection={d => goSec((st.si + (d > 0 ? 1 : SIDE.length - 1)) % SIDE.length, { zone: 'main' })} active={st.zone !== 'side'} />
+            run={run} onOpen={openGame} onBack={() => { sfx.play('back'); up({ zone: 'tabs' }); }}
+            onSection={d => goSec((st.si + (d > 0 ? 1 : SIDE.length - 1)) % SIDE.length, { zone: 'main' })} active={st.zone !== 'tabs'} onTopEdge={() => { sfx.play('move'); up({ zone: 'tabs' }); }} />
         )}
-        <aside className="pc-side">
+        <header className="pc-top">
           <div className="brand"><i><Ic n="pad" /></i>{c.name}</div>
-          {SIDE.map(([k, l, ic], i) => {
+          <nav>{SIDE.map(([k, l, ic], i) => {
             const n = k === 'news' ? data.feed.length : k === 'cat' ? data.catalog.filter(x => x.isNew).length : 0;
             return (
-              <button key={k} className={`${i === st.si ? 'cur' : ''} ${st.zone === 'side' && i === st.si && !game ? 'on' : ''}`} onClick={() => goSec(i, { zone: 'main' })}>
+              <button key={k} className={`${i === st.si ? 'cur' : ''} ${st.zone === 'tabs' && i === st.si && !game ? 'on' : ''}`} onClick={() => goSec(i, { zone: 'main' })}>
                 <Ic n={ic} />{l}{n > 0 && <span className="n">{n}</span>}
               </button>
             );
-          })}
-          <div className="sp" />
-          <button onClick={() => { sfx.play('back'); onBack(); }}><Ic n="back" />Voltar ao Cartucho</button>
-          <div className="me"><i><Ic n="clock" /></i><span>{fmtPlay(data.playMs) || '0m'} jogados<br />{clock}</span></div>
-        </aside>
+          })}</nav>
+          <div className="me"><Ic n="clock" /><span>{fmtPlay(data.playMs) || '0m'} jogados · {clock}</span></div>
+          <button className="out" onClick={() => { sfx.play('back'); onBack(); }}><Ic n="back" />Cartucho</button>
+        </header>
         <main className="pc-main" ref={mainRef}>
-          {game ? null : (
+          {game || sec === 'cat' ? null : (
             <div className="pc-pg" key={sec}>
-              {(sec === 'lib' || sec === 'cat') && (
+              {sec === 'lib' && (
                 <>
                   {sec === 'lib' && hero && <Hero g={hero} />}
                   <div className={`pc-bar ${st.zone === 'search' ? 'on' : ''}`}>
@@ -253,7 +262,7 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
                   ) : <div className="pc-empty">{q ? `Nada encontrado para “${q}”.` : sec === 'lib' ? `Nenhum jogo instalado. ${plural(data.catalog.length, 'jogo', 'jogos')} em Descobrir.` : 'O catálogo ainda não tem nada aqui.'}</div>}
                 </>
               )}
-              {sec !== 'lib' && sec !== 'cat' && (
+              {sec !== 'lib' && (
                 <div className="pc-panel">
                   <h2>{SIDE[st.si]![1]}</h2>
                   <div className={sec === 'news' ? '' : 'pc-split'}>
@@ -278,9 +287,9 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
             </div>
           </div>
         )}
-        {game && <GameView theme="d-pc" g={game} self={self} run={run} onBack={() => up({ game: null })}
+        {game && <GameView theme="d-pc" g={game} self={self} run={run} onBack={() => up({ game: null, zone: 'main' })}
           opts={gameOpts.map(o => ({ k: o.k, l: o.l, icon: <Ic n={o.ic} /> }))} />}
-        {sec !== 'cat' && !game && <div className="pc-ft">{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>}
+        {(sec !== 'cat' || st.zone === 'tabs') && !game && <div className="pc-ft">{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>}
         {toast}
       </Fit>
       <BootOverlay kind="sweep" label={c.name.toUpperCase()} />

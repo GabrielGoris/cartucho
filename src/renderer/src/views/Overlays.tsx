@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CONSOLE_NAME } from '@shared/consoles';
 import type { ConsoleId } from '@shared/types';
 import { useTRPC } from '../trpc';
+import { useFeed } from '../hubs/data';
 import { Glyph } from '../lib/input';
 import { useSpatialNav } from '../lib/spatial';
 import { ago, fmtPlay, plural } from '../lib/format';
@@ -34,19 +35,24 @@ export function RadarOverlay({ onClose, onOpenConsole }: { onClose: () => void; 
   const refresh = useMutation(trpc.catalog.refresh.mutationOptions({ onSettled: () => qc.invalidateQueries() }));
   const seen = useMutation(trpc.catalog.markRadarSeen.mutationOptions({ onSuccess: () => qc.invalidateQueries({ queryKey: trpc.library.summary.queryKey() }) }));
   const close = () => { seen.mutate(); onClose(); };
+  const feed = useFeed(radar.data ?? [], true);
 
   return (
     <Shell title="RADAR" onClose={close}>
       {radar.data?.length === 0 && <p className="empty">Nada novo por enquanto. O Cartucho confere o Recompendium toda vez que abre; jogos novos, mudanças de status e versões novas dos seus jogos aparecem aqui.</p>}
       {radar.data?.slice(0, 40).map(r => (
-        <button key={r.id} className="it" data-hf onClick={() => { seen.mutate(); onOpenConsole(r.console); }}>
-          <span className={`tag ${r.kind}`}>{TAGS[r.kind]}</span>
-          <span className="t">{r.title}</span>
-          <span className="s">{CONSOLE_NAME[r.console]}{r.kind !== 'new' ? ` · ${r.detail}` : ''} · {ago(r.at)}</span>
-        </button>
+        <div key={r.id} className="it-row">
+          <button className="it" data-hf onClick={() => { feed.done(r); seen.mutate(); onOpenConsole(r.console); }}>
+            <span className={`tag ${r.kind}`}>{TAGS[r.kind]}</span>
+            <span className="t">{r.title}</span>
+            <span className="s">{CONSOLE_NAME[r.console]}{r.kind !== 'new' ? ` · ${r.detail}` : ''} · {ago(r.at)}</span>
+          </button>
+          <button className="it-x" data-hf title="Dispensar" aria-label="Dispensar" onClick={() => feed.drop(r)}>✕</button>
+        </div>
       ))}
       <div className="scan">
         <span>{refresh.error ? `Sem conexão com o Recompendium (${refresh.error.message})` : info.data?.checkedAt ? `Verificado ${ago(info.data.checkedAt)}` : 'Ainda não verificado'}</span>
+        {!!radar.data?.length && <button data-hf onClick={() => void feed.clear(radar.data ?? [])}>Limpar tudo</button>}
         <button data-hf disabled={refresh.isPending} onClick={() => refresh.mutate({})}>{refresh.isPending ? 'Verificando…' : 'Verificar agora'}</button>
       </div>
     </Shell>
