@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { toConsoleId } from '../src/shared/consoles';
 import { artPlatform } from '../src/main/artwork/service';
 import { cleanTitle } from '../src/main/artwork/service';
-import { type IgdbGame, type Notas, pickIgdb, wikidataScore } from '../src/main/artwork/info';
+import { type IgdbGame, matchIgdb, type NotaJogo, type Notas, pickIgdb, ttbHours, wikidataScore } from '../src/main/artwork/info';
 
 const [prevFile, outFile = 'notas.json'] = process.argv.slice(2);
 const CATALOG = process.env.CARTUCHO_CATALOG_URL || 'https://recompendium.com/unricopie/catalogo.json';
@@ -22,20 +22,19 @@ async function igdbToken() {
   return ((await r.json()) as { access_token?: string }).access_token ?? null;
 }
 
-async function igdb(title: string, platform: string | null) {
-  if (!token) return null;
-  const q = cleanTitle(title).replace(/["\\]/g, ' ');
-  const body = `search "${q}"; fields name,aggregated_rating,aggregated_rating_count,url,platforms.name; limit 10;`;
+async function igdbPost<T>(path: string, body: string): Promise<T> {
   for (let tries = 1; ; tries++) {
     const wait = igdbAt + 300 - Date.now(); if (wait > 0) await sleep(wait);
     igdbAt = Date.now();
-    const r = await fetch(`${IGDB}/games`, { method: 'POST', body, headers: { 'Client-ID': TWITCH_ID, Authorization: `Bearer ${token}`, Accept: 'application/json', 'User-Agent': UA }, signal: AbortSignal.timeout(30_000) }).catch(e => e as Error);
-    if (!(r instanceof Error) && r.ok) return pickIgdb(title, platform, (await r.json()) as IgdbGame[]);
+    const r = await fetch(`${IGDB}/${path}`, { method: 'POST', body, headers: { 'Client-ID': TWITCH_ID, Authorization: `Bearer ${token}`, Accept: 'application/json', 'User-Agent': UA }, signal: AbortSignal.timeout(30_000) }).catch(e => e as Error);
+    if (!(r instanceof Error) && r.ok) return (await r.json()) as T;
     const busy = r instanceof Error || r.status === 429 || r.status >= 500;
     if (!busy || tries >= 4) throw new Error(r instanceof Error ? r.message : `IGDB respondeu ${r.status}`);
     await sleep(3000 * tries);
   }
 }
+
+const igdbSearch = (title: string) => igdbPost<IgdbGame[]>('games', `search "${cleanTitle(title).replace(/["\\]/g, ' ')}"; fields id,name,aggregated_rating,aggregated_rating_count,url,platforms.name; limit 10;`);
 
 async function json<T>(url: string): Promise<T> {
   for (let tries = 1; ; tries++) {
@@ -59,24 +58,40 @@ if (token && process.env.GITHUB_ACTIONS) console.log(`::add-mask::${token}`);
 console.log(token ? 'IGDB ligado' : 'IGDB desligado (sem TWITCH_CLIENT_ID/TWITCH_CLIENT_SECRET)');
 const cat = await json<{ entradas?: Entry[] }>(CATALOG);
 const now = Date.now(), out: Required<Notas> = { gerado: new Date(now).toISOString(), jogos: {} };
-let asked = 0, found = 0, kept = 0, failed = 0, fromIgdb = 0;
+let asked = 0, found = 0, kept = 0, failed = 0, fromIgdb = 0, ttbAsked = 0;
+const KEEP_TTB = 30 * DAY;
+const waitingTtb: [string, number][] = [];
 
 for (const e of cat.entradas ?? []) {
   if (!e.entry || !e.nombre || e.retirado) continue;
   const old = prev.jogos?.[e.entry];
   const retryIgdb = !!token && old && !old.i && (!old.n || old.n.by === 'OpenCritic');
-  if (old && !retryIgdb && now - old.t < (old.n ? KEEP_FOUND : KEEP_MISSING)) { out.jogos[e.entry] = old; kept++; continue; }
+  const needScore = !old || retryIgdb || now - old.t >= (old.n ? KEEP_FOUND : KEEP_MISSING);
+  const needTtb = !!token && (!old?.zt || now - old.zt >= KEEP_TTB);
+  if (!needScore && !needTtb) { out.jogos[e.entry] = old!; kept++; continue; }
   if (asked >= MAX) { if (old) out.jogos[e.entry] = old; continue; }
   asked++;
   const cid = toConsoleId(e.consola), platform = artPlatform(cid, e.consola_nombre ?? e.consola ?? 'Outros');
   try {
-    let n = await wikidataScore(json, e.nombre, platform);
-    if (token && (!n || n.by === 'OpenCritic')) {
-      const ig = await igdb(e.nombre, platform);
-      if (ig && (!n || ig.platform)) { n = ig; fromIgdb++; }
+    let games: IgdbGame[] | null = null;
+    const search = async () => (games ??= token ? await igdbSearch(e.nombre!) : []);
+    const entry: NotaJogo = old ? { ...old } : { n: null, t: now };
+    if (needScore) {
+      let n = await wikidataScore(json, e.nombre, platform);
+      if (token && (!n || n.by === 'OpenCritic')) {
+        const ig = pickIgdb(e.nombre, platform, await search());
+        if (ig && (!n || ig.platform)) { n = ig; fromIgdb++; }
+      }
+      entry.n = n; entry.t = now;
+      if (token) entry.i = 1;
+      if (n) found++;
+    } else kept++;
+    if (needTtb) {
+      const g = matchIgdb(e.nombre, platform, await search());
+      entry.zt = now;
+      if (g?.id) { waitingTtb.push([e.entry, g.id]); ttbAsked++; } else entry.z = null;
     }
-    out.jogos[e.entry] = token ? { n, t: now, i: 1 } : { n, t: now };
-    if (n) found++;
+    out.jogos[e.entry] = entry;
   } catch (err) {
     failed++;
     if (old) out.jogos[e.entry] = old;
@@ -84,6 +99,20 @@ for (const e of cat.entradas ?? []) {
   }
 }
 
+let withTtb = 0;
+for (let k = 0; k < waitingTtb.length; k += 400) {
+  const part = waitingTtb.slice(k, k + 400);
+  try {
+    const rows = await igdbPost<{ game_id?: number; hastily?: number; normally?: number; completely?: number }[]>('game_time_to_beats', `fields game_id,hastily,normally,completely; where game_id = (${part.map(x => x[1]).join(',')}); limit 500;`);
+    const byGame = new Map(rows.map(r => [r.game_id, r]));
+    for (const [entry, id] of part) { const z = ttbHours(byGame.get(id)); out.jogos[entry]!.z = z; if (z) withTtb++; }
+  } catch (err) {
+    console.warn(`tempo para zerar: ${(err as Error).message}`);
+    for (const [entry] of part) { const o = prev.jogos?.[entry]; out.jogos[entry]!.z = o?.z ?? null; out.jogos[entry]!.zt = o?.zt; }
+  }
+}
+
 writeFileSync(outFile, JSON.stringify(out));
 const total = Object.keys(out.jogos).length, withScore = Object.values(out.jogos).filter(v => v.n).length;
-console.log(`${total} jogos · ${withScore} com nota · ${asked} consultados agora (${found} com nota, ${fromIgdb} pelo IGDB, ${failed} com erro) · ${kept} reaproveitados`);
+const totalTtb = Object.values(out.jogos).filter(v => v.z).length;
+console.log(`${total} jogos · ${withScore} com nota · ${totalTtb} com tempo para zerar · ${asked} consultados agora (${found} com nota, ${fromIgdb} pelo IGDB, ${withTtb} com tempo de ${ttbAsked}, ${failed} com erro) · ${kept} reaproveitados`);

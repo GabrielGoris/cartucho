@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../src/main/db';
-import { GameInfoService, parseScore, pickIgdb, pickScore, steamAppId, type WdEntity } from '../src/main/artwork/info';
+import { GameInfoService, matchIgdb, parseScore, pickIgdb, pickScore, steamAppId, ttbHours, type WdEntity } from '../src/main/artwork/info';
 import type { Artwork } from '../src/main/artwork/service';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'cartucho-'));
@@ -86,7 +86,7 @@ describe('informações do jogo', () => {
     expect(svc.get(input)).toMatchObject({ overview: null, score: null });
     await new Promise(r => setTimeout(r, 100));
     expect(notified).toBe(1);
-    expect(svc.get(input)).toEqual({ overview: 'Explore cavernas & lute.', lang: 'pt', developer: 'Team Cherry', year: 2017, lbPending: false, score: { value: 87, by: 'Metacritic', url: 'https://www.metacritic.com/game/pc/hollow-knight', platform: 'PC', via: 'Steam' } });
+    expect(svc.get(input)).toEqual({ overview: 'Explore cavernas & lute.', lang: 'pt', developer: 'Team Cherry', year: 2017, lbPending: false, ttb: null, score: { value: 87, by: 'Metacritic', url: 'https://www.metacritic.com/game/pc/hollow-knight', platform: 'PC', via: 'Steam' } });
     expect(urls).toHaveLength(1);
   });
 
@@ -158,5 +158,27 @@ describe('média da crítica do IGDB', () => {
     expect(pickIgdb('Sonic 3 A.I.R.', 'megadrive', [g('Sonic 3 & Knuckles', 90, 5, ['Sega Mega Drive/Genesis'])])?.platform).toBe('Sega Mega Drive/Genesis');
     expect(pickIgdb('DOOM', 'pc', [g('Doom', 89, 9, ['PC (Microsoft Windows)'])])?.value).toBe(89);
     expect(pickIgdb('Banjo-Kazooie', 'n64', [g('Banjo-Kazooie', undefined, 0, ['Nintendo 64'])])).toBeNull();
+  });
+});
+
+describe('tempo para zerar', () => {
+  it('acha o jogo do IGDB pela plataforma, mesmo sem nota da crítica', () => {
+    const games = [{ id: 3, name: 'Super Mario 64 DS', platforms: [{ name: 'Nintendo DS' }] }, { id: 2, name: 'Super Mario 64', platforms: [{ name: 'Nintendo 64' }] }];
+    expect(matchIgdb('Super Mario 64', 'n64', games)?.id).toBe(2);
+    expect(matchIgdb('Outro', 'snes', games)).toBeNull();
+  });
+
+  it('converte segundos em horas, de meia em meia', () => {
+    expect(ttbHours({ hastily: 12 * 3600 + 900, normally: 18 * 3600, completely: 0 })).toEqual({ h: 12.5, n: 18 });
+    expect(ttbHours({ hastily: 600 })).toEqual({ h: 0.5 });
+    expect(ttbHours({})).toBeNull();
+  });
+
+  it('o app mostra o tempo do arquivo de notas para jogos do catálogo', () => {
+    const a = { indexReady: async () => true, info: async () => null, notify: () => {} } as unknown as Artwork;
+    const svc = new GameInfoService(openDb(':memory:'), (async () => { throw new Error('sem rede'); }) as never, a);
+    svc.setNotas({ jogos: { 'recomps/meu': { n: null, t: 1, z: { h: 12.5, n: 18, c: 30 } } } });
+    expect(svc.get({ console: 'n64', title: 'Banjo-Kazooie', catalogId: 'recomps/meu' }).ttb).toEqual({ h: 12.5, n: 18, c: 30 });
+    expect(svc.get({ console: 'n64', title: 'Outro', catalogId: 'recomps/x' }).ttb).toBeNull();
   });
 });

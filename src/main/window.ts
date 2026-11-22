@@ -72,6 +72,15 @@ export class WinCtl {
   }
   minimize() { this.win?.minimize(); }
 
+  summon() {
+    const w = this.win; if (!w || w.isDestroyed()) return;
+    this.reveal();
+    w.setAlwaysOnTop(true, 'screen-saver');
+    w.moveTop();
+    w.focus();
+    setTimeout(() => { if (!w.isDestroyed()) w.setAlwaysOnTop(false); }, 400);
+  }
+
   reveal() {
     const w = this.win; if (!w || w.isDestroyed()) return;
     if (!w.isVisible()) { if (this.saved.maximized) w.maximize(); w.show(); if (this.saved.fullscreen) w.setFullScreen(true); }

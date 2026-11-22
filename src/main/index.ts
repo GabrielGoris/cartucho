@@ -14,6 +14,7 @@ import { portsDirOf } from './router';
 import { Artwork } from './artwork/service';
 import { GameInfoService } from './artwork/info';
 import { createEmulatorResolver } from './emulators';
+import { InGame } from './ingame';
 import { Translator } from './translate';
 import { WinCtl } from './window';
 import { Background, playArg, startHidden } from './background';
@@ -23,6 +24,7 @@ import { initLog, log } from './log';
 if (process.env.CARTUCHO_USER_DATA) app.setPath('userData', process.env.CARTUCHO_USER_DATA);
 if (!app.requestSingleInstanceLock()) app.quit();
 app.commandLine.appendSwitch('disable-gpu-process-crash-limit');
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 
 const APP_ORIGIN = 'app://cartucho';
 protocol.registerSchemesAsPrivileged([
@@ -48,7 +50,7 @@ function createWindow(show = true) {
     ...ctl.options(), minWidth: 1024, minHeight: 640,
     backgroundColor: '#07020f', show: false, autoHideMenuBar: true, title: 'Cartucho',
     icon: appIcon(),
-    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true },
+    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true, backgroundThrottling: false },
   });
   ctl.attach(win, show);
   const w = win;
@@ -95,9 +97,11 @@ void app.whenReady().then(async () => {
   const info = new GameInfoService(db, ((url, init) => net.fetch(url, init as RequestInit)) as Fetch, art);
   void info.startNotas();
   setTimeout(() => info.warm(ach.listGames().filter(g => !g.missing).map(g => ({ console: g.console, platformName: g.platformName, title: g.title, installDir: g.installDir, exe: g.exe, catalogId: g.catalogId }))), 20_000);
+  const ingame = new InGame(join(app.getPath('pictures'), 'Cartucho'), () => player.current(), () => ctl?.summon(), appIcon());
+  player.events.on('play', () => ingame.setActive(!!player.current()));
   protocol.handle('media', req => {
     const u = new URL(req.url);
-    const file = u.hostname === 'art' ? art.resolve(decodeURIComponent(u.pathname)) : null;
+    const file = u.hostname === 'art' ? art.resolve(decodeURIComponent(u.pathname)) : u.hostname === 'shots' ? ingame.resolve(u.pathname) : null;
     if (!file) return new Response('não encontrado', { status: 404 });
     return net.fetch(pathToFileURL(file).toString()).then(r => {
       const h = new Headers(r.headers); h.set('Access-Control-Allow-Origin', '*');
@@ -106,7 +110,7 @@ void app.whenReady().then(async () => {
   });
   const ports = new Ports(db, ach, gh, () => portsDirOf({ db, defaultPortsDir }), player.isRunning);
   createIPCHandler({
-    router: createRouter({ db, ach, ports, player, art, info, win: () => ctl, bg: () => bg, upd: () => upd, tr: new Translator(db, ((url, init) => net.fetch(url, init as RequestInit)) as ConstructorParameters<typeof Translator>[1]), defaultPortsDir }),
+    router: createRouter({ db, ach, ports, player, art, info, ingame, win: () => ctl, bg: () => bg, upd: () => upd, tr: new Translator(db, ((url, init) => net.fetch(url, init as RequestInit)) as ConstructorParameters<typeof Translator>[1]), defaultPortsDir }),
     preload: false,
     allow: e => isOurPage(e.senderFrame?.url ?? ''),
   });

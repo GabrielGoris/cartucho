@@ -22,6 +22,14 @@ export class Player {
   private resolveEmu: ((exe: string, title: string) => Promise<string | null>) | null = null;
   setEmulatorResolver(f: (exe: string, title: string) => Promise<string | null>) { this.resolveEmu = f; }
 
+  current(): { id: string; title: string; start: number } | null {
+    const pick = (id: string, start: number) => { try { return { id, title: this.games.getGame(id).title, start }; } catch { return null; } };
+    for (const [id, r] of this.running) return pick(id, r.start);
+    for (const [id, r] of this.external) return pick(id, r.start);
+    for (const r of this.emu.values()) if (r.gameId) return pick(r.gameId, r.start);
+    return null;
+  }
+
   isRunning = (id: string) => this.running.has(id) || this.external.has(id) || [...this.emu.values()].some(e => e.gameId === id);
 
   private async env() {

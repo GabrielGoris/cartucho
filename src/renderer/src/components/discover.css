@@ -103,6 +103,7 @@
 .gv-head h1 { margin: 0; font-family: var(--d-title); font-weight: var(--d-tw); font-size: 72px; line-height: 1.05; text-wrap: balance; }
 .gv-logo { max-width: 760px; max-height: 220px; object-fit: contain; object-position: left center; filter: drop-shadow(0 6px 20px rgba(0,0,0,.45)); align-self: flex-start; }
 .gv-meta { margin: 0; font-size: 26px; color: var(--d-dim); }
+.gv-ttb { margin: -6px 0 0; font-size: 20px; color: var(--d-dim, var(--d-ink)); opacity: .8; }
 .gv-pills { position: relative; z-index: 9; display: flex; flex-wrap: wrap; gap: 10px; }
 .gv-pills .pill { padding: 7px 16px; border-radius: 8px; font-size: 21px; font-weight: 500; background: var(--d-line); color: var(--d-ink); }
 .gv-pills .pill.full { background: #1f7a45; color: #fff; } .gv-pills .pill.play { background: #2a63b8; color: #fff; } .gv-pills .pill.wip { background: #a86a10; color: #fff; }
@@ -208,3 +209,5 @@
 .sk-all { background: var(--bg0); --toast-bg: var(--bg2); --toast-fg: var(--ink); }
 
 .dsc.idle .on { box-shadow: none !important; outline: none !important; transform: none !important; }
+.gv-shots button.mine { position: relative; }
+.gv-shots button.mine::after { content: 'SUA'; position: absolute; top: 8px; left: 8px; padding: 2px 8px; border-radius: 6px; background: var(--d-acc); color: var(--d-on-acc); font-size: 14px; font-weight: 700; letter-spacing: 1px; }

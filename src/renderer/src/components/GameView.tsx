@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTRPC } from '../trpc';
 import { SELF_INSTALL_NOTE, STATUS_LABEL } from '@shared/consoles';
 import { Glyph, useKeys, type Key } from '../lib/input';
@@ -18,11 +18,16 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
   theme: string; g: HubGame; opts: DOpt[]; run: (k: string, g: HubGame) => void; onBack: () => void; self: boolean; logo?: boolean; extra?: ReactNode;
 }) {
   const art = useArt(g.console, g.title, g.platformName);
-  const shots = useShots(g.console, g.title, g.platformName);
+  const lbShots = useShots(g.console, g.title, g.platformName);
+  const capsQ = useQuery(useTRPC().ingame.shots.queryOptions({ title: g.title }, { enabled: !!g.installed }));
+  const caps = capsQ.data ?? [];
+  const shots = [...caps, ...lbShots];
   const info = useInfo(g.console, g.title, g.platformName, g.installed?.id, g.catalog?.id);
   const about = useTranslated(g.catalog?.description || (info?.lang === 'en' ? info.overview : null));
   const aboutText = about.text || (info?.lang === 'pt' ? info.overview ?? '' : '');
   const score = info?.score ?? null;
+  const hrs = (h: number) => `${Math.floor(h)}h${h % 1 ? '30' : ''}`;
+  const ttbText = info?.ttb ? [info.ttb.h && `Para zerar: ${hrs(info.ttb.h)}`, info.ttb.n && `Com extras: ${hrs(info.ttb.n)}`, info.ttb.c && `100%: ${hrs(info.ttb.c)}`].filter(Boolean).join(' · ') : '';
   const needs = useTranslated(g.catalog?.needs);
   const p = useGameProgress(g);
   const inst = g.installed;
@@ -30,6 +35,7 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
   const [note, setNote] = useState<string | null>(null);
   const lnk = useMutation(trpc.background.shortcut.mutationOptions({ onSuccess: () => setNote('Atalho criado na Área de Trabalho. Ele abre o jogo pelo Cartucho e conta o tempo.'), onError: e => setNote(e.message) }));
   const qc = useQueryClient();
+  const openShots = useMutation(trpc.ingame.openShots.mutationOptions());
   const plat = useMutation(trpc.games.changePlatform.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
   const dir = useMutation(trpc.games.relink.mutationOptions({
     onSuccess: r => { if (r) { setNote(`Pasta trocada para ${r.installDir}.`); void qc.invalidateQueries(); } },
@@ -40,6 +46,7 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
     ...(inst && !inst.missing && !base.some(o => o.k === 'relink') ? [{ k: '__dir', l: 'Trocar a pasta' }] : []),
     ...(inst && !inst.missing && inst.exe && navigator.userAgent.includes('Windows') ? [{ k: '__lnk', l: 'Atalho na Área de Trabalho' }] : []),
     ...(inst && !g.catalog ? [{ k: '__plat', l: 'Trocar a plataforma' }] : []),
+    ...(caps.length ? [{ k: '__shots', l: 'Abrir pasta das capturas' }] : []),
   ];
   const main = opts.filter((o, j) => j === 0 || MAIN.has(o.k)), rest = opts.filter((o, j) => j !== 0 && !MAIN.has(o.k));
   const shown: DOpt[] = rest.length > 1 ? [...main, { k: '__more', l: 'Mais opções' }] : [...main, ...rest];
@@ -66,7 +73,7 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
   useEffect(() => { strip.current?.children[si]?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); }, [si]);
 
   const mv = (f: () => void) => { sfx.play('move'); f(); };
-  const runOpt = (o: DOpt | undefined) => { if (!o) return; setMore(false); if (o.k === '__lnk') { sfx.play('ok'); lnk.mutate({ id: inst!.id }); } else if (o.k === '__dir') { sfx.play('ok'); dir.mutate({ id: inst!.id }); } else if (o.k === '__plat') { sfx.play('ok'); plat.mutate({ id: inst!.id }); } else run(o.k, g); };
+  const runOpt = (o: DOpt | undefined) => { if (!o) return; setMore(false); if (o.k === '__lnk') { sfx.play('ok'); lnk.mutate({ id: inst!.id }); } else if (o.k === '__dir') { sfx.play('ok'); dir.mutate({ id: inst!.id }); } else if (o.k === '__plat') { sfx.play('ok'); plat.mutate({ id: inst!.id }); } else if (o.k === '__shots') { sfx.play('ok'); openShots.mutate({ title: g.title }); } else run(o.k, g); };
   const act = (j: number) => { const o = shown[j]; if (o?.k === '__more') { sfx.play(more ? 'back' : 'ok'); setMi(0); setMore(!more); } else runOpt(o); };
 
   useKeys((k: Key) => {
@@ -127,6 +134,7 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
           <div className="gv-head">
             {logo && art.logo ? <img className="gv-logo" src={art.logo} alt={g.title} /> : <h1>{g.title}</h1>}
             {meta && <p className="gv-meta">{meta}</p>}
+            {ttbText && <p className="gv-ttb" title="Médias informadas por jogadores no IGDB.com">{ttbText}</p>}
             <div className="gv-pills">
               {score && (
                 <span className={`pill score ${tone} ${zone === 'score' ? 'on' : ''}`} onClick={openScore}>
@@ -165,7 +173,7 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
         <section className="gv-sec">
           <h3>Imagens</h3>
           {shots.length ? <div className="gv-shots" ref={strip}>{shots.map((u, j) => (
-            <button key={u} className={zone === 'shots' && si === j ? 'on' : ''} onClick={() => { sfx.play('ok'); setZone('shots'); setSi(j); setView(j); }}><img src={u} alt="" /></button>
+            <button key={u} className={`${zone === 'shots' && si === j ? 'on' : ''} ${j < caps.length ? 'mine' : ''}`} onClick={() => { sfx.play('ok'); setZone('shots'); setSi(j); setView(j); }}><img src={u} alt="" /></button>
           ))}</div> : <p className="dim">Sem capturas de tela para este jogo.</p>}
         </section>
         <section className={`gv-sec gv-text ${zone === 'text' ? 'on' : ''}`}>

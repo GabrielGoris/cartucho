@@ -5,9 +5,11 @@ import type { Fetch } from '../ports/github';
 import { type Artwork, artPlatform, cleanTitle, looseKey } from './service';
 
 export interface Score { value: number; by: 'Metacritic' | 'OpenCritic' | 'IGDB'; url: string | null; platform: string | null; via: 'Wikidata' | 'Steam' | 'IGDB' }
-export interface GameInfo { overview: string | null; lang: 'pt' | 'en' | null; developer: string | null; year: number | null; score: Score | null; lbPending?: boolean }
+export interface GameInfo { overview: string | null; lang: 'pt' | 'en' | null; developer: string | null; year: number | null; score: Score | null; ttb?: Ttb | null; lbPending?: boolean }
 export interface InfoInput { console: string; platformName?: string | null; title: string; installDir?: string | null; exe?: string | null; catalogId?: string | null }
-export interface Notas { gerado?: string; jogos?: Record<string, { n: Score | null; t: number; i?: 1 }> }
+export interface Ttb { h?: number; n?: number; c?: number }
+export interface NotaJogo { n: Score | null; t: number; i?: 1; z?: Ttb | null; zt?: number }
+export interface Notas { gerado?: string; jogos?: Record<string, NotaJogo> }
 
 export const infoKey = (console: string, platformName: string | null | undefined, title: string) => `${artPlatform(console, platformName) ?? console}:${looseKey(title)}`;
 
@@ -79,7 +81,7 @@ export function pickScore(title: string, platform: string | null, games: WdEntit
   return best ? { value: best.value, by: best.by, url: best.url, platform: best.platform, via: 'Wikidata' } : null;
 }
 
-export interface IgdbGame { name?: string; aggregated_rating?: number; aggregated_rating_count?: number; url?: string; platforms?: { name?: string }[] }
+export interface IgdbGame { id?: number; name?: string; aggregated_rating?: number; aggregated_rating_count?: number; url?: string; platforms?: { name?: string }[] }
 
 export function pickIgdb(title: string, platform: string | null, games: IgdbGame[]): Score | null {
   const want = platform ? PLATFORM_LABEL[platform] : undefined, key = looseKey(title);
@@ -91,6 +93,23 @@ export function pickIgdb(title: string, platform: string | null, games: IgdbGame
   if (!g) return null;
   const p = want ? g.platforms?.find(x => want.test(x.name ?? ''))?.name ?? null : null;
   return { value: Math.round(g.aggregated_rating!), by: 'IGDB', url: g.url ?? null, platform: p, via: 'IGDB' };
+}
+
+export function matchIgdb(title: string, platform: string | null, games: IgdbGame[]): IgdbGame | null {
+  const want = platform ? PLATFORM_LABEL[platform] : undefined, key = looseKey(title);
+  const plat = (g: IgdbGame) => !!want && (g.platforms ?? []).some(p => want.test(p.name ?? ''));
+  const same = (g: IgdbGame) => looseKey(g.name ?? '') === key;
+  const pool = want && games.some(plat) ? games.filter(plat) : games.filter(same);
+  return [...pool].sort((a, b) => Number(same(b)) - Number(same(a)) || (b.aggregated_rating_count ?? 0) - (a.aggregated_rating_count ?? 0))[0] ?? null;
+}
+
+export function ttbHours(t: { hastily?: number | null; normally?: number | null; completely?: number | null } | undefined): Ttb | null {
+  if (!t) return null;
+  const h = (s?: number | null) => (s && s > 0 ? Math.max(0.5, Math.round((s / 3600) * 2) / 2) : undefined);
+  const out: Ttb = {};
+  const a = h(t.hastily), b = h(t.normally), c = h(t.completely);
+  if (a) out.h = a; if (b) out.n = b; if (c) out.c = c;
+  return Object.keys(out).length ? out : null;
 }
 
 export function steamAppId(installDir?: string | null, exe?: string | null): string | null {
@@ -152,6 +171,7 @@ export class GameInfoService {
   private queue: (() => Promise<void>)[] = [];
   private running = 0;
   private notas = new Map<string, Score | null>();
+  private ttb = new Map<string, Ttb>();
 
   constructor(private db: DB, private fetch: Fetch, private art: Artwork) {}
 
@@ -159,13 +179,14 @@ export class GameInfoService {
 
   setNotas(n: Notas) {
     this.notas = new Map(Object.entries(n.jogos ?? {}).map(([id, v]) => [id, v?.n ?? null]));
+    this.ttb = new Map(Object.entries(n.jogos ?? {}).flatMap(([id, v]) => (v?.z ? [[id, v.z] as const] : [])));
     this.art.notify();
   }
 
   async startNotas() {
     try { const saved = kvGet(this.db, 'notas.json'); if (saved) this.setNotas(JSON.parse(saved) as Notas); } catch { }
-    const tick = async () => {
-      if (Date.now() - Number(kvGet(this.db, 'notas.checkedAt') ?? 0) < NOTAS_EVERY) return;
+    const tick = async (force = false) => {
+      if (!force && Date.now() - Number(kvGet(this.db, 'notas.checkedAt') ?? 0) < NOTAS_EVERY) return;
       try {
         const etag = kvGet(this.db, 'notas.etag');
         const r = await this.fetch(NOTAS_URL, { headers: { 'User-Agent': UA, ...(etag && this.notas.size ? { 'If-None-Match': etag } : {}) }, signal: AbortSignal.timeout(30_000) });
@@ -178,7 +199,7 @@ export class GameInfoService {
         this.setNotas(n);
       } catch { }
     };
-    await tick();
+    await tick(true);
     setInterval(() => void tick(), 3600_000).unref?.();
   }
 
@@ -194,7 +215,8 @@ export class GameInfoService {
     const stale = !r || Date.now() - r.at > FRESH || (r.info.lbPending && Date.now() - r.at > LB_AGAIN);
     if (stale) this.enqueue(key, i, first, r?.info ?? null, !known);
     const info = r?.info ?? EMPTY;
-    return known && !info.score ? { ...info, score: this.notas.get(i.catalogId!) ?? null } : info;
+    const ttb = i.catalogId ? this.ttb.get(i.catalogId) ?? null : null;
+    return { ...info, ...(known && !info.score ? { score: this.notas.get(i.catalogId!) ?? null } : {}), ttb };
   }
 
   warm(list: InfoInput[]) { for (const i of list) this.get(i, false); }

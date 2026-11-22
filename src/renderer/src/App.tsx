@@ -25,6 +25,7 @@ import { ConsolePicker } from './views/ConsolePicker';
 import { HUBS } from './hubs';
 import { TitleBar } from './components/TitleBar';
 import { AllGames } from './views/AllGames';
+import { InGameHost } from './components/InGame';
 
 type Inside = { id: ConsoleId; game?: string; tab?: 'lib' | 'cat'; key: number };
 const LAST = 'cartucho.lastConsole';
@@ -92,7 +93,7 @@ export function App() {
   gk.current = { booting, picker, confirmReq, inside, leaveConsole, all, closeAll };
   useEffect(() => setGlobalKeys(k => {
     const g = gk.current;
-    if (g.booting || g.picker || g.confirmReq || document.querySelector('.osk-ov, .gl-pick, .gl-plat, .gl-padset')) return false;
+    if (g.booting || g.picker || g.confirmReq || document.querySelector('.osk-ov, .gl-pick, .gl-plat, .gl-padset, .ig-ov')) return false;
     if (k === 'Start') { sfx.play(menu ? 'back' : 'ok'); setMenu(m => !m); return true; }
     if (k === 'Home') { setMenu(false); setGov(null); setSettingsOpen(false); if (g.inside) g.leaveConsole(); else if (g.all) g.closeAll(); else setPage('stage'); sfx.play('back'); return true; }
     return false;
@@ -166,6 +167,7 @@ export function App() {
       <PickerHost />
       <PlatformHost />
       <PadSetupHost />
+      <InGameHost />
       {settingsOpen && <Settings onSupport={() => { setSettingsOpen(false); setGov('support'); }} onClose={() => setSettingsOpen(false)} onPickConsoles={() => { setSettingsOpen(false); setPicker(true); }} />}
       {askPicker && <ConsolePicker first={!s.picked} onClose={() => setPicker(false)} />}
       {booting && <Boot summary={summary.data} onDone={() => setBooting(false)} />}

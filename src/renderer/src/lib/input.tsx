@@ -173,8 +173,8 @@ const GL: Record<PadKind, Record<Act, string | [string, string] | ReactNode>> = 
   ps: { ok: PS.ok, back: PS.back, x: PS.x, y: PS.y, lb: 'L1', rb: 'R1', lt: 'L2', rt: 'R2', menu: 'OPTIONS', sel: 'CREATE', ud: '✚', lr: '✚' },
   nin: { ok: ['A', '#fff'], back: ['B', '#fff'], x: ['Y', '#fff'], y: ['X', '#fff'], lb: 'L', rb: 'R', lt: 'ZL', rt: 'ZR', menu: '+', sel: '−', ud: '✚', lr: '✚' },
 };
-export function Glyph({ a }: { a: Act }) {
-  const k = usePadKind(), v = GL[k][a];
+export function Glyph({ a, pad }: { a: Act; pad?: boolean }) {
+  const kind = usePadKind(), k = pad && kind === 'kb' ? 'xbox' : kind, v = GL[k][a];
   if (k === 'kb') return <span className="gp kb">{v as string}</span>;
   if (Array.isArray(v) && typeof v[0] === 'string') return <span className="gp r" style={{ color: v[1] as string }}>{v[0]}</span>;
   if (typeof v === 'string') return <span className="gp pill">{v}</span>;
