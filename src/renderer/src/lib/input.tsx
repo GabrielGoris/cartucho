@@ -92,7 +92,7 @@ const setupEmit = () => setupSubs.forEach(f => f());
 export const usePadSetup = () => useSyncExternalStore(f => { setupSubs.add(f); return () => setupSubs.delete(f); }, () => setup);
 export function startPadSetup(): boolean {
   const p = activePad(); if (!p) return false;
-  setup = { id: p.id, step: 0, map: {} }; prev = p.buttons.map(x => x.pressed || x.value > 0.5); setupEmit(); return true;
+  setup = { id: p.id, step: 0, map: {} }; for (const q of pads()) prevs.set(q.index, btns(q)); setupEmit(); return true;
 }
 export const cancelPadSetup = () => { setup = null; setupEmit(); };
 function setupPress(i: number) {
@@ -115,43 +115,48 @@ function hatDir(p: Gamepad): Key | null {
   return Math.abs(v) > 1.01 ? null : HAT[Math.round((v + 1) * 3.5) & 7] ?? null;
 }
 
-let prev: boolean[] = [], axisAt = 0, held: Key | null = null, heldAt = 0, away = false, prevHat: Key | null = null;
+const prevs = new Map<number, boolean[]>(), hats = new Map<number, Key | null>();
+let axisAt = 0, held: Key | null = null, heldAt = 0, away = false;
 let gameRunning = false;
 export const setGameRunning = (v: boolean) => { gameRunning = v; };
 export const keyMapFor = (p: { id: string; mapping: string }, nin: boolean) => mapFor(p, nin, maps[p.id]);
 const DIRS = new Set<Key>(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+const btns = (p: Gamepad) => p.buttons.map(x => x.pressed || x.value > 0.5);
+function pads() { return [...(navigator.getGamepads?.() ?? [])].filter((x): x is Gamepad => !!x); }
+function touch(p: Gamepad) { if (p.index !== connected?.index || p.id !== connected?.id) { connected = p; padSubs.forEach(f => f()); } }
 function activePad() {
-  const all = [...(navigator.getGamepads?.() ?? [])].filter((x): x is Gamepad => !!x);
+  const all = pads();
   if (!all.length) return null;
-  const p = all.find(x => x.index === connected?.index) ?? all.find(x => x.buttons.some(b => b.pressed)) ?? all[0]!;
-  if (p.id !== connected?.id) { connected = p; padSubs.forEach(f => f()); }
+  const p = all.find(x => x.index === connected?.index) ?? all[0]!;
+  touch(p);
   return p;
 }
 function poll() {
   if (document.hidden || (gameRunning && !document.hasFocus())) { away = true; held = null; return; }
-  const p = activePad();
-  if (p && away) { away = false; prev = p.buttons.map(x => x.pressed || x.value > 0.5); axisAt = performance.now() + 400; return; }
-  if (p) {
-    const now = performance.now();
-    const b = p.buttons.map(x => x.pressed || x.value > 0.5), old = prev; prev = b;
-    const hit = (i: number) => !!b[i] && !old[i];
+  const all = pads();
+  if (!all.length) return;
+  const now = performance.now();
+  if (away) { away = false; for (const p of all) prevs.set(p.index, btns(p)); axisAt = now + 400; return; }
+  let dir = false, stick: Key | null = null;
+  for (const p of all) {
+    const b = btns(p), old = prevs.get(p.index) ?? b;
+    prevs.set(p.index, b);
     const pressed = b.findIndex((v, i) => v && !old[i]);
-    if (setup) { if (p.id === setup.id && pressed >= 0) setupPress(pressed); return; }
+    if (setup) { if (p.id === setup.id && pressed >= 0) setupPress(pressed); continue; }
     const map = keyMapFor(p, padKind() === 'nin');
-    if (pressed >= 0) setLast('pad');
-    for (const i in map) if (hit(+i)) { send(map[i]!); if (DIRS.has(map[i]!)) { held = map[i]!; heldAt = now + 250; } }
+    if (pressed >= 0) { setLast('pad'); touch(p); }
+    for (const i in map) if (b[+i] && !old[+i]) { send(map[i]!); if (DIRS.has(map[i]!)) { held = map[i]!; heldAt = now + 250; } }
     const hat = hatDir(p);
-    if (hat && hat !== prevHat) { setLast('pad'); send(hat); held = hat; heldAt = now + 250; }
-    prevHat = hat;
-    const dpad = Object.keys(map).some(i => b[+i] && DIRS.has(map[+i]!)) || !!hat;
-    if (!dpad) held = null;
-    else if (held && now > heldAt) { send(held); heldAt = now + 110; }
+    if (hat && hat !== hats.get(p.index)) { setLast('pad'); touch(p); send(hat); held = hat; heldAt = now + 250; }
+    hats.set(p.index, hat);
+    if (hat || Object.keys(map).some(i => b[+i] && DIRS.has(map[+i]!))) dir = true;
     const [ax = 0, ay = 0] = p.axes;
-    if (Math.abs(ax) > 0.6 || Math.abs(ay) > 0.6) {
-      setLast('pad');
-      if (now - axisAt > 180) { axisAt = now; send(Math.abs(ax) > Math.abs(ay) ? (ax > 0 ? 'ArrowRight' : 'ArrowLeft') : (ay > 0 ? 'ArrowDown' : 'ArrowUp')); }
-    } else axisAt = 0;
+    if (!stick && (Math.abs(ax) > 0.6 || Math.abs(ay) > 0.6)) { touch(p); stick = Math.abs(ax) > Math.abs(ay) ? (ax > 0 ? 'ArrowRight' : 'ArrowLeft') : (ay > 0 ? 'ArrowDown' : 'ArrowUp'); }
   }
+  if (setup) return;
+  if (!dir) held = null;
+  else if (held && now > heldAt) { send(held); heldAt = now + 110; }
+  if (stick) { setLast('pad'); if (now - axisAt > 180) { axisAt = now; send(stick); } } else axisAt = 0;
 }
 if (typeof window !== 'undefined') setInterval(poll, 16);
 
