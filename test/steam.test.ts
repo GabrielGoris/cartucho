@@ -84,3 +84,15 @@ describe('saves de jogos do Windows no Linux', () => {
     expect(windowsAppData(dir, join(dir, 'unleashed'))).toBeNull();
   });
 });
+
+import { trayMissing } from '../src/main/background';
+
+describe('ícone na bandeja no Linux', () => {
+  it('avisa só no GNOME sem a extensão AppIndicator', () => {
+    if (process.platform !== 'linux') return;
+    expect(trayMissing('ubuntu:GNOME', () => 'ding@rastersoft.com\nubuntu-appindicators@ubuntu.com\n')).toBe(false);
+    expect(trayMissing('GNOME', () => 'ding@rastersoft.com\n')).toBe(true);
+    expect(trayMissing('KDE', () => '')).toBe(false);
+    expect(trayMissing('GNOME', () => null)).toBe(false);
+  });
+});

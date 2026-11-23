@@ -237,7 +237,7 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
             <span><span className="t">{tt('Tela cheia')}</span><span className="d">{tt('Também com Alt+Enter ou F11. O Cartucho lembra do tamanho e da posição da janela.')}</span></span>
             <span className="c"><span className={`st-sw ${win.data?.fullscreen ? 'f' : ''}`}><i /></span></span>
           </button>
-            {bg.data && bgRow('tray', tt('Fechar para a bandeja'), tt('O X esconde o Cartucho perto do relógio em vez de fechar. Para sair de vez, use Sair no ícone da bandeja.'))}
+            {bg.data && bgRow('tray', tt('Fechar para a bandeja'), bg.data.trayOk ? tt('O X esconde o Cartucho perto do relógio em vez de fechar. Para sair de vez, use Sair no ícone da bandeja.') : tt('No GNOME o ícone perto do relógio só aparece com a extensão AppIndicator, que não está ligada. Sem ela, o Cartucho some ao fechar e só volta abrindo de novo pelo menu de aplicativos.'))}
             {bg.data && bgRow('autostart', LINUX ? tt('Abrir junto com o sistema') : tt('Abrir com o Windows'), tt('Liga escondido na bandeja quando o computador inicia, pronto para contar o tempo.'))}
           <button className="st-r" data-hf onClick={() => { sfx.play('ok'); if (u?.status === 'ready') install.mutate(); else check.mutate(); }}>
             <span><span className="t">{tt('Cartucho {0}', { 0: u ? `v${u.current}` : '' })}</span><span className="d">{updText}</span></span>

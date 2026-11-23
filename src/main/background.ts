@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -8,13 +9,21 @@ import type { AchievementService } from './achievements/service';
 import type { WinCtl } from './window';
 import { tt } from '@shared/i18n';
 
-export interface BgPrefs { tray: boolean; track: boolean; autostart: boolean; screen: boolean }
+export interface BgPrefs { tray: boolean; track: boolean; autostart: boolean; screen: boolean; trayOk: boolean }
 
 const launcher = () => process.env.APPIMAGE || process.execPath;
 const quote = (s: string) => `"${s.replace(/(["\\`$])/g, '\\$1')}"`;
 const devArgs = () => (app?.isPackaged === false ? `${quote(app.getAppPath())} ` : '');
 export function desktopEntry(o: { name: string; comment: string; args: string; icon: string; hidden?: boolean }) {
   return ['[Desktop Entry]', 'Type=Application', `Name=${o.name}`, `Comment=${o.comment}`, `Exec=${quote(launcher())} ${devArgs()}${o.args}`.trim(), `Icon=${o.icon}`, 'Terminal=false', 'Categories=Game;', ...(o.hidden ? ['X-GNOME-Autostart-enabled=true'] : []), ''].join('\n');
+}
+export function trayMissing(desktop = process.env.XDG_CURRENT_DESKTOP ?? '', enabled: () => string | null = gnomeExtensions) {
+  if (process.platform !== 'linux' || !/gnome/i.test(desktop)) return false;
+  const list = enabled();
+  return list == null ? false : !/appindicator/i.test(list);
+}
+function gnomeExtensions() {
+  try { return execFileSync('gnome-extensions', ['list', '--enabled'], { encoding: 'utf8', timeout: 3000 }); } catch { return null; }
 }
 const autostartFile = () => join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'autostart', 'cartucho.desktop');
 
@@ -23,6 +32,7 @@ export const playArg = (argv: string[]) => { const i = argv.indexOf('--play'); r
 
 export class Background {
   private tray: Tray | null = null;
+  private noTray = trayMissing();
   quitting = false;
   hiddenStart = false;
 
@@ -32,7 +42,7 @@ export class Background {
 
   prefs(): BgPrefs {
     const b = (k: string, d: boolean) => { const v = kvGet(this.db, k); return v == null ? d : v === '1'; };
-    return { tray: b('bg.tray', true), track: b('bg.track', true), screen: b('bg.screen', true), autostart: process.platform === 'win32' ? app.getLoginItemSettings({ args: ['--hidden'] }).openAtLogin : process.platform === 'linux' && existsSync(autostartFile()) };
+    return { trayOk: !this.noTray, tray: b('bg.tray', !this.noTray), track: b('bg.track', true), screen: b('bg.screen', true), autostart: process.platform === 'win32' ? app.getLoginItemSettings({ args: ['--hidden'] }).openAtLogin : process.platform === 'linux' && existsSync(autostartFile()) };
   }
 
   set(p: Partial<BgPrefs>) {

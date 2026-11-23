@@ -1,4 +1,5 @@
 export const EN: Record<string, string> = {
+  "No GNOME o ícone perto do relógio só aparece com a extensão AppIndicator, que não está ligada. Sem ela, o Cartucho some ao fechar e só volta abrindo de novo pelo menu de aplicativos.": "On GNOME the icon by the clock only shows up with the AppIndicator extension, which isn't enabled. Without it, Cartucho disappears when closed and only comes back by opening it again from the app menu.",
   "Não deu para capturar a tela": "Couldn't capture the screen",
   "No Linux, a captura de tela e trazer o Cartucho para a frente precisam de uma sessão X11 com o xdotool instalado. No Wayland, o sistema não deixa um programa capturar a tela ou pegar o foco sozinho.": "On Linux, screenshots and bringing Cartucho to the front need an X11 session with xdotool installed. On Wayland, the system doesn't let a program capture the screen or take focus on its own.",
   "Abrir junto com o sistema": "Open with the system",

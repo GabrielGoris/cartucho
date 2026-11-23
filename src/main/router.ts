@@ -175,7 +175,7 @@ export function createRouter(deps: RouterDeps) {
     }),
 
     background: t.router({
-      get: t.procedure.query(() => deps.bg?.()?.prefs() ?? { tray: false, track: false, autostart: false, screen: false }),
+      get: t.procedure.query(() => deps.bg?.()?.prefs() ?? { tray: false, track: false, autostart: false, screen: false, trayOk: true }),
       set: t.procedure.input(z.object({ tray: z.boolean().optional(), track: z.boolean().optional(), autostart: z.boolean().optional(), screen: z.boolean().optional() })).mutation(({ input }) => {
         const b = deps.bg?.(); if (!b) throw new Error(tt('Indisponível.'));
         return b.set(input);
