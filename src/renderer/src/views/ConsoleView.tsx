@@ -8,6 +8,7 @@ import { useSpatialNav } from '../lib/spatial';
 import { askConfirm } from '../lib/dialogs';
 import { ago, fmtDate, fmtPlay, plural } from '../lib/format';
 import { sfx } from '../lib/sfx';
+import { useAskDeletePrefix } from '../lib/wine';
 import { GameArt } from '../components/GameArt';
 import { CONSOLES, otherConsoles } from '../stage/consoles';
 import { useSettings } from '../lib/settings';
@@ -222,6 +223,7 @@ function Achievements({ id, active, onBack }: { id: string; active: boolean; onB
     onSuccess: d => { qc.setQueryData(trpc.achievements.forGame.queryKey({ id }), d); void qc.invalidateQueries({ queryKey: trpc.games.list.queryKey() }); },
   }));
   const remove = useMutation(trpc.games.remove.mutationOptions({ onSuccess: () => { void qc.invalidateQueries(); onBack(); } }));
+  const askPrefix = useAskDeletePrefix();
   const openFolder = useMutation(trpc.games.openFolder.mutationOptions());
   const [filter, setFilter] = useState<'all' | 'on' | 'off'>('all');
   const root = useRef<HTMLDivElement>(null);
@@ -241,7 +243,7 @@ function Achievements({ id, active, onBack }: { id: string; active: boolean; onB
         <span className="grow" />
         <button className="btn" data-hf disabled={resync.isPending} onClick={() => resync.mutate({ id })}>{resync.isPending ? tt('Lendo…') : tt('Ler de novo')}</button>
         <button className="btn ghost" data-hf onClick={() => openFolder.mutate({ id })}>{tt('Abrir pasta')}</button>
-        <button className="btn ghost danger" data-hf onClick={() => { void askConfirm({ title: tt('Remover {0} do Cartucho? Os arquivos do jogo não são apagados.', { 0: d.game.title }), ok: tt('Remover'), danger: true }).then(y => { if (y) remove.mutate({ id }); }); }}>{tt('Remover')}</button>
+        <button className="btn ghost danger" data-hf onClick={() => { void askConfirm({ title: tt('Remover {0} do Cartucho? Os arquivos do jogo não são apagados.', { 0: d.game.title }), ok: tt('Remover'), danger: true }).then(async y => { if (y) remove.mutate({ id, deletePrefix: await askPrefix(id, d.game.title) }); }); }}>{tt('Remover')}</button>
       </header>
       <div className="chub-body">
         <div className="ach-head">

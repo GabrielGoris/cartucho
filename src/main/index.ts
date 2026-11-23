@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, net, protocol, shell } from 'electron';
 import { createIPCHandler } from 'electron-trpc/main';
 import { kvGet, openDb } from './db';
+import { wineEvents } from './wine/components';
 import { createRouter } from './router';
 import { AchievementService } from './achievements/service';
 import { refreshCatalog } from './catalog';
@@ -161,6 +162,8 @@ void app.whenReady().then(async () => {
     });
   });
   const ports = new Ports(db, ach, gh, () => portsDirOf({ db, defaultPortsDir }), player.isRunning);
+  player.events.on('progress', p => ports.events.emit('progress', p));
+  wineEvents.on('progress', p => ports.events.emit('progress', p));
   createIPCHandler({
     router: createRouter({ db, ach, ports, player, art, info, ingame, web: new WebPane(() => win), win: () => ctl, bg: () => bg, upd: () => upd, tr: new Translator(db, ((url, init) => net.fetch(url, init as RequestInit)) as ConstructorParameters<typeof Translator>[1]), defaultPortsDir }),
     preload: false,

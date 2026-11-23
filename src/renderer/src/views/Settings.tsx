@@ -13,6 +13,7 @@ import { PALETTES, paletteById } from '../lib/palettes';
 import { setSettings, useSettings, type Settings as S } from '../lib/settings';
 import { useSpatialNav } from '../lib/spatial';
 import { initAudio, sfx } from '../lib/sfx';
+import { stepFocused, WineOptions } from '../components/WineOptions';
 import { getLang, tt } from '@shared/i18n';
 
 type Row =
@@ -41,8 +42,8 @@ const ROWS: Record<string, Row> = Object.fromEntries(([
 ] as Row[]).map(r => [r.k, r]));
 
 const LINUX = navigator.userAgent.includes('Linux');
-const TABS = ['Geral', 'Visual', 'Áudio', 'Controle', 'Jogos', 'Sistema', 'Sobre'] as const;
-type Tab = typeof TABS[number];
+type Tab = 'Geral' | 'Visual' | 'Áudio' | 'Controle' | 'Jogos' | 'Wine' | 'Sistema' | 'Sobre';
+const TABS: Tab[] = LINUX ? ['Geral', 'Visual', 'Áudio', 'Controle', 'Jogos', 'Wine', 'Sistema', 'Sobre'] : ['Geral', 'Visual', 'Áudio', 'Controle', 'Jogos', 'Sistema', 'Sobre'];
 
 export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () => void; onPickConsoles: () => void; onSupport: () => void }) {
   const s = useSettings();
@@ -123,6 +124,7 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
       if (k === 'ArrowLeft' || k === 'ArrowRight') {
         const el = root.current?.querySelector<HTMLElement>('[data-on]') ?? null;
         if (el?.dataset.tab) { go(k === 'ArrowRight' ? 1 : -1, 'bar'); return true; }
+        if (stepFocused(root.current, k === 'ArrowRight' ? 1 : -1)) return true;
         const r = rowOf(el); if (r) { change(r, k === 'ArrowRight' ? 1 : -1); return true; }
         const bk = el?.dataset.k as 'tray' | 'track' | 'autostart' | 'screen' | 'fs' | undefined;
         if (bk === 'fs') { toggleFs.mutate(); return true; }
@@ -231,6 +233,10 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
             <span><span className="t">{tt('Consoles no palco')}</span><span className="d">{tt('Quais aparecem no palco. Os que ficam de fora vão para Outros.')}</span></span>
             <span className="c"><span className="st-pick"><b style={{ minWidth: 0 }}>{s.hidden.length ? tt('{0} escondido{1}', { 0: s.hidden.length, 1: s.hidden.length > 1 ? 's' : '' }) : tt('Todos')}</b>›</span></span>
           </button>
+          </>}
+          {tab === 'Wine' && <>
+            <p className="st-note">{tt('Como o Cartucho abre programas do Windows no Linux. Cada jogo ganha o seu prefixo; estas são as opções de todos os jogos, e cada jogo pode ter as suas na página dele.')}</p>
+            <WineOptions />
           </>}
           {tab === 'Sistema' && <>
           <button className="st-r" data-hf data-k="fs" onClick={() => toggleFs.mutate()}>

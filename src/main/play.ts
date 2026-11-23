@@ -1,17 +1,18 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { accessSync, chmodSync, constants, existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync } from 'node:fs';
+import { accessSync, chmodSync, closeSync, constants, existsSync, openSync, readdirSync, readFileSync, readlinkSync } from 'node:fs';
 import { basename, dirname, join, normalize } from 'node:path';
-import type { PlayEvent, PlayStats } from '@shared/types';
+import type { InstallProgress, PlayEvent, PlayStats } from '@shared/types';
 import type { DB } from './db';
 import type { AchievementService } from './achievements/service';
 import { emulatorFor } from './emulators';
 import { tt } from '@shared/i18n';
 import { log } from './log';
-import { findProton, prefixDir, steamManifest } from './steam';
+import { steamManifest } from './steam';
+import { prepareWindows } from './wine/launch';
 
 export class Player {
-  readonly events = new EventEmitter<{ play: [PlayEvent]; launch: [{ gameId: string; dirs: string[]; pid?: number }] }>();
+  readonly events = new EventEmitter<{ play: [PlayEvent]; launch: [{ gameId: string; dirs: string[]; pid?: number }]; progress: [InstallProgress] }>();
   private running = new Map<string, Run>();
   private external = new Map<string, { pid: number; session: number; start: number }>();
   private scanTimer: NodeJS.Timeout | null = null;
@@ -58,33 +59,42 @@ export class Player {
       return;
     }
 
-    let cmd = g.exe, args: string[] = [], extraEnv: Record<string, string> = {};
+    let cmd = g.exe, args: string[] = [], extraEnv: Record<string, string> = {}, logFile: string | null = null;
     if (process.platform === 'linux') {
-      if (/\.exe$/i.test(g.exe)) {
-        const steam = steamManifest(g.installDir, g.exe);
+      if (/\.(exe|bat|cmd|lnk)$/i.test(g.exe)) {
+        const steam = /\.exe$/i.test(g.exe) ? steamManifest(g.installDir, g.exe) : null;
         if (steam) {
           const err = await run('xdg-open', [`steam://rungameid/${steam.appid}`], 15_000).then(() => '', e => (e instanceof Error ? e.message : String(e)));
           if (err) throw new Error(tt('Não consegui pedir para a Steam abrir {0}: {1}', { 0: g.title, 1: err }));
           this.trackDetached(gameId, g.title, g.exe, g.installDir, 30);
           return;
         }
-        const w = await windowsRunner(gameId, g.exe);
-        if (!w) throw new Error(tt('{0} é um programa do Windows. No Linux, o Cartucho roda ele pelo Proton: instale a Steam (com o Proton) ou o umu-launcher. O Wine também serve.', { 0: basename(g.exe) }));
-        cmd = w.cmd; args = w.args; extraEnv = w.env;
-        log(`${g.title}: programa do Windows aberto pelo ${w.how}`);
+        const note = (stage: string, pct: number) => this.events.emit('progress', { key: gameId, stage, pct });
+        try {
+          const w = await prepareWindows(this.db, gameId, g.exe, note, m => log(`${g.title}: ${m}`));
+          cmd = w.cmd; args = w.args; extraEnv = w.env; logFile = w.logFile;
+          log(`${g.title}: programa do Windows aberto pelo ${w.how}`);
+          this.events.emit('progress', { key: gameId, stage: tt('Pronto'), pct: 1, done: true });
+        } catch (e) {
+          this.events.emit('progress', { key: gameId, stage: tt('Erro'), pct: 0, done: true, error: (e as Error).message });
+          throw e;
+        }
       } else {
         try { accessSync(g.exe, constants.X_OK); } catch { try { chmodSync(g.exe, 0o755); } catch { } }
       }
     }
 
     const env = { ...(await this.env()), ...extraEnv };
+    const fd = logFile ? openSync(logFile, 'a') : -1;
     const denied = await new Promise<boolean>((ok, fail) => {
-      const child = spawn(cmd, args, { cwd: dirname(g.exe!), env, detached: true, stdio: 'ignore' });
+      const child = spawn(cmd, args, { cwd: dirname(g.exe!), env, detached: true, stdio: fd >= 0 ? ['ignore', fd, fd] : 'ignore' });
       child.once('error', e => {
+        if (fd >= 0) closeSync(fd);
         if ((e as NodeJS.ErrnoException).code === 'EACCES' && process.platform === 'win32') ok(true);
         else fail(new Error(tt('Não consegui abrir o jogo: {0}', { 0: e.message })));
       });
       child.once('spawn', () => {
+        if (fd >= 0) closeSync(fd);
         const start = Date.now();
         const session = Number(this.db.prepare('INSERT INTO play_session (game_id, started_at) VALUES (?, ?)').run(gameId, start).lastInsertRowid);
         this.running.set(gameId, { child, session, start });
@@ -372,21 +382,6 @@ function wineTarget(pid: string) {
   let args: string[] = [];
   try { args = readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean); } catch { return null; }
   for (const a of args) if (/\.exe$/i.test(a)) { const p = winePath(a); if (p) return p; }
-  return null;
-}
-
-export async function windowsRunner(gameId: string, exe: string): Promise<{ cmd: string; args: string[]; env: Record<string, string>; how: string } | null> {
-  const dir = prefixDir(gameId), has = (c: string) => run('which', [c]).then(x => !!x.trim(), () => false);
-  if (await has('umu-run')) {
-    mkdirSync(join(dir, 'pfx'), { recursive: true });
-    return { cmd: 'umu-run', args: [exe], env: { WINEPREFIX: join(dir, 'pfx'), GAMEID: 'umu-default', STORE: 'none' }, how: 'umu' };
-  }
-  const p = findProton();
-  if (p) {
-    mkdirSync(dir, { recursive: true });
-    return { cmd: p.proton, args: ['run', exe], env: { STEAM_COMPAT_DATA_PATH: dir, STEAM_COMPAT_CLIENT_INSTALL_PATH: p.root }, how: basename(dirname(p.proton)) };
-  }
-  if (await has('wine')) return { cmd: 'wine', args: [exe], env: {}, how: 'wine' };
   return null;
 }
 
