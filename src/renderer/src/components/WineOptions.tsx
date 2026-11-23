@@ -30,7 +30,6 @@ function Row({ t, d, value, onStep, onEnter }: { t: string; d?: ReactNode; value
   );
 }
 
-/** Left/right on the focused row changes the value of rows that have several (see Row). Returns whether it did. */
 export function stepFocused(root: HTMLElement | null, dir: 1 | -1) {
   const el = root?.querySelector<HTMLElement>('[data-on]');
   if (el?.dataset.cyc === undefined) return false;
@@ -43,13 +42,12 @@ const envText = (env: Record<string, string>) => Object.entries(env).map(([k, v]
 const parseEnv = (s: string) => Object.fromEntries(s.split(/\s+/).map(x => x.match(/^([A-Za-z_]\w*)=(.*)$/)).filter((m): m is RegExpMatchArray => !!m).map(m => [m[1]!, m[2]!]));
 const parseVerbs = (s: string) => [...new Set(s.split(/[\s,]+/).filter(Boolean))];
 
-/** Wine/Proton/DXVK options. Without `id` it edits the defaults for every game; with `id`, only that game. */
 export function WineOptions({ id }: { id?: string }) {
   const trpc = useTRPC(), qc = useQueryClient();
   const cfgQ = useQuery(trpc.wine.config.queryOptions({ ...(id ? { id } : {}) }));
   const status = useQuery(trpc.wine.status.queryOptions());
   const versions = useQuery(trpc.wine.versions.queryOptions());
-  const remote = useQuery(trpc.wine.remoteBuilds.queryOptions(undefined, { staleTime: 10 * 60_000, retry: false }));
+  const remote = useQuery(trpc.wine.remoteBuilds.queryOptions(undefined, { staleTime: 10 * 60_000, retry: false, enabled: !id }));
   const refresh = () => { void qc.invalidateQueries({ queryKey: trpc.wine.pathKey() }); };
   const save = useMutation(trpc.wine.setConfig.mutationOptions({ onSuccess: refresh }));
   const pickPrefix = useMutation(trpc.wine.pickPrefix.mutationOptions({ onSuccess: refresh }));
@@ -60,6 +58,7 @@ export function WineOptions({ id }: { id?: string }) {
   const installTricks = useMutation(trpc.wine.installWinetricks.mutationOptions({ onSuccess: refresh }));
   const tricks = useMutation(trpc.wine.winetricks.mutationOptions({ onSuccess: refresh }));
   const openLog = useMutation(trpc.wine.openLog.mutationOptions());
+  const setAsk = useMutation(trpc.wine.setAskDownloads.mutationOptions({ onSuccess: refresh }));
   const [pickIdx, setPickIdx] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const prog = useProgress(busy);
@@ -122,8 +121,10 @@ export function WineOptions({ id }: { id?: string }) {
         onEnter={() => { if (!tricks.isPending) tricks.mutate({ id, verbs: cfg.winetricks }); }} />}
 
       {!id && <>
+        <Row t={tt('Perguntar antes de baixar')} d={tt('Antes de abrir um jogo, o Cartucho avisa o que precisa baixar (Proton-GE, DXVK, componentes do winetricks) e espera você permitir.')} value={data.askDownloads ? tt('Ligado') : tt('Desligado')}
+          onStep={() => setAsk.mutate({ on: !data.askDownloads })} />
         <Row t={tt('Baixar Proton/Wine')} d={todo.length ? tt('Enter troca a versão, a linha de baixo baixa.') : remote.isLoading ? tt('Procurando versões…') : tt('Nada novo para baixar (ou sem internet).')}
-          value={pick ? `${pick.name}${pick.family === 'ge' ? ' · GE' : pick.family === 'cachyos' ? ' · CachyOS' : ' · Wine'}` : '—'} onStep={todo.length ? d => setPickIdx(i => (i + d + todo.length) % todo.length) : undefined} />
+          value={pick ? `${pick.name}${pick.family === 'ge' ? ' · GE' : pick.family === 'cachyos' ? ' · CachyOS' : ' · Wine'}${pick.size ? ` · ${Math.round(pick.size / 1048576)} MB` : ''}` : '—'} onStep={todo.length ? d => setPickIdx(i => (i + d + todo.length) % todo.length) : undefined} />
         {pick && <Row t={tt('Baixar {0}', { 0: pick.name })} value={installBuild.isPending ? tt('Baixando…') : tt('Baixar')} onEnter={() => { if (!installBuild.isPending) { setBusy(`wine:${pick.name}`); installBuild.mutate({ id: pick.id }); } }} />}
         {builds.filter(b => b.where === 'cartucho').map(b => (
           <Row key={b.id} t={tt('Apagar {0}', { 0: b.name })} d={tt('Só os que o Cartucho baixou.')} value={tt('Apagar')} onEnter={() => removeBuild.mutate({ dir: b.id })} />

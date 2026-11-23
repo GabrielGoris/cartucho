@@ -19,8 +19,8 @@ import { parseRepo } from './ports/github';
 import type { Player } from './play';
 import { installBuild, installUmu, installWinetricks, listVersions, remoteBuilds, removeBuild } from './wine/components';
 import { loadConfig, readPatch, resetGame, writePatch } from './wine/config';
-import { deletePrefix, runLog, runWinetricks, wineStatus } from './wine/launch';
-import { mergeConfig, VERB } from '@shared/wine';
+import { askBeforeDownload, deletePrefix, runLog, runWinetricks, setAskBeforeDownload, setDownloadAsker, wineStatus } from './wine/launch';
+import { type Download, mergeConfig, VERB } from '@shared/wine';
 import { prefixDir } from './steam';
 import type { Artwork } from './artwork/service';
 import type { GameInfoService } from './artwork/info';
@@ -93,10 +93,38 @@ async function askPlatform(title: string, current: string | null) {
   return new Promise<string | null>(resolve => { platPending.set(id, resolve); platBus.emit('ask', { id, title, current } satisfies PlatformRequest); });
 }
 
+export interface DownloadRequest { id: number; title: string; items: Download[] }
+const dlBus = new EventEmitter();
+const dlPending = new Map<number, (v: boolean) => void>();
+let dlSeq = 0;
+
+const mb = (n: number | null) => (n ? ` (${Math.max(1, Math.round(n / 1048576))} MB)` : '');
+
+async function nativeAskDownload(title: string, items: Download[]) {
+  const opts: Electron.MessageBoxOptions = {
+    type: 'question', buttons: [tt('Agora não'), tt('Baixar')], defaultId: 1, cancelId: 0,
+    message: tt('O Cartucho precisa baixar algumas coisas para abrir {0}', { 0: title }),
+    detail: items.map(d => `• ${d.name}${mb(d.size)}`).join('\n'),
+  };
+  const win = BrowserWindow.getFocusedWindow();
+  return (win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts)).response === 1;
+}
+
+function askDownload(title: string, items: Download[]) {
+  if (!dlBus.listenerCount('ask')) return nativeAskDownload(title, items);
+  const id = ++dlSeq;
+  return new Promise<boolean>(resolve => {
+    const timer = setTimeout(() => { dlPending.delete(id); resolve(false); }, 10 * 60_000);
+    dlPending.set(id, v => { clearTimeout(timer); resolve(v); });
+    dlBus.emit('ask', { id, title, items } satisfies DownloadRequest);
+  });
+}
+
 const t = initTRPC.create({ transformer: superjson, isServer: true });
 
 export function createRouter(deps: RouterDeps) {
   const { db, ach, ports, player, art, tr } = deps;
+  setDownloadAsker((title, items) => { deps.win?.()?.summon(); return askDownload(title, items); });
   return t.router({
     art: t.router({
       get: t.procedure.input(z.object({ console: z.string(), platformName: z.string().nullish(), title: z.string() }))
@@ -231,7 +259,13 @@ export function createRouter(deps: RouterDeps) {
         override: input.id ? readPatch(db, input.id) : null,
         hasPrefix: !!input.id && existsSync(prefixDir(input.id)),
         logFile: input.id ? runLog(input.id) : null,
+        askDownloads: askBeforeDownload(db),
       })),
+      setAskDownloads: t.procedure.input(z.object({ on: z.boolean() })).mutation(({ input }) => setAskBeforeDownload(db, input.on)),
+      onAskDownload: t.procedure.subscription(async function* ({ signal }) { for await (const [r] of on(dlBus, 'ask', { signal })) yield r as DownloadRequest; }),
+      answerDownload: t.procedure.input(z.object({ id: z.number(), ok: z.boolean() })).mutation(({ input }) => {
+        const f = dlPending.get(input.id); dlPending.delete(input.id); f?.(input.ok);
+      }),
       setConfig: t.procedure.input(z.object({ id: z.string().optional(), patch: z.record(z.string(), z.unknown()) })).mutation(({ input }) => writePatch(db, input.id ?? null, input.patch)),
       resetGame: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => resetGame(db, input.id)),
       pickPrefix: t.procedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {

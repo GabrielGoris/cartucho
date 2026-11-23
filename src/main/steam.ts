@@ -22,7 +22,6 @@ export function steamManifest(...paths: (string | null | undefined)[]): { appid:
 export function windowsAppData(installDir: string, exe: string | null | undefined, gameId?: string, customPrefix?: string | null): string | null {
   if (!exe || !/\.exe$/i.test(exe)) return null;
   let user = ''; try { user = userInfo().username; } catch { }
-  // Proton/umu prefixes use `steamuser`; a plain Wine prefix uses the real user name.
   const roaming = (prefix: string, ...users: string[]) => users.map(u => join(prefix, 'drive_c', 'users', u, 'AppData', 'Roaming')).find(existsSync) ?? null;
   if (customPrefix) { const own = roaming(customPrefix, 'steamuser', user); if (own) return own; }
   if (gameId) { const own = roaming(join(prefixDir(gameId), 'pfx'), 'steamuser', user); if (own) return own; }
@@ -32,7 +31,6 @@ export function windowsAppData(installDir: string, exe: string | null | undefine
   return roaming(process.env.WINEPREFIX || join(homedir(), '.wine'), user);
 }
 
-/** Steam installs that exist here, native or Flatpak. */
 export function steamRoots(home = homedir()) {
   return [join(home, '.local', 'share', 'Steam'), join(home, '.steam', 'steam'), join(home, '.steam', 'root'),
     join(home, '.var', 'app', 'com.valvesoftware.Steam', 'data', 'Steam'), join(home, '.var', 'app', 'com.valvesoftware.Steam', '.local', 'share', 'Steam')].filter(p => existsSync(p));

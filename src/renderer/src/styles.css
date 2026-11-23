@@ -388,6 +388,8 @@ body.pal-light .stage-behind { filter: blur(8px) brightness(.85) saturate(.6); }
 .gl-box { width: min(620px, 90%); padding: 26px 28px; }
 .gl-box h3 { margin: 0 0 10px; font-size: 26px; font-weight: normal; line-height: 1.3; }
 .gl-box p { margin: 0 0 14px; font-size: 20px; color: var(--dim); }
+.gl-dl { margin: 0 0 14px; padding: 0 0 0 22px; font-size: 20px; line-height: 1.5; }
+.gl-dl span { color: var(--dim); margin-left: 10px; }
 .gl-btns { display: flex; gap: 14px; justify-content: flex-end; margin-top: 18px; }
 .gl-plat { width: min(900px, 92%); }
 .gl-plats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 6px; }

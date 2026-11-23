@@ -5,7 +5,6 @@ import { sfx } from '../lib/sfx';
 import { stepFocused, WineOptions } from './WineOptions';
 import { tt } from '@shared/i18n';
 
-/** One game's Wine/Proton options as an overlay, usable with keyboard and gamepad. */
 export function WineDialog({ id, title, onClose }: { id: string; title: string; onClose: () => void }) {
   const root = useRef<HTMLDivElement>(null);
   useSpatialNav(root, {

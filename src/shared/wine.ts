@@ -3,14 +3,10 @@ export type SyncMode = 'default' | 'esync' | 'fsync' | 'none';
 
 export interface WineConfig {
   runner: RunnerKind;
-  /** Absolute folder of a Proton-style (has `proton`) or Wine-style (has `bin/wine`) build. null = best one found. */
   runnerBuild: string | null;
-  /** Existing prefix to use instead of the per-game one. Only per game. */
   prefixPath: string | null;
   env: Record<string, string>;
-  /** version: 'auto' (latest for Wine, the build's own for Proton), 'off', or a release such as '3.1.1'. */
   dxvk: { version: string; async: boolean };
-  /** 'off' or a release such as '3.1'. */
   vkd3d: { version: string };
   winetricks: string[];
   sync: SyncMode;
@@ -37,7 +33,6 @@ const SYNCS: Record<SyncMode, true> = { default: true, esync: true, fsync: true,
 const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const VERB = /^[a-z0-9_.-]{1,40}$/i;
 
-/** Accepts anything (e.g. JSON from the db) and keeps only valid fields. */
 export function cleanPatch(raw: unknown): WinePatch {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>, out: WinePatch = {};
   if (typeof o.runner === 'string' && Object.hasOwn(RUNNERS, o.runner)) out.runner = o.runner as RunnerKind;
@@ -61,7 +56,6 @@ export function cleanPatch(raw: unknown): WinePatch {
   return out;
 }
 
-/** Later patches win. `winetricks` is the union, `env` merges key by key. */
 export function mergeConfig(...patches: WinePatch[]): WineConfig {
   const c: WineConfig = { ...WINE_DEFAULTS, env: {}, dxvk: { ...WINE_DEFAULTS.dxvk }, vkd3d: { ...WINE_DEFAULTS.vkd3d }, winetricks: [] };
   for (const p of patches) {
@@ -78,7 +72,6 @@ export function mergeConfig(...patches: WinePatch[]): WineConfig {
 }
 
 export interface RunnerBuild {
-  /** absolute folder, or 'system' for the `wine` found in PATH */
   id: string;
   name: string;
   kind: 'proton' | 'wine';
@@ -98,4 +91,6 @@ export interface WineStatus {
 
 export interface WineVersions { dxvk: string[]; dxvkAsync: string[]; vkd3d: string[]; dxvkDefault: string | null }
 
-export interface RemoteBuild { id: string; name: string; family: 'ge' | 'cachyos' | 'wine'; installed: boolean }
+export interface RemoteBuild { id: string; name: string; family: 'ge' | 'cachyos' | 'wine'; size: number | null; installed: boolean }
+
+export interface Download { name: string; size: number | null }

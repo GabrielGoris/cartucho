@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSubscription } from '@trpc/tanstack-react-query';
 import { useTRPC } from '../trpc';
 import { cancelBindRec, Glyph, IdxChips, PAD_NAMES, useBindRec, useKeys, usePadKind } from '../lib/input';
@@ -49,6 +49,41 @@ export function BindRecHost() {
 }
 
 const PLATFORM_ORDER = ['pc', ...CONSOLES.map(c => c.id).filter(id => id !== 'pc' && id !== 'other'), 'other'];
+
+const mb = (n: number | null) => (n ? `${Math.max(1, Math.round(n / 1048576))} MB` : '');
+
+export function DownloadAskHost() {
+  const trpc = useTRPC(), qc = useQueryClient();
+  const [req, setReq] = useState<{ id: number; title: string; items: { name: string; size: number | null }[] } | null>(null);
+  const answer = useMutation(trpc.wine.answerDownload.mutationOptions());
+  const always = useMutation(trpc.wine.setAskDownloads.mutationOptions({ onSuccess: () => void qc.invalidateQueries({ queryKey: trpc.wine.pathKey() }) }));
+  useSubscription(trpc.wine.onAskDownload.subscriptionOptions(undefined, { onData: r => setReq(r) }));
+  const root = useRef<HTMLDivElement>(null);
+  const done = (ok: boolean, forever = false) => {
+    if (!req) return;
+    sfx.play(ok ? 'ok' : 'back');
+    if (forever) always.mutate({ on: false });
+    answer.mutate({ id: req.id, ok });
+    setReq(null);
+  };
+  useSpatialNav(root, { active: !!req, initial: '[data-main]', onKey: k => { if (k === 'Escape') { done(false); return true; } } });
+  if (!req) return null;
+  const total = req.items.reduce((n, d) => n + (d.size ?? 0), 0);
+  return (
+    <div className="ov gl-ov">
+      <div className="gl-box" ref={root}>
+        <h3>{tt('O Cartucho precisa baixar algumas coisas para abrir {0}', { 0: req.title })}</h3>
+        <ul className="gl-dl">{req.items.map(d => <li key={d.name}>{d.name}{d.size ? <span>{mb(d.size)}</span> : null}</li>)}</ul>
+        <p>{total ? tt('Total: cerca de {0}. Fica guardado e só baixa uma vez.', { 0: mb(total) }) : tt('Fica guardado e só baixa uma vez.')}</p>
+        <div className="gl-btns">
+          <button className="btn" data-hf onClick={() => done(false)}>{tt('Agora não')}</button>
+          <button className="btn" data-hf onClick={() => done(true, true)}>{tt('Sempre baixar sem perguntar')}</button>
+          <button className="btn acc" data-hf data-main onClick={() => done(true)}>{tt('Baixar')}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function PlatformHost() {
   const trpc = useTRPC();

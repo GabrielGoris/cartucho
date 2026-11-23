@@ -14,6 +14,7 @@ import { prepareWindows } from './wine/launch';
 export class Player {
   readonly events = new EventEmitter<{ play: [PlayEvent]; launch: [{ gameId: string; dirs: string[]; pid?: number }]; progress: [InstallProgress] }>();
   private running = new Map<string, Run>();
+  private preparing = new Set<string>();
   private external = new Map<string, { pid: number; session: number; start: number }>();
   private scanTimer: NodeJS.Timeout | null = null;
   private scanning = false;
@@ -69,16 +70,18 @@ export class Player {
           this.trackDetached(gameId, g.title, g.exe, g.installDir, 30);
           return;
         }
+        if (this.preparing.has(gameId)) throw new Error(tt('{0} já está abrindo.', { 0: g.title }));
         const note = (stage: string, pct: number) => this.events.emit('progress', { key: gameId, stage, pct });
+        this.preparing.add(gameId);
         try {
-          const w = await prepareWindows(this.db, gameId, g.exe, note, m => log(`${g.title}: ${m}`));
+          const w = await prepareWindows(this.db, gameId, g.title, g.exe, note, m => log(`${g.title}: ${m}`));
           cmd = w.cmd; args = w.args; extraEnv = w.env; logFile = w.logFile;
           log(`${g.title}: programa do Windows aberto pelo ${w.how}`);
           this.events.emit('progress', { key: gameId, stage: tt('Pronto'), pct: 1, done: true });
         } catch (e) {
           this.events.emit('progress', { key: gameId, stage: tt('Erro'), pct: 0, done: true, error: (e as Error).message });
           throw e;
-        }
+        } finally { this.preparing.delete(gameId); }
       } else {
         try { accessSync(g.exe, constants.X_OK); } catch { try { chmodSync(g.exe, 0o755); } catch { } }
       }

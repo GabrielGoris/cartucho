@@ -1,7 +1,6 @@
 import { cleanPatch, mergeConfig, type WineConfig, type WinePatch } from '@shared/wine';
 import { type DB, kvGet, kvSet } from '../db';
 
-/** Defaults live under `wine.cfg`, a game's own changes under `wine.cfg.<id>`. */
 const key = (gameId: string | null) => (gameId ? `wine.cfg.${gameId}` : 'wine.cfg');
 
 export function readPatch(db: DB, gameId: string | null): WinePatch {
@@ -14,7 +13,6 @@ export function readPatch(db: DB, gameId: string | null): WinePatch {
 
 export const loadConfig = (db: DB, gameId: string): WineConfig => mergeConfig(readPatch(db, null), readPatch(db, gameId));
 
-/** Stores only what the user changed. `env` and `winetricks` are replaced as a whole, `dxvk`/`vkd3d` field by field. */
 export function writePatch(db: DB, gameId: string | null, patch: unknown) {
   const old = readPatch(db, gameId), p = cleanPatch(patch);
   const next: WinePatch = { ...old, ...p };

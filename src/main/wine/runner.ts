@@ -5,7 +5,6 @@ import { delimiter, join } from 'node:path';
 import type { RunnerBuild, WineConfig } from '@shared/wine';
 import { dataDir, prefixDir, steamLibraries, steamRoots } from '../steam';
 
-/** `system: false` ignores PATH and the system folders (tests). */
 export interface Deps { home: string; env: NodeJS.ProcessEnv; system?: boolean }
 export const realDeps = (): Deps => ({ home: homedir(), env: process.env });
 
@@ -14,7 +13,6 @@ export const storeDir = (kind: StoreKind, d: Deps = realDeps()) => join(dataDir(
 
 const isExec = (p: string) => { try { return statSync(p).isFile() && (accessSync(p, constants.X_OK), true); } catch { return false; } };
 
-/** PATH lookup that also covers the per-user bin dirs a desktop-launched app does not have in PATH. */
 export function findExecutable(name: string, d: Deps = realDeps()): string | null {
   const system = d.system === false ? [] : [...(d.env.PATH ?? '').split(delimiter), '/usr/local/bin', '/usr/bin', '/bin', '/opt/bin'];
   const dirs = [...system, join(d.home, '.local', 'bin'), join(d.home, 'bin')].filter(Boolean);
@@ -26,8 +24,6 @@ export function findExecutable(name: string, d: Deps = realDeps()): string | nul
 
 export const detectTools = (d: Deps = realDeps()) => ({ umu: findExecutable('umu-run', d), wine: findExecutable('wine', d), winetricks: findExecutable('winetricks', d) });
 
-// ---------- installed builds ----------
-
 const FAMILY_RANK: Record<RunnerBuild['family'], number> = { ge: 3, cachyos: 2, valve: 1, other: 0, wine: 0 };
 
 function familyOf(name: string): RunnerBuild['family'] {
@@ -37,14 +33,12 @@ function familyOf(name: string): RunnerBuild['family'] {
   return 'other';
 }
 
-/** Comparable number from the first "10-34" / "9.0" in a build name; Experimental sorts last. */
 function buildVersion(name: string) {
   if (/experimental/i.test(name)) return 1e6;
   const m = name.match(/(\d+)[.-](\d+)/);
   return m ? Number(m[1]) * 1000 + Number(m[2]) : -1;
 }
 
-/** GE first, then CachyOS, then Valve; newest first inside each family. */
 const rank = (a: RunnerBuild, b: RunnerBuild) =>
   FAMILY_RANK[b.family] - FAMILY_RANK[a.family] || buildVersion(b.name) - buildVersion(a.name) || b.name.localeCompare(a.name, 'en', { numeric: true });
 
@@ -59,7 +53,6 @@ export function discoverBuilds(d: Deps = realDeps()): RunnerBuild[] {
     if (existsSync(join(id, 'proton'))) found.set(id, { id, name, kind: 'proton', family: familyOf(name), where });
     else if (existsSync(join(id, 'bin', 'wine'))) found.set(id, { id, name, kind: 'wine', family: 'wine', where });
   };
-  // `.tmp` is a half-copied download
   const scan = (parent: string, where: RunnerBuild['where']) => { for (const n of ls(parent)) if (!n.endsWith('.tmp')) add(join(parent, n), where); };
 
   for (const root of steamRoots(d.home)) {
@@ -77,24 +70,18 @@ export function discoverBuilds(d: Deps = realDeps()): RunnerBuild[] {
 const pickBuild = (builds: RunnerBuild[], kind: RunnerBuild['kind'], id: string | null) =>
   (id ? builds.find(b => b.id === id && b.kind === kind) : builds.filter(b => b.kind === kind).sort(rank)[0]) ?? null;
 
-// ---------- choosing how to run ----------
-
 export type RunnerName = 'umu' | 'proton' | 'wine';
-/** Why no runner was found: the runner the user forced, nothing at all, or a chosen build that is gone. */
 export type RunnerError = RunnerName | 'none' | 'build-missing';
 
 export interface Runner {
   name: RunnerName;
   cmd: string;
   env: Record<string, string>;
-  /** For the log. */
   how: string;
   prefix: string;
-  /** Proton only: STEAM_COMPAT_DATA_PATH, whose `pfx` must point at `prefix`. */
   compat: string | null;
   build: RunnerBuild | null;
   firstRun: boolean;
-  /** `wine` binary matching this runner, for winetricks. null: umu brings its own. */
   wineBin: string | null;
 }
 
@@ -111,7 +98,6 @@ const protonWine = (dir: string) => [join(dir, 'files', 'bin', 'wine'), join(dir
 
 type Pick = Omit<Runner, 'prefix' | 'firstRun'>;
 
-/** What to run for this game. Looks things up only: creates nothing on disk (see ensureDirs). */
 export function resolveRunner(gameId: string, cfg: WineConfig, d: Deps = realDeps(), builds = discoverBuilds(d)): RunnerResult {
   const want = cfg.runnerBuild ? builds.find(b => b.id === cfg.runnerBuild) ?? null : null;
   if (cfg.runnerBuild && !want) return { runner: null, error: 'build-missing' };
@@ -122,7 +108,6 @@ export function resolveRunner(gameId: string, cfg: WineConfig, d: Deps = realDep
 
   const attempt = (name: RunnerName): Pick | null => {
     if (name === 'umu' && umu && want?.kind !== 'wine') {
-      // umu only looks for a Proton on its own through the network: hand it the installed one
       return { name, cmd: umu, env: { WINEPREFIX: prefix, GAMEID: 'umu-default', STORE: 'none', PROTONPATH: proton?.id ?? 'GE-Proton' }, how: `umu (${proton?.name ?? 'GE-Proton, download'})`, compat: null, build: proton, wineBin: null };
     }
     if (name === 'proton' && proton) {
@@ -151,10 +136,8 @@ export function launchArgs(r: Runner, file: string): string[] {
   return [file];
 }
 
-/** For maintenance commands that must finish (wineboot, winetricks). */
 export const toolArgs = (r: Runner, argv: string[]) => (r.name === 'proton' ? ['waitforexitandrun', ...argv] : argv);
 
-/** Creates the prefix folder (and Proton's `pfx` link when the prefix is user supplied). */
 export function ensureDirs(r: Runner) {
   mkdirSync(r.prefix, { recursive: true });
   if (!r.compat) return;
@@ -164,20 +147,17 @@ export function ensureDirs(r: Runner) {
   let st; try { st = lstatSync(link); } catch { st = null; }
   if (st?.isSymbolicLink()) return;
   if (st?.isDirectory()) { try { rmdirSync(link); } catch { return; } }
-  try { symlinkSync(r.prefix, link); } catch { /* Proton then makes its own prefix */ }
+  try { symlinkSync(r.prefix, link); } catch { }
 }
-
-// ---------- running tools ----------
 
 export interface ToolResult { code: number | null; output: string }
 export interface SpawnOpts { cwd?: string; log?: string; timeout?: number; env?: Record<string, string> }
 
-/** Runs to the end, appending output to `log`; keeps the last 20 kB for error messages. */
 export function spawnLogged(cmd: string, args: string[], opts: SpawnOpts = {}) {
   const { promise, resolve } = Promise.withResolvers<ToolResult>();
   const child = spawn(cmd, args, { cwd: opts.cwd, env: { ...process.env, ...opts.env }, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
-  const take = (b: Buffer) => { const s = b.toString(); out = (out + s).slice(-20_000); if (opts.log) try { appendFileSync(opts.log, s); } catch { /* sem log */ } };
+  const take = (b: Buffer) => { const s = b.toString(); out = (out + s).slice(-20_000); if (opts.log) try { appendFileSync(opts.log, s); } catch { } };
   child.stdout.on('data', take); child.stderr.on('data', take);
   const timer = setTimeout(() => child.kill('SIGTERM'), opts.timeout ?? 300_000);
   child.once('error', e => { clearTimeout(timer); resolve({ code: null, output: out + String(e.message) }); });

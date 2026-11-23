@@ -3,7 +3,6 @@ import { useTRPC } from '../trpc';
 import { askConfirm } from './dialogs';
 import { tt } from '@shared/i18n';
 
-/** For when a game is being removed: asks whether to delete its Wine prefix too. No question when it has none. */
 export function useAskDeletePrefix() {
   const trpc = useTRPC(), qc = useQueryClient();
   return async (id: string, title: string) => {

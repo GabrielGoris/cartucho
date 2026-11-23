@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -164,6 +164,22 @@ describe('DXVK', () => {
     expect(readFileSync(join(sys32, 'd3d11.dll'), 'utf8')).toBe('wine-original');
     expect(existsSync(join(wow, 'dxgi.dll'))).toBe(false);
     expect(existsSync(marker)).toBe(false);
+  });
+
+  it('uma instalação que falha no meio é desfeita e os originais voltam', () => {
+    const sys32 = join(home, 'pfx2', 'system32'), marker = join(home, 'pfx2', '.m.json');
+    touch(join(sys32, 'd3d9.dll'), 'wine-d3d9');
+    touch(join(sys32, 'd3d11.dll'), 'wine-d3d11');
+    const p = pack('dxvk-x', 'C');
+    const bad = join(p.dir, 'x64', 'd3d11.dll');
+    rmSync(bad); mkdirSync(bad);
+    expect(() => deploy(p, DXVK_DLLS, { x64: sys32, x32: null }, marker)).toThrow();
+    deploy(pack('dxvk-y', 'D'), DXVK_DLLS, { x64: sys32, x32: null }, marker);
+    expect(readFileSync(join(sys32, 'd3d11.dll'), 'utf8')).toBe('D-x64');
+    undeploy(marker);
+    expect(readFileSync(join(sys32, 'd3d9.dll'), 'utf8')).toBe('wine-d3d9');
+    expect(readFileSync(join(sys32, 'd3d11.dll'), 'utf8')).toBe('wine-d3d11');
+    expect(existsSync(`${join(sys32, 'd3d11.dll')}.cartucho-bak`)).toBe(false);
   });
 
   it('lê se o .exe é de 32 ou 64 bits', () => {
