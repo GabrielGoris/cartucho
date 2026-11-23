@@ -140,7 +140,7 @@ export function createRouter(deps: RouterDeps) {
 
     ingame: t.router({
       current: t.procedure.query(() => player.current()),
-      onSummon: t.procedure.subscription(async function* ({ signal }) { if (!deps.ingame) return; for await (const _ of on(deps.ingame.events, 'summon', { signal })) yield Date.now(); }),
+      onSummon: t.procedure.subscription(async function* ({ signal }) { if (!deps.ingame) return; for await (const [title] of on(deps.ingame.events, 'summon', { signal })) yield String(title ?? ''); }),
       onShot: t.procedure.subscription(async function* ({ signal }) { if (!deps.ingame) return; for await (const [s] of on(deps.ingame.events, 'shot', { signal })) yield s as { title: string; file: string }; }),
       shots: t.procedure.input(z.object({ title: z.string() })).query(({ input }) => deps.ingame?.list(input.title) ?? []),
       openShots: t.procedure.input(z.object({ title: z.string() })).mutation(async ({ input }) => { const d = deps.ingame?.folder(input.title); if (d && existsSync(d)) await shell.openPath(d); }),

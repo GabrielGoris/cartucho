@@ -7,7 +7,7 @@ import { fmtPlay } from './lib/format';
 import { useTRPC } from './trpc';
 import { getSettings, reduceMotion, setSettings, useSettings } from './lib/settings';
 import { applyPalette, paletteById, PALETTES } from './lib/palettes';
-import { Glyph, setGameRunning, setGlobalKeys, setShortcutHandler } from './lib/input';
+import { Glyph, setGlobalKeys, setShortcutHandler } from './lib/input';
 import { getLang, tt } from '@shared/i18n';
 import { useConfirmReq } from './lib/dialogs';
 import { CartuchoMenu, ConfirmHost, PadSetupHost, PickerHost, PlatformHost } from './views/GlobalUI';
@@ -63,7 +63,10 @@ export function App() {
   const resume = useMutation(trpc.ingame.back.mutationOptions());
   const syncLang = useMutation(trpc.system.setLang.mutationOptions());
   useEffect(() => { syncLang.mutate({ lang: getLang() }); }, []);
-  useSubscription(trpc.ingame.onSummon.subscriptionOptions(undefined, { onData: () => sfx.play('ok') }));
+  const [away, setAway] = useState<string | null>(null);
+  useSubscription(trpc.ingame.onSummon.subscriptionOptions(undefined, { onData: title => { sfx.play('ok'); setAway(title); } }));
+  const back = () => { sfx.play('ok'); setAway(null); resume.mutate(); };
+  useEffect(() => { const f = () => setAway(null); addEventListener('blur', f); return () => removeEventListener('blur', f); }, []);
   const overlay = useMutation(trpc.win.overlay.mutationOptions());
   const installUpd = useMutation(trpc.updates.install.mutationOptions());
   const asked = useRef<string | null>(null);
@@ -94,13 +97,13 @@ export function App() {
   const openAll = () => transition(() => setAll(true));
   const closeAll = () => transition(() => { setAll(false); setPage('act'); });
 
-  const gk = useRef({ booting, picker, confirmReq, inside, leaveConsole, all, closeAll, gameOpen: false });
-  gk.current = { booting, picker, confirmReq, inside, leaveConsole, all, closeAll, gameOpen: Object.keys(playing).length > 0 };
+  const gk = useRef({ booting, picker, confirmReq, inside, leaveConsole, all, closeAll, gameOpen: false, back: () => {} });
+  gk.current = { booting, picker, confirmReq, inside, leaveConsole, all, closeAll, gameOpen: Object.keys(playing).length > 0 || away != null, back };
   useEffect(() => setGlobalKeys(k => {
     const g = gk.current;
     if (g.booting || g.picker || g.confirmReq || document.querySelector('.osk-ov, .gl-pick, .gl-plat, .gl-padset, .web-ov')) return false;
     if (k === 'Start') { sfx.play(menu ? 'back' : 'ok'); setMenu(m => !m); return true; }
-    if (k === 'Home' && g.gameOpen) { sfx.play('ok'); resume.mutate(); return true; }
+    if (k === 'Home' && g.gameOpen) { g.back(); return true; }
     if (k === 'Home') { setMenu(false); setGov(null); setSettingsOpen(false); if (g.inside) g.leaveConsole(); else if (g.all) g.closeAll(); else setPage('stage'); sfx.play('back'); return true; }
     return false;
   }), [menu]);
@@ -125,6 +128,7 @@ export function App() {
   useSubscription(trpc.play.onEvent.subscriptionOptions(undefined, {
     onData: (e: PlayEvent) => {
       setPlaying(p => { const { [e.gameId]: _, ...rest } = p; return e.running ? { ...rest, [e.gameId]: e.title } : rest; });
+      if (!e.running) setAway(null);
       if (!e.running && e.sessionMs) toast({ k: tt('SESSÃO ENCERRADA'), n: fmtPlay(e.sessionMs), g: e.title });
       void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }); void qc.invalidateQueries({ queryKey: trpc.play.pathKey() }); void qc.invalidateQueries({ queryKey: trpc.library.summary.queryKey() });
     },
@@ -139,7 +143,6 @@ export function App() {
   ].filter(Boolean).join(' '), [tvAnim, s, inside, all]);
 
   const gameOpen = Object.keys(playing).length > 0;
-  useEffect(() => setGameRunning(gameOpen), [gameOpen]);
   useEffect(() => {
     if (!updReady || gameOpen || booting || asked.current === updReady) return;
     asked.current = updReady;
@@ -178,7 +181,7 @@ export function App() {
       {askPicker && <ConsolePicker first={!s.picked} onClose={() => setPicker(false)} />}
       {booting && <Boot summary={summary.data} onDone={() => setBooting(false)} />}
 
-      {gameOpen && <button className="playing" onClick={() => { sfx.play('ok'); resume.mutate(); }}>▶ {tt('JOGANDO {g}', { g: Object.values(playing).join(', ').toUpperCase() })}<span className="pl-k"><Glyph a="home" pad />{tt('voltar para o jogo')}</span></button>}
+      {(gameOpen || away != null) && <button className="playing" onClick={back}>▶ {Object.values(playing).join(', ') || away ? tt('JOGANDO {g}', { g: (Object.values(playing).join(', ') || away || '').toUpperCase() }) : tt('JOGO ABERTO')}<span className="pl-k"><Glyph a="home" pad />{tt('voltar para o jogo')}</span></button>}
       <div className="toasts">
         {toasts.map((t, i) => (
           <div key={i} className="toast">

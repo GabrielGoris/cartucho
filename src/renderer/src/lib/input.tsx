@@ -118,8 +118,6 @@ function hatDir(p: Gamepad): Key | null {
 
 const prevs = new Map<number, boolean[]>(), hats = new Map<number, Key | null>();
 let axisAt = 0, held: Key | null = null, heldAt = 0, away = false;
-let gameRunning = false;
-export const setGameRunning = (v: boolean) => { gameRunning = v; };
 export const keyMapFor = (p: { id: string; mapping: string }, nin: boolean) => mapFor(p, nin, maps[p.id]);
 const DIRS = new Set<Key>(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 const btns = (p: Gamepad) => p.buttons.map(x => x.pressed || x.value > 0.5);
@@ -133,7 +131,7 @@ function activePad() {
   return p;
 }
 function poll() {
-  if (document.hidden || (gameRunning && !document.hasFocus())) { away = true; held = null; return; }
+  if (document.hidden || (!document.hasFocus() && !document.querySelector('.web-ov'))) { away = true; held = null; return; }
   const all = pads();
   if (!all.length) return;
   const now = performance.now();

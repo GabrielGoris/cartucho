@@ -1,10 +1,11 @@
 import { EventEmitter } from 'node:events';
 import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
-import { BrowserWindow, desktopCapturer, type Display, ipcMain, type NativeImage, screen, shell } from 'electron';
+import { BrowserWindow, desktopCapturer, type Display, ipcMain, nativeImage, type NativeImage, screen, shell } from 'electron';
 import { type Key, keyMapFor } from '@shared/padmap';
-import { moveTo, ownedBy, type Rect, type Win32 } from './win32';
+import { moveTo, ownedBy, type Rect, type Win, type Win32 } from './win32';
 import { tt } from '@shared/i18n';
+import { log } from './log';
 
 export interface PadState { index: number; id: string; mapping: string; b: string }
 export type Action = 'summon' | 'shot';
@@ -88,15 +89,17 @@ export interface InGameDeps {
   w32: Win32;
   current: () => { id: string; title: string } | null;
   reveal: () => void;
+  refocus: () => void;
   minimize: () => void;
   own: () => number | null;
   visible: () => boolean;
+  focused: () => boolean;
   sameScreen: () => boolean;
   dirsOf: (id: string) => string[];
 }
 
 export class InGame {
-  readonly events = new EventEmitter<{ summon: []; shot: [{ title: string; file: string }] }>();
+  readonly events = new EventEmitter<{ summon: [string]; shot: [{ title: string; file: string }] }>();
   private pad: BrowserWindow | null = null;
   private combos = new Combos();
   private busy = false;
@@ -128,7 +131,6 @@ export class InGame {
       this.pad.destroy();
       this.pad = null;
       this.combos.clear();
-      this.game = null;
       if (this.timer) { clearTimeout(this.timer); this.timer = null; }
     }
   }
@@ -145,6 +147,7 @@ export class InGame {
   }
 
   private run(actions: Action[]) {
+    if (!actions.length || this.d.focused()) return;
     for (const a of actions) {
       if (a === 'summon') void this.summon();
       else void this.capture();
@@ -154,8 +157,13 @@ export class InGame {
   async summon() {
     const fg = await this.d.w32.foreground();
     if (fg && fg.pid !== process.pid) this.game = fg.hwnd;
+    const title = this.d.current()?.title ?? (fg && fg.pid !== process.pid ? fg.title : '') ?? '';
     this.d.reveal();
-    this.events.emit('summon');
+    const own = this.d.own();
+    const ok = own ? await this.d.w32.front(own) : null;
+    this.d.refocus();
+    log('Cartucho chamado pelo controle', title, ok === false ? '(sem foco)' : '');
+    this.events.emit('summon', title);
   }
 
   private async gameWindow() {
@@ -199,8 +207,7 @@ export class InGame {
 
   folder(title: string) { return join(this.d.root, safeName(title)); }
 
-  private async display(): Promise<Display> {
-    const fg = await this.d.w32.foreground();
+  private async display(fg: Win | null): Promise<Display> {
     if (fg) {
       try {
         const [l, tp, r, b] = fg.m;
@@ -211,25 +218,34 @@ export class InGame {
   }
 
   async capture() {
-    const g = this.d.current();
-    if (!g || this.busy) return null;
+    if (this.busy) return null;
     this.busy = true;
     try {
-      const d = await this.display();
-      const size = { width: Math.round(d.size.width * d.scaleFactor), height: Math.round(d.size.height * d.scaleFactor) };
-      const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: size });
-      const src = sources.find(s => s.display_id === String(d.id)) ?? (sources.length === 1 ? sources[0] : undefined);
-      if (!src || src.thumbnail.isEmpty()) throw new Error(tt('nada para capturar'));
-      const dir = this.folder(g.title);
+      const fg = await this.d.w32.foreground();
+      if (fg && fg.pid === process.pid) return null;
+      const title = this.d.current()?.title || fg?.title?.trim() || 'Cartucho';
+      const dir = this.folder(title);
       mkdirSync(dir, { recursive: true });
       const base = stamp();
       let file = join(dir, `${base}.png`);
       for (let n = 2; existsSync(file); n++) file = join(dir, `${base} (${n}).png`);
-      writeFileSync(file, src.thumbnail.toPNG());
-      this.toast(d, src.thumbnail, g.title, tt('Captura salva'));
-      this.events.emit('shot', { title: g.title, file });
+      const d = await this.display(fg);
+      let img: NativeImage | null = null;
+      if (await this.d.w32.shot(file) && existsSync(file)) img = nativeImage.createFromPath(file);
+      if (!img || img.isEmpty()) {
+        const size = { width: Math.round(d.size.width * d.scaleFactor), height: Math.round(d.size.height * d.scaleFactor) };
+        const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: size });
+        const src = sources.find(s => s.display_id === String(d.id)) ?? sources[0];
+        if (!src || src.thumbnail.isEmpty()) throw new Error('nada para capturar');
+        img = src.thumbnail;
+        writeFileSync(file, img.toPNG());
+      }
+      this.toast(d, img, title, tt('Captura salva'));
+      log('captura salva', file);
+      this.events.emit('shot', { title, file });
       return file;
-    } catch {
+    } catch (e) {
+      log('captura falhou', e instanceof Error ? e.message : String(e), this.d.w32.err.trim().slice(-300));
       return null;
     } finally { this.busy = false; }
   }

@@ -1,4 +1,5 @@
 export const EN: Record<string, string> = {
+  "JOGO ABERTO": "GAME OPEN",
   "Não consegui ler a lista de conquistas: {0}": "Couldn't read the achievements list: {0}",
   "Não consegui ler os desbloqueios: {0}": "Couldn't read the unlocks: {0}",
   "Conquista #{0}": "Achievement #{0}",

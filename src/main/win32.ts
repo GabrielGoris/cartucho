@@ -1,9 +1,10 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { log } from './log';
 
 export type Rect = [number, number, number, number];
-export interface Win { hwnd: number; pid: number; path: string; r: Rect; m: Rect }
+export interface Win { hwnd: number; pid: number; path: string; title: string; r: Rect; m: Rect }
 export interface Mon { m: Rect; w: Rect }
 
 const CS = String.raw`
@@ -31,6 +32,11 @@ public static class CartuchoWin {
   [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint a, bool i, uint pid);
   [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
   [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool QueryFullProcessImageName(IntPtr h, int f, StringBuilder s, ref int n);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll")] static extern bool AttachThreadInput(uint a, uint b, bool f);
+  [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+  [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr h);
+  [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
 
   public static void Init() { try { SetThreadDpiAwarenessContext(new IntPtr(-4)); } catch { } }
 
@@ -41,9 +47,39 @@ public static class CartuchoWin {
     IntPtr p = OpenProcess(0x1000, false, pid); if (p == IntPtr.Zero) return "";
     try { var sb = new StringBuilder(1024); int n = sb.Capacity; return QueryFullProcessImageName(p, 0, sb, ref n) ? sb.ToString() : ""; } finally { CloseHandle(p); }
   }
+  static string TitleOf(IntPtr h) { var sb = new StringBuilder(512); GetWindowText(h, sb, sb.Capacity); return sb.ToString(); }
   static string One(IntPtr h) {
     uint pid; GetWindowThreadProcessId(h, out pid); RECT r; GetWindowRect(h, out r); var m = Mon(h);
-    return "{\"hwnd\":" + h.ToInt64() + ",\"pid\":" + pid + ",\"path\":" + Q(PathOf(pid)) + ",\"r\":" + R(r) + ",\"m\":" + R(m.rcMonitor) + "}";
+    return "{\"hwnd\":" + h.ToInt64() + ",\"pid\":" + pid + ",\"path\":" + Q(PathOf(pid)) + ",\"title\":" + Q(TitleOf(h)) + ",\"r\":" + R(r) + ",\"m\":" + R(m.rcMonitor) + "}";
+  }
+  static bool Focus(IntPtr h) {
+    if (IsIconic(h)) ShowWindow(h, 9);
+    IntPtr fg = GetForegroundWindow();
+    if (fg == h) return true;
+    uint pid; uint ft = GetWindowThreadProcessId(fg, out pid), tt = GetWindowThreadProcessId(h, out pid), me = GetCurrentThreadId();
+    bool a1 = ft != 0 && ft != me && AttachThreadInput(me, ft, true);
+    bool a2 = tt != 0 && tt != me && tt != ft && AttachThreadInput(me, tt, true);
+    BringWindowToTop(h);
+    bool ok = SetForegroundWindow(h);
+    if (a1) AttachThreadInput(me, ft, false);
+    if (a2) AttachThreadInput(me, tt, false);
+    if (GetForegroundWindow() != h) {
+      keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero);
+      BringWindowToTop(h);
+      ok = SetForegroundWindow(h);
+    }
+    return ok && GetForegroundWindow() == h;
+  }
+  static string Shot(string path) {
+    var m = Mon(GetForegroundWindow()).rcMonitor;
+    int w = m.R - m.L, hh = m.B - m.T;
+    if (w <= 0 || hh <= 0) return "null";
+    using (var bmp = new System.Drawing.Bitmap(w, hh))
+    using (var g = System.Drawing.Graphics.FromImage(bmp)) {
+      g.CopyFromScreen(m.L, m.T, 0, 0, new System.Drawing.Size(w, hh));
+      bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+    }
+    return "{\"m\":" + R(m) + "}";
   }
 
   public static string Run(string line) {
@@ -66,11 +102,8 @@ public static class CartuchoWin {
         if (IsIconic(h)) ShowWindow(h, 9);
         return SetWindowPos(h, IntPtr.Zero, l, t, rr - l, b - t, 0x0004 | 0x0010 | 0x4000) ? "true" : "false";
       }
-      case "front": {
-        IntPtr h = new IntPtr(long.Parse(a[1]));
-        if (IsIconic(h)) ShowWindow(h, 9);
-        return SetForegroundWindow(h) ? "true" : "false";
-      }
+      case "front": return Focus(new IntPtr(long.Parse(a[1]))) ? "true" : "false";
+      case "shot": return Shot(line.Substring(5));
     }
     return "null";
   }
@@ -78,19 +111,22 @@ public static class CartuchoWin {
 `;
 
 const PS = `$ErrorActionPreference = 'Stop'
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
-Add-Type -TypeDefinition @'
+Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
 ${CS}
 '@
 [CartuchoWin]::Init()
+$utf8 = New-Object System.Text.UTF8Encoding $false
+$in = New-Object System.IO.StreamReader([Console]::OpenStandardInput(), $utf8)
+$out = New-Object System.IO.StreamWriter([Console]::OpenStandardOutput(), $utf8)
+$out.AutoFlush = $true
 while ($true) {
-  $l = [Console]::In.ReadLine()
+  $l = $in.ReadLine()
   if ($l -eq $null) { break }
   $i = $l.IndexOf(' ')
+  if ($i -lt 1) { continue }
   $id = $l.Substring(0, $i)
   try { $r = [CartuchoWin]::Run($l.Substring($i + 1)) } catch { $r = 'null' }
-  [Console]::Out.WriteLine($id + ' ' + $r)
-  [Console]::Out.Flush()
+  $out.WriteLine($id + ' ' + $r)
 }
 `;
 
@@ -100,6 +136,7 @@ export class Win32 {
   private wait = new Map<number, (v: unknown) => void>();
   private buf = '';
   private dead = 0;
+  err = '';
 
   constructor(private dir: string) {}
 
@@ -121,8 +158,9 @@ export class Win32 {
         try { f(JSON.parse(line.slice(sp + 1))); } catch { f(null); }
       }
     });
-    ps.stderr.resume();
-    const gone = () => { if (this.ps === ps) { this.ps = null; this.dead++; } for (const f of this.wait.values()) f(null); this.wait.clear(); };
+    ps.stderr.setEncoding('utf8');
+    ps.stderr.on('data', (d: string) => { this.err = (this.err + d).slice(-2000); });
+    const gone = () => { if (this.ps === ps) { this.ps = null; this.dead++; log('ajudante do Windows parou', this.err.trim().slice(-400)); } for (const f of this.wait.values()) f(null); this.wait.clear(); };
     ps.on('exit', gone);
     ps.on('error', gone);
     this.ps = ps;
@@ -146,6 +184,7 @@ export class Win32 {
   monitor(hwnd: number) { return this.ask<Mon>(`mon ${Math.trunc(hwnd)}`); }
   place(hwnd: number, r: Rect) { return this.ask<boolean>(`place ${Math.trunc(hwnd)} ${r.map(Math.round).join(' ')}`); }
   front(hwnd: number) { return this.ask<boolean>(`front ${Math.trunc(hwnd)}`); }
+  shot(file: string) { return this.ask<{ m: Rect }>(`shot ${file.replace(/[\r\n]/g, '')}`, 15_000); }
   stop() { this.ps?.kill(); this.ps = null; }
 }
 

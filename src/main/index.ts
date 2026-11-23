@@ -108,13 +108,15 @@ void app.whenReady().then(async () => {
     root: join(app.getPath('pictures'), 'Cartucho'), w32,
     current: () => player.current(),
     reveal: () => ctl?.summon(),
+    refocus: () => { if (win && !win.isDestroyed()) { win.focus(); win.webContents.focus(); } },
     minimize: () => ctl?.minimize(),
     own: () => hwndOf(win),
     visible: () => !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized(),
+    focused: () => !!win && !win.isDestroyed() && win.isVisible() && win.isFocused(),
     sameScreen: () => bg?.prefs().screen ?? true,
     dirsOf: id => { try { const g = ach.getGame(id); return [g.installDir, g.exe ? dirname(g.exe) : ''].filter(Boolean); } catch { return []; } },
   });
-  player.events.on('play', () => ingame.setActive(!!player.current()));
+  if (process.platform === 'win32') ingame.setActive(true);
   player.events.on('launch', e => void ingame.place(e.dirs, e.pid));
   protocol.handle('media', req => {
     const u = new URL(req.url);
