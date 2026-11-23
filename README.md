@@ -13,7 +13,7 @@ O Cartucho é um projeto pessoal e gratuito, sem nenhuma ligação com Nintendo,
 
 ## Baixar
 
-Baixe o instalador (`Cartucho-Setup-x.y.z.exe`) na página de [Releases](https://github.com/GabrielGoris/cartucho/releases/latest). Depois de instalado, o Cartucho se atualiza sozinho.
+Baixe o instalador (`Cartucho-x.y.z-windows.exe`, ou `Cartucho-x.y.z-linux.AppImage` no Linux) na página de [Releases](https://github.com/GabrielGoris/cartucho/releases/latest). Depois de instalado, o Cartucho se atualiza sozinho.
 
 Como o instalador não tem assinatura digital, o Windows pode mostrar "O Windows protegeu o computador": clique em **Mais informações** e depois em **Executar assim mesmo**.
 
