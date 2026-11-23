@@ -36,3 +36,27 @@ describe('Linux', () => {
     expect(e).toMatch(/^Exec=".+" .*--play abc$/m);
   });
 });
+
+import { hasBit, PadState } from '../src/main/linux';
+import { bindsFor } from '../src/shared/binds';
+
+describe('controle no Linux', () => {
+  it('reconhece um controle pelos botões que ele declara', () => {
+    expect(hasBit('7cdb000000000000 0 0 0', 0x130)).toBe(false);
+    expect(hasBit('7cdb000000000000 0 0 0 0', 0x130)).toBe(true);
+  });
+  it('converte eventos do evdev no mesmo formato do XInput', () => {
+    const s = new PadState(true);
+    s.event(1, 0x13c, 1); s.event(1, 0x137, 1);
+    expect(s.mask).toBe(0x0400 | 0x0200);
+    s.event(3, 0x11, -1); expect(s.mask & 0x0001).toBe(1);
+    s.event(3, 0x02, 200); expect(s.mask & 0x10000).toBe(0x10000);
+    s.event(1, 0x13c, 0); s.event(3, 0x11, 0); s.event(3, 0x02, 0);
+    expect(s.mask).toBe(0x0200);
+  });
+  it('acha os atalhos do mesmo controle mesmo com outro nome', () => {
+    const all = { 'Xbox 360 pad (STANDARD GAMEPAD Vendor: 045e Product: 028e)': { shot: ['Select', 'Start'] } };
+    expect(bindsFor(all, 'Microsoft X-Box 360 pad (STANDARD GAMEPAD Vendor: 045e Product: 028e)').shot).toEqual(['Select', 'Start']);
+    expect(bindsFor(all, 'Outro (Vendor: 1234 Product: 5678)').shot).toEqual(['Home', 'RB']);
+  });
+});

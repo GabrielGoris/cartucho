@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync,
 import { join, relative, resolve, sep } from 'node:path';
 import { app, BrowserWindow, desktopCapturer, type Display, ipcMain, nativeImage, type NativeImage, screen, shell } from 'electron';
 import { type Binds, DEFAULT_BINDS, HOLD, padTokens } from '@shared/binds';
-import { moveTo, ownedBy, type Rect, type Win, type Win32, xinputButtons } from './win32';
+import { type Desk, moveTo, ownedBy, type Rect, type Win, xinputButtons } from './win32';
 import { tt } from '@shared/i18n';
 import { log } from './log';
 
@@ -79,7 +79,7 @@ span{display:block;font-size:14px;opacity:.85;margin-top:3px;white-space:nowrap;
 
 export interface InGameDeps {
   root: string;
-  w32: Win32;
+  w32: Desk;
   current: () => { id: string; title: string } | null;
   reveal: () => void;
   refocus: () => void;
@@ -117,18 +117,20 @@ export class InGame {
   private xon = false;
   private xseen = new Set<number>();
 
-  private onXinput(slot: number, mask: number, mode: number) {
+  private onXinput(slot: number, mask: number, mode: number, id?: string) {
     if (slot < 0) { log('XInput indisponível neste Windows: os atalhos usam só o leitor do Chromium'); this.xon = false; return; }
     this.xon = true;
-    if (mask < 0) { this.xseen.delete(slot); this.combos.feed(100 + slot, new Set(), Date.now(), this.xid); return; }
-    if (!this.xseen.has(slot)) { this.xseen.add(slot); log(`controle XInput ${slot + 1} lido direto pelo Windows`, mode === 3 ? '(sem o botão Xbox: XInput antigo)' : ''); }
-    this.run(this.combos.feed(100 + slot, padTokens({ id: this.xid, mapping: 'standard' }, xinputButtons(mask)), Date.now(), this.xid));
+    const pid = id ?? this.xid;
+    if (mask < 0) { this.xseen.delete(slot); this.combos.feed(100 + slot, new Set(), Date.now(), pid); return; }
+    if (!this.xseen.has(slot) && !id) { this.xseen.add(slot); log(`controle XInput ${slot + 1} lido direto pelo Windows`, mode === 3 ? '(sem o botão Xbox: XInput antigo)' : ''); }
+    this.run(this.combos.feed(100 + slot, padTokens({ id: pid, mapping: 'standard' }, xinputButtons(mask)), Date.now(), pid));
     this.schedule();
   }
 
   setActive(on: boolean) {
     if (on && !this.pad) {
-      void this.d.w32.xinput((a, b, c) => this.onXinput(a, b, c)).then(ok => { if (!ok) log('não deu para ler o XInput direto; os atalhos usam só o leitor do Chromium'); });
+      void this.d.w32.xinput((a, b, c, d) => this.onXinput(a, b, c, d)).then(ok => { if (!ok) log('não deu para ler o controle direto pelo sistema; os atalhos usam só o leitor do Chromium'); });
+      if (process.platform === 'linux') { this.pad = null; return; }
       const a = screen.getPrimaryDisplay().workArea;
       this.pad = new BrowserWindow({
         width: 1, height: 1, x: a.x + a.width - 1, y: a.y + a.height - 1, frame: false, transparent: true, resizable: false, movable: false,
@@ -153,7 +155,7 @@ export class InGame {
       if (!this.seen.has(p.id)) { this.seen.add(p.id); log('controle visto:', p.id, p.mapping || 'genérico', `${p.b.length} botões`); }
       const xi = p.mapping === 'standard' && !/vendor:/i.test(p.id);
       if (xi) this.xid = p.id;
-      if (xi && this.xon) continue;
+      if (this.xon && (xi || process.platform === 'linux')) continue;
       this.run(this.combos.feed(p.index, padKeys(p), Date.now(), p.id));
     }
     this.schedule();

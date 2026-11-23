@@ -30,7 +30,12 @@ export function readAllBinds(raw: string | null | undefined): BindsByPad {
   return out;
 }
 
-export const bindsFor = (all: BindsByPad, id: string): Binds => ({ summon: all[id]?.summon ?? DEFAULT_BINDS.summon, shot: all[id]?.shot ?? DEFAULT_BINDS.shot });
+const hw = (id: string) => id.match(/vendor:\s*([0-9a-f]{4}).*product:\s*([0-9a-f]{4})/i)?.slice(1, 3).join(':').toLowerCase() ?? null;
+export function bindsFor(all: BindsByPad, id: string): Binds {
+  const key = all[id] ? id : (() => { const h = hw(id); return h ? Object.keys(all).find(k => hw(k) === h) : undefined; })();
+  const b = key ? all[key] : undefined;
+  return { summon: b?.summon ?? DEFAULT_BINDS.summon, shot: b?.shot ?? DEFAULT_BINDS.shot };
+}
 
 export const sameBind = (a: Bind, b: Bind) => a.length === b.length && a.every(x => b.includes(x));
 

@@ -16,7 +16,8 @@ import { GameInfoService } from './artwork/info';
 import { createEmulatorResolver } from './emulators';
 import { WebPane } from './web';
 import { InGame } from './ingame';
-import { Win32 } from './win32';
+import { type Desk, Win32 } from './win32';
+import { LinuxDesk } from './linux';
 import { bindsFor, readAllBinds } from '@shared/binds';
 import { Translator } from './translate';
 import { WinCtl } from './window';
@@ -134,7 +135,7 @@ void app.whenReady().then(async () => {
   const info = new GameInfoService(db, ((url, init) => net.fetch(url, init as RequestInit)) as Fetch, art);
   void info.startNotas();
   setTimeout(() => info.warm(ach.listGames().filter(g => !g.missing).map(g => ({ console: g.console, platformName: g.platformName, title: g.title, installDir: g.installDir, exe: g.exe, catalogId: g.catalogId }))), 20_000);
-  const w32 = new Win32(app.getPath('userData'));
+  const w32: Desk = process.platform === 'linux' ? new LinuxDesk() : new Win32(app.getPath('userData'));
   const ingame = new InGame({
     root: join(app.getPath('pictures'), 'Cartucho'), w32,
     current: () => player.current(),
@@ -148,7 +149,7 @@ void app.whenReady().then(async () => {
     binds: id => bindsFor(readAllBinds(kvGet(db, 'pad.binds')), id),
     dirsOf: id => { try { const g = ach.getGame(id); return [g.installDir, g.exe ? dirname(g.exe) : ''].filter(Boolean); } catch { return []; } },
   });
-  if (process.platform === 'win32') ingame.setActive(true);
+  if (process.platform === 'win32' || process.platform === 'linux') ingame.setActive(true);
   player.events.on('launch', e => void ingame.place(e.dirs, e.pid));
   protocol.handle('media', req => {
     const u = new URL(req.url);

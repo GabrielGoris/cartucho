@@ -6,6 +6,19 @@ import { log } from './log';
 export type Rect = [number, number, number, number];
 export interface Win { hwnd: number; pid: number; path: string; title: string; r: Rect; m: Rect }
 export interface Mon { m: Rect; w: Rect }
+export type PadFeed = (slot: number, mask: number, mode: number, id?: string) => void;
+export interface Desk {
+  err: string;
+  foreground(): Promise<Win | null>;
+  windows(): Promise<Win[] | null>;
+  monitor(hwnd: number): Promise<Mon | null>;
+  place(hwnd: number, r: Rect): Promise<boolean | null>;
+  front(hwnd: number): Promise<boolean | null>;
+  shot(file: string): Promise<{ m: Rect } | null>;
+  beep(file: string): Promise<boolean | null>;
+  xinput(cb: PadFeed): Promise<boolean | null>;
+  stop(): void;
+}
 
 const CS = String.raw`
 using System;
@@ -175,14 +188,14 @@ ${CS}
 [CartuchoWin]::Serve()
 `;
 
-export class Win32 {
+export class Win32 implements Desk {
   private ps: ChildProcessWithoutNullStreams | null = null;
   private seq = 0;
   private wait = new Map<number, (v: unknown) => void>();
   private buf = '';
   private dead = 0;
   err = '';
-  private onPad: ((slot: number, mask: number, mode: number) => void) | null = null;
+  private onPad: PadFeed | null = null;
 
   constructor(private dir: string) {}
 
@@ -233,7 +246,7 @@ export class Win32 {
   front(hwnd: number) { return this.ask<boolean>(`front ${Math.trunc(hwnd)}`); }
   beep(file: string) { return this.ask<boolean>(`beep ${file.replace(/[\r\n]/g, '')}`); }
   shot(file: string) { return this.ask<{ m: Rect }>(`shot ${file.replace(/[\r\n]/g, '')}`, 15_000); }
-  xinput(cb: (slot: number, mask: number, mode: number) => void) { this.onPad = cb; return this.ask<boolean>('xinput', 20_000); }
+  xinput(cb: PadFeed) { this.onPad = cb; return this.ask<boolean>('xinput', 20_000); }
   stop() { this.ps?.kill(); this.ps = null; }
 }
 
