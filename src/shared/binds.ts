@@ -15,12 +15,22 @@ export function cleanBind(b: unknown): Bind | null {
   return out.length ? out : null;
 }
 
-export function readBinds(raw: string | null | undefined): Binds {
+export type BindsByPad = Record<string, Partial<Binds>>;
+
+export function readAllBinds(raw: string | null | undefined): BindsByPad {
+  const out: BindsByPad = {};
   try {
-    const o = JSON.parse(raw || '{}') as Partial<Record<BindAction, unknown>>;
-    return { summon: cleanBind(o.summon) ?? DEFAULT_BINDS.summon, shot: cleanBind(o.shot) ?? DEFAULT_BINDS.shot };
-  } catch { return { ...DEFAULT_BINDS }; }
+    const o = JSON.parse(raw || '{}') as Record<string, unknown>;
+    for (const [id, v] of Object.entries(o)) {
+      if (id === 'summon' || id === 'shot' || !v || typeof v !== 'object') continue;
+      const e = v as Record<string, unknown>, summon = cleanBind(e.summon), shot = cleanBind(e.shot);
+      if (summon || shot) out[id] = { ...(summon ? { summon } : {}), ...(shot ? { shot } : {}) };
+    }
+  } catch { }
+  return out;
 }
+
+export const bindsFor = (all: BindsByPad, id: string): Binds => ({ summon: all[id]?.summon ?? DEFAULT_BINDS.summon, shot: all[id]?.shot ?? DEFAULT_BINDS.shot });
 
 export const sameBind = (a: Bind, b: Bind) => a.length === b.length && a.every(x => b.includes(x));
 

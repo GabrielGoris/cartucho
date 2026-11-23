@@ -11,6 +11,7 @@ import { absUrl } from '../catalog';
 import { type Adapter, type AdapterContext, adapterById, adapterForDir } from './adapters';
 import type { Unlock } from './saves';
 import { tt } from '@shared/i18n';
+import { steamManifest } from '../steam';
 
 const ADAPTER_CONSOLE: Record<string, ConsoleId> = { 'unleashed-recomp': 'x360', 'marathon-recomp': 'x360', sonic3air: 'other', rsdkv4: 'other' };
 
@@ -121,7 +122,7 @@ export class AchievementService {
     const id = randomUUID();
     this.db.prepare(`INSERT INTO installed_game (id, catalog_id, title, console, install_dir, adapter, added_at, exe, source_repo, release_json, version, managed, manifest_json)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-      id, cat?.id ?? null, extra.title ?? cat?.title ?? adapter?.label ?? basename(dir),
+      id, cat?.id ?? null, extra.title ?? cat?.title ?? adapter?.label ?? steamManifest(dir, exe)?.name ?? basename(dir),
       extra.console ?? cat?.console ?? (adapter ? ADAPTER_CONSOLE[adapter.id] : 'other') ?? 'other', dir, adapter?.id ?? null, Date.now(),
       exe, extra.sourceRepo ?? cat?.repo ?? null, extra.release ? JSON.stringify(extra.release) : null, extra.release?.tag ?? null,
       extra.managed ? 1 : 0, extra.manifest ? JSON.stringify(extra.manifest) : null);
@@ -220,6 +221,11 @@ export class AchievementService {
     if (file) { unwatchFile(file); this.watching.delete(id); }
   }
   async start() {
+    for (const r of this.db.prepare('SELECT id, title, install_dir, exe FROM installed_game WHERE catalog_id IS NULL').all() as { id: string; title: string; install_dir: string; exe: string | null }[]) {
+      if (r.title.toLowerCase() !== basename(r.install_dir).toLowerCase()) continue;
+      const name = steamManifest(r.install_dir, r.exe)?.name;
+      if (name && name !== r.title) this.db.prepare('UPDATE installed_game SET title = ? WHERE id = ?').run(name, r.id);
+    }
     for (const r of this.db.prepare(`SELECT g.id, g.install_dir, g.exe, g.source_repo, c.repo FROM installed_game g LEFT JOIN catalog_game c ON c.id = g.catalog_id
         WHERE g.exe IS NULL OR (g.source_repo IS NULL AND c.repo IS NOT NULL)`).all() as { id: string; install_dir: string; exe: string | null; source_repo: string | null; repo: string | null }[]) {
       let exe = r.exe;

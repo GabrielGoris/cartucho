@@ -17,7 +17,7 @@ import { createEmulatorResolver } from './emulators';
 import { WebPane } from './web';
 import { InGame } from './ingame';
 import { Win32 } from './win32';
-import { readBinds } from '@shared/binds';
+import { bindsFor, readAllBinds } from '@shared/binds';
 import { Translator } from './translate';
 import { WinCtl } from './window';
 import { Background, playArg, startHidden } from './background';
@@ -145,7 +145,7 @@ void app.whenReady().then(async () => {
     visible: () => !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized(),
     focused: () => !!win && !win.isDestroyed() && win.isVisible() && win.isFocused(),
     sameScreen: () => bg?.prefs().screen ?? true,
-    binds: () => readBinds(kvGet(db, 'pad.binds')),
+    binds: id => bindsFor(readAllBinds(kvGet(db, 'pad.binds')), id),
     dirsOf: id => { try { const g = ach.getGame(id); return [g.installDir, g.exe ? dirname(g.exe) : ''].filter(Boolean); } catch { return []; } },
   });
   if (process.platform === 'win32') ingame.setActive(true);

@@ -37,6 +37,15 @@ public static class CartuchoWin {
   [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
   [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr h);
   [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+  [StructLayout(LayoutKind.Sequential)] public struct XPAD { public ushort wButtons; public byte bLeftTrigger; public byte bRightTrigger; public short sThumbLX, sThumbLY, sThumbRX, sThumbRY; }
+  [StructLayout(LayoutKind.Sequential)] public struct XSTATE { public uint dwPacketNumber; public XPAD Gamepad; }
+  [DllImport("xinput1_4.dll", EntryPoint = "#100")] static extern uint XGetEx14(uint i, out XSTATE s);
+  [DllImport("xinput1_3.dll", EntryPoint = "#100")] static extern uint XGetEx13(uint i, out XSTATE s);
+  [DllImport("xinput9_1_0.dll", EntryPoint = "XInputGetState")] static extern uint XGet910(uint i, out XSTATE s);
+  static int xmode = 0;
+  static System.Threading.Thread xthread;
+  static readonly object outLock = new object();
+  static System.IO.StreamWriter Out;
 
   public static void Init() { try { SetThreadDpiAwarenessContext(new IntPtr(-4)); } catch { } }
 
@@ -52,24 +61,27 @@ public static class CartuchoWin {
     uint pid; GetWindowThreadProcessId(h, out pid); RECT r; GetWindowRect(h, out r); var m = Mon(h);
     return "{\"hwnd\":" + h.ToInt64() + ",\"pid\":" + pid + ",\"path\":" + Q(PathOf(pid)) + ",\"title\":" + Q(TitleOf(h)) + ",\"r\":" + R(r) + ",\"m\":" + R(m.rcMonitor) + "}";
   }
+  [DllImport("user32.dll")] static extern void SwitchToThisWindow(IntPtr h, bool alt);
+  static bool Front(IntPtr h) { System.Threading.Thread.Sleep(40); return GetForegroundWindow() == h; }
   static bool Focus(IntPtr h) {
     if (IsIconic(h)) ShowWindow(h, 9);
-    IntPtr fg = GetForegroundWindow();
-    if (fg == h) return true;
-    uint pid; uint ft = GetWindowThreadProcessId(fg, out pid), tt = GetWindowThreadProcessId(h, out pid), me = GetCurrentThreadId();
+    if (GetForegroundWindow() == h) return true;
+    uint pid; uint ft = GetWindowThreadProcessId(GetForegroundWindow(), out pid), tt = GetWindowThreadProcessId(h, out pid), me = GetCurrentThreadId();
     bool a1 = ft != 0 && ft != me && AttachThreadInput(me, ft, true);
     bool a2 = tt != 0 && tt != me && tt != ft && AttachThreadInput(me, tt, true);
     BringWindowToTop(h);
-    bool ok = SetForegroundWindow(h);
+    SetForegroundWindow(h);
     if (a1) AttachThreadInput(me, ft, false);
     if (a2) AttachThreadInput(me, tt, false);
-    if (GetForegroundWindow() != h) {
-      keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero);
-      BringWindowToTop(h);
-      ok = SetForegroundWindow(h);
-    }
-    return ok && GetForegroundWindow() == h;
+    if (Front(h)) return true;
+    keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero);
+    BringWindowToTop(h);
+    SetForegroundWindow(h);
+    if (Front(h)) return true;
+    SwitchToThisWindow(h, true);
+    return Front(h);
   }
+  static string Beep(string path) { try { new System.Media.SoundPlayer(path).Play(); return "true"; } catch (Exception) { return "false"; } }
   static string Shot(string path) {
     var m = Mon(GetForegroundWindow()).rcMonitor;
     int w = m.R - m.L, hh = m.B - m.T;
@@ -80,6 +92,46 @@ public static class CartuchoWin {
       bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
     }
     return "{\"m\":" + R(m) + "}";
+  }
+
+  static uint XGet(uint i, out XSTATE s) {
+    s = new XSTATE();
+    if (xmode <= 1) { try { uint r = XGetEx14(i, out s); xmode = 1; return r; } catch (Exception) { xmode = 2; } }
+    if (xmode == 2) { try { return XGetEx13(i, out s); } catch (Exception) { xmode = 3; } }
+    if (xmode == 3) { try { return XGet910(i, out s); } catch (Exception) { xmode = -1; } }
+    return 1167;
+  }
+  static void Write(string s) { lock (outLock) { Out.WriteLine(s); } }
+  static void XLoop() {
+    var last = new int[] { -1, -1, -1, -1 };
+    var next = new int[4];
+    while (true) {
+      int now = Environment.TickCount;
+      for (uint i = 0; i < 4; i++) {
+        if (last[i] == -2 && now - next[i] < 0) continue;
+        XSTATE s;
+        uint rc = XGet(i, out s);
+        if (xmode == -1) { Write("pad -1 0"); return; }
+        if (rc != 0) { if (last[i] != -2) { last[i] = -2; Write("pad " + i + " -1"); } next[i] = now + 1000; continue; }
+        int v = s.Gamepad.wButtons | (s.Gamepad.bLeftTrigger > 128 ? 0x10000 : 0) | (s.Gamepad.bRightTrigger > 128 ? 0x20000 : 0);
+        if (v != last[i]) { last[i] = v; Write("pad " + i + " " + v + " " + xmode); }
+      }
+      System.Threading.Thread.Sleep(8);
+    }
+  }
+  public static void Serve() {
+    var utf8 = new UTF8Encoding(false);
+    var input = new System.IO.StreamReader(Console.OpenStandardInput(), utf8);
+    Out = new System.IO.StreamWriter(Console.OpenStandardOutput(), utf8);
+    Out.AutoFlush = true;
+    string l;
+    while ((l = input.ReadLine()) != null) {
+      int i = l.IndexOf(' ');
+      if (i < 1) continue;
+      string r;
+      try { r = Run(l.Substring(i + 1)); } catch (Exception) { r = "null"; }
+      Write(l.Substring(0, i) + " " + r);
+    }
   }
 
   public static string Run(string line) {
@@ -104,6 +156,11 @@ public static class CartuchoWin {
       }
       case "front": return Focus(new IntPtr(long.Parse(a[1]))) ? "true" : "false";
       case "shot": return Shot(line.Substring(5));
+      case "beep": return Beep(line.Substring(5));
+      case "xinput": {
+        if (xthread == null) { xthread = new System.Threading.Thread(XLoop); xthread.IsBackground = true; xthread.Start(); }
+        return "true";
+      }
     }
     return "null";
   }
@@ -115,19 +172,7 @@ Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
 ${CS}
 '@
 [CartuchoWin]::Init()
-$utf8 = New-Object System.Text.UTF8Encoding $false
-$in = New-Object System.IO.StreamReader([Console]::OpenStandardInput(), $utf8)
-$out = New-Object System.IO.StreamWriter([Console]::OpenStandardOutput(), $utf8)
-$out.AutoFlush = $true
-while ($true) {
-  $l = $in.ReadLine()
-  if ($l -eq $null) { break }
-  $i = $l.IndexOf(' ')
-  if ($i -lt 1) { continue }
-  $id = $l.Substring(0, $i)
-  try { $r = [CartuchoWin]::Run($l.Substring($i + 1)) } catch { $r = 'null' }
-  $out.WriteLine($id + ' ' + $r)
-}
+[CartuchoWin]::Serve()
 `;
 
 export class Win32 {
@@ -137,6 +182,7 @@ export class Win32 {
   private buf = '';
   private dead = 0;
   err = '';
+  private onPad: ((slot: number, mask: number, mode: number) => void) | null = null;
 
   constructor(private dir: string) {}
 
@@ -152,6 +198,7 @@ export class Win32 {
       this.buf += d;
       for (let i; (i = this.buf.indexOf('\n')) >= 0;) {
         const line = this.buf.slice(0, i).trim(); this.buf = this.buf.slice(i + 1);
+        if (line.startsWith('pad ')) { const [, slot, mask, mode] = line.split(' ').map(Number); this.onPad?.(slot!, mask!, mode ?? 0); continue; }
         const sp = line.indexOf(' '); if (sp < 0) continue;
         const f = this.wait.get(Number(line.slice(0, sp))); if (!f) continue;
         this.wait.delete(Number(line.slice(0, sp)));
@@ -160,7 +207,7 @@ export class Win32 {
     });
     ps.stderr.setEncoding('utf8');
     ps.stderr.on('data', (d: string) => { this.err = (this.err + d).slice(-2000); });
-    const gone = () => { if (this.ps === ps) { this.ps = null; this.dead++; log('ajudante do Windows parou', this.err.trim().slice(-400)); } for (const f of this.wait.values()) f(null); this.wait.clear(); };
+    const gone = () => { if (this.ps === ps && this.onPad) setTimeout(() => { if (!this.ps && this.onPad) void this.ask('xinput'); }, 2000); if (this.ps === ps) { this.ps = null; this.dead++; log('ajudante do Windows parou', this.err.trim().slice(-400)); } for (const f of this.wait.values()) f(null); this.wait.clear(); };
     ps.on('exit', gone);
     ps.on('error', gone);
     this.ps = ps;
@@ -184,7 +231,9 @@ export class Win32 {
   monitor(hwnd: number) { return this.ask<Mon>(`mon ${Math.trunc(hwnd)}`); }
   place(hwnd: number, r: Rect) { return this.ask<boolean>(`place ${Math.trunc(hwnd)} ${r.map(Math.round).join(' ')}`); }
   front(hwnd: number) { return this.ask<boolean>(`front ${Math.trunc(hwnd)}`); }
+  beep(file: string) { return this.ask<boolean>(`beep ${file.replace(/[\r\n]/g, '')}`); }
   shot(file: string) { return this.ask<{ m: Rect }>(`shot ${file.replace(/[\r\n]/g, '')}`, 15_000); }
+  xinput(cb: (slot: number, mask: number, mode: number) => void) { this.onPad = cb; return this.ask<boolean>('xinput', 20_000); }
   stop() { this.ps?.kill(); this.ps = null; }
 }
 
@@ -204,4 +253,11 @@ export function ownedBy(w: Pick<Win, 'pid' | 'path'>, pids: Set<number>, dirs: s
   const k = (x: string) => x.replace(/[\\/]+/g, '/').toLowerCase().replace(/\/$/, '');
   const p = k(w.path);
   return !!p && dirs.filter(Boolean).some(d => p.startsWith(k(d) + '/'));
+}
+
+const XBITS: [number, number][] = [[0x0001, 12], [0x0002, 13], [0x0004, 14], [0x0008, 15], [0x0010, 9], [0x0020, 8], [0x0040, 10], [0x0080, 11], [0x0100, 4], [0x0200, 5], [0x0400, 16], [0x1000, 0], [0x2000, 1], [0x4000, 2], [0x8000, 3], [0x10000, 6], [0x20000, 7]];
+export function xinputButtons(mask: number) {
+  const out = Array<boolean>(17).fill(false);
+  for (const [bit, i] of XBITS) if (mask & bit) out[i] = true;
+  return out;
 }

@@ -64,6 +64,9 @@ export function App() {
   const syncLang = useMutation(trpc.system.setLang.mutationOptions());
   useEffect(() => { syncLang.mutate({ lang: getLang() }); }, []);
   const [away, setAway] = useState<string | null>(null);
+  const [winFocus, setWinFocus] = useState(() => document.hasFocus());
+  useEffect(() => { const on = () => setWinFocus(true), off = () => setWinFocus(false); addEventListener('focus', on); addEventListener('blur', off); return () => { removeEventListener('focus', on); removeEventListener('blur', off); }; }, []);
+  useSubscription(trpc.ingame.onShot.subscriptionOptions(undefined, { onData: () => void qc.invalidateQueries({ queryKey: trpc.ingame.shots.pathKey() }) }));
   useSubscription(trpc.ingame.onSummon.subscriptionOptions(undefined, { onData: title => { sfx.play('ok'); setAway(title); } }));
   const back = () => { sfx.play('ok'); setAway(null); resume.mutate(); };
   useEffect(() => { const f = () => setAway(null); addEventListener('blur', f); return () => removeEventListener('blur', f); }, []);
@@ -149,7 +152,7 @@ export function App() {
     void askConfirm({ title: tt('Cartucho {0} pronto', { 0: updReady }), text: tt('A atualização já foi baixada. Reiniciar agora? O Cartucho fecha, instala e abre de novo sozinho em alguns segundos. Se preferir deixar para depois, ela entra quando você fechar o Cartucho.'), ok: tt('Reiniciar agora'), cancel: tt('Depois') })
       .then(y => { if (y) installUpd.mutate(); });
   }, [updReady, gameOpen, booting]);
-  const stageMode = inside || all || gameOpen ? 'hidden' : booting || page === 'act' ? 'behind' : 'stage';
+  const stageMode = inside || all || (gameOpen && !winFocus) ? 'hidden' : booting || page === 'act' ? 'behind' : 'stage';
   const askPicker = picker || (!s.picked && !booting && !inside && !settingsOpen && page === 'stage');
 
   return (

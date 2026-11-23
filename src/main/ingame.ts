@@ -1,14 +1,14 @@
 import { EventEmitter } from 'node:events';
-import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
-import { BrowserWindow, desktopCapturer, type Display, ipcMain, nativeImage, type NativeImage, screen, shell } from 'electron';
+import { app, BrowserWindow, desktopCapturer, type Display, ipcMain, nativeImage, type NativeImage, screen, shell } from 'electron';
 import { type Binds, DEFAULT_BINDS, HOLD, padTokens } from '@shared/binds';
-import { moveTo, ownedBy, type Rect, type Win, type Win32 } from './win32';
+import { moveTo, ownedBy, type Rect, type Win, type Win32, xinputButtons } from './win32';
 import { tt } from '@shared/i18n';
 import { log } from './log';
 
 export interface PadState { index: number; id: string; mapping: string; b: string }
-export type Action = 'summon' | 'shot';
+export type Action = 'summon' | 'shot' | 'arm';
 
 const PAD_PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:transparent"><script>
 const { ipcRenderer } = require('electron');
@@ -17,7 +17,7 @@ setInterval(() => {
   const s = [...navigator.getGamepads()].filter(Boolean).map(p => ({ index: p.index, id: p.id, mapping: p.mapping, b: p.buttons.map(x => (x.pressed || x.value > 0.5 ? 1 : 0)).join('') }));
   const k = JSON.stringify(s);
   if (k !== last) { last = k; ipcRenderer.send('cartucho:pads', s); }
-}, 40);
+}, 16);
 </script>`;
 
 export const padKeys = (p: PadState) => padTokens(p, [...p.b].map(v => v === '1'));
@@ -26,10 +26,10 @@ export class Combos {
   private down = new Map<number, Set<string>>();
   private held = new Map<number, number>();
 
-  constructor(private binds: () => Binds = () => DEFAULT_BINDS) {}
+  constructor(private binds: (id: string) => Binds = () => DEFAULT_BINDS) {}
 
-  feed(index: number, now: Set<string>, at = Date.now()): Action[] {
-    const b = this.binds(), before = this.down.get(index) ?? now, out: Action[] = [];
+  feed(index: number, now: Set<string>, at = Date.now(), id = ''): Action[] {
+    const b = this.binds(id), before = this.down.get(index) ?? now, out: Action[] = [];
     this.down.set(index, now);
     const has = (s: Set<string>, k: string[]) => k.length > 0 && k.every(x => s.has(x));
     const sNow = has(now, b.summon), extra = [...now].some(k => !b.summon.includes(k));
@@ -37,6 +37,10 @@ export class Combos {
     else if (extra) this.held.set(index, -1);
     else if (!has(before, b.summon)) this.held.set(index, at);
     if (has(now, b.shot) && !has(before, b.shot)) out.push('shot');
+    else if (b.shot.length > 1) {
+      const part = (k: Set<string>) => [...k].filter(x => b.shot.includes(x)).length;
+      if (part(now) > part(before) && part(now) < b.shot.length) out.push('arm');
+    }
     return [...out, ...this.tick(at)];
   }
 
@@ -71,17 +75,7 @@ b{display:block;font-size:17px;color:#ff4fa8}
 span{display:block;font-size:14px;opacity:.85;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
 @keyframes in{from{transform:translateY(30px);opacity:0}}
 @keyframes out{to{transform:translateY(20px);opacity:0}}
-</style><div class="t"><img src="data:image/jpeg;base64,${thumb}"><div><b>📷 ${esc(label)}</b><span>${esc(title)}</span></div></div><script>
-try {
-  const a = new AudioContext(), n = a.sampleRate * .09, buf = a.createBuffer(1, n, a.sampleRate), d = buf.getChannelData(0);
-  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3);
-  const s = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
-  f.type = 'highpass'; f.frequency.value = 1800; g.gain.value = .5;
-  s.buffer = buf; s.connect(f); f.connect(g); g.connect(a.destination); s.start();
-  const o = a.createOscillator(), og = a.createGain(); o.frequency.value = 2400; og.gain.setValueAtTime(.12, a.currentTime + .06); og.gain.exponentialRampToValueAtTime(.001, a.currentTime + .14);
-  o.connect(og); og.connect(a.destination); o.start(a.currentTime + .06); o.stop(a.currentTime + .15);
-} catch {}
-</script>`;
+</style><div class="t">${thumb ? `<img src="data:image/jpeg;base64,${thumb}">` : ''}<div><b>${thumb ? '📷 ' : '⚠ '}${esc(label)}</b><span>${esc(title)}</span></div></div>`;
 
 export interface InGameDeps {
   root: string;
@@ -95,7 +89,7 @@ export interface InGameDeps {
   focused: () => boolean;
   sameScreen: () => boolean;
   dirsOf: (id: string) => string[];
-  binds: () => Binds;
+  binds: (padId: string) => Binds;
 }
 
 export class InGame {
@@ -106,6 +100,11 @@ export class InGame {
   private timer: NodeJS.Timeout | null = null;
   private game: number | null = null;
   private follow = 0;
+  private seen = new Set<string>();
+  private pre: Promise<{ file: string; at: number } | null> | null = null;
+  private preAt = 0;
+  private summonAt = 0;
+  private summonTitle = '';
 
   constructor(private d: InGameDeps) {
     this.combos = new Combos(d.binds);
@@ -114,9 +113,22 @@ export class InGame {
 
   get root() { return this.d.root; }
 
+  private xid = '';
+  private xon = false;
+  private xseen = new Set<number>();
+
+  private onXinput(slot: number, mask: number, mode: number) {
+    if (slot < 0) { log('XInput indisponível neste Windows: os atalhos usam só o leitor do Chromium'); this.xon = false; return; }
+    this.xon = true;
+    if (mask < 0) { this.xseen.delete(slot); this.combos.feed(100 + slot, new Set(), Date.now(), this.xid); return; }
+    if (!this.xseen.has(slot)) { this.xseen.add(slot); log(`controle XInput ${slot + 1} lido direto pelo Windows`, mode === 3 ? '(sem o botão Xbox: XInput antigo)' : ''); }
+    this.run(this.combos.feed(100 + slot, padTokens({ id: this.xid, mapping: 'standard' }, xinputButtons(mask)), Date.now(), this.xid));
+    this.schedule();
+  }
+
   setActive(on: boolean) {
     if (on && !this.pad) {
-      this.d.w32.warm();
+      void this.d.w32.xinput((a, b, c) => this.onXinput(a, b, c)).then(ok => { if (!ok) log('não deu para ler o XInput direto; os atalhos usam só o leitor do Chromium'); });
       const a = screen.getPrimaryDisplay().workArea;
       this.pad = new BrowserWindow({
         width: 1, height: 1, x: a.x + a.width - 1, y: a.y + a.height - 1, frame: false, transparent: true, resizable: false, movable: false,
@@ -137,7 +149,13 @@ export class InGame {
   }
 
   onPads(list: PadState[]) {
-    for (const p of list) this.run(this.combos.feed(p.index, padKeys(p)));
+    for (const p of list) {
+      if (!this.seen.has(p.id)) { this.seen.add(p.id); log('controle visto:', p.id, p.mapping || 'genérico', `${p.b.length} botões`); }
+      const xi = p.mapping === 'standard' && !/vendor:/i.test(p.id);
+      if (xi) this.xid = p.id;
+      if (xi && this.xon) continue;
+      this.run(this.combos.feed(p.index, padKeys(p), Date.now(), p.id));
+    }
     this.schedule();
   }
 
@@ -148,14 +166,35 @@ export class InGame {
   }
 
   private run(actions: Action[]) {
-    if (!actions.length || this.d.focused()) return;
+    if (!actions.length) return;
+    const late = actions.includes('shot') && Date.now() - this.summonAt < 4000;
+    if (this.d.focused() && !late) { if (actions.includes('shot')) log('atalho de captura ignorado: o Cartucho está em foco'); return; }
     for (const a of actions) {
       if (a === 'summon') void this.summon();
-      else void this.capture();
+      else if (a === 'arm') this.arm();
+      else if (late) { log('atalho de captura completado depois de o Cartucho aparecer: captura e volta para o jogo'); void this.lateShot(); }
+      else { log('atalho de captura apertado'); void this.capture(); }
     }
   }
 
+  private async lateShot() {
+    if (this.pre) { await this.capture(true); await this.back(); return; }
+    await this.back();
+    await new Promise(r => setTimeout(r, 350));
+    await this.capture(true);
+  }
+
+  private arm() {
+    const at = Date.now();
+    if (this.pre && at - this.preAt < 300) return;
+    const file = join(app.getPath('temp'), `cartucho-pre-${process.pid}-${at}.png`);
+    void this.pre?.then(x => { if (x) try { unlinkSync(x.file); } catch { } });
+    this.preAt = at;
+    this.pre = this.d.w32.shot(file).then(r => (r && existsSync(file) ? { file, at } : null), () => null);
+  }
+
   async summon() {
+    this.summonAt = Date.now();
     const fg = await this.d.w32.foreground();
     if (fg && fg.pid !== process.pid) this.game = fg.hwnd;
     const title = this.d.current()?.title ?? (fg && fg.pid !== process.pid ? fg.title : '') ?? '';
@@ -163,6 +202,7 @@ export class InGame {
     const own = this.d.own();
     const ok = own ? await this.d.w32.front(own) : null;
     this.d.refocus();
+    this.summonTitle = title;
     log('Cartucho chamado pelo controle', title, ok === false ? '(sem foco)' : '');
     this.events.emit('summon', title);
   }
@@ -218,13 +258,14 @@ export class InGame {
     return screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   }
 
-  async capture() {
+  async capture(late = false) {
     if (this.busy) return null;
     this.busy = true;
+    const pre = this.pre; this.pre = null;
     try {
       const fg = await this.d.w32.foreground();
-      if (fg && fg.pid === process.pid) return null;
-      const title = this.d.current()?.title || fg?.title?.trim() || 'Cartucho';
+      if (!late && fg && fg.pid === process.pid) { log('captura ignorada: o Cartucho está na frente'); return null; }
+      const title = this.d.current()?.title || (late ? this.summonTitle : fg?.pid !== process.pid ? fg?.title?.trim() : '') || 'Cartucho';
       const dir = this.folder(title);
       mkdirSync(dir, { recursive: true });
       const base = stamp();
@@ -232,7 +273,10 @@ export class InGame {
       for (let n = 2; existsSync(file); n++) file = join(dir, `${base} (${n}).png`);
       const d = await this.display(fg);
       let img: NativeImage | null = null;
-      if (await this.d.w32.shot(file) && existsSync(file)) img = nativeImage.createFromPath(file);
+      const early = pre ? await pre : null;
+      if (early && Date.now() - early.at < 4500) { copyFileSync(early.file, file); img = nativeImage.createFromPath(file); }
+      if (early) try { unlinkSync(early.file); } catch { }
+      if ((!img || img.isEmpty()) && await this.d.w32.shot(file) && existsSync(file)) img = nativeImage.createFromPath(file);
       if (!img || img.isEmpty()) {
         const size = { width: Math.round(d.size.width * d.scaleFactor), height: Math.round(d.size.height * d.scaleFactor) };
         const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: size });
@@ -242,16 +286,18 @@ export class InGame {
         writeFileSync(file, img.toPNG());
       }
       this.toast(d, img, title, tt('Captura salva'));
-      log('captura salva', file);
+      log('captura salva', file, early ? '(do instante do primeiro botão)' : '');
       this.events.emit('shot', { title, file });
       return file;
     } catch (e) {
-      log('captura falhou', e instanceof Error ? e.message : String(e), this.d.w32.err.trim().slice(-300));
+      const why = e instanceof Error ? e.message : String(e);
+      log('captura falhou', why, this.d.w32.err.trim().slice(-300));
+      try { this.toast(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()), null, why, tt('Não deu para capturar a tela')); } catch { }
       return null;
     } finally { this.busy = false; }
   }
 
-  private toast(d: Display, img: NativeImage, title: string, label: string) {
+  private toast(d: Display, img: NativeImage | null, title: string, label: string) {
     const W = 460, H = 112, a = d.workArea;
     const w = new BrowserWindow({
       width: W, height: H, x: Math.round(a.x + (a.width - W) / 2), y: a.y + a.height - H - 48, frame: false, transparent: true, resizable: false, movable: false,
@@ -261,10 +307,37 @@ export class InGame {
     w.setAlwaysOnTop(true, 'screen-saver');
     w.setIgnoreMouseEvents(true);
     w.webContents.on('will-navigate', e => e.preventDefault());
-    const thumb = img.resize({ height: 152 }).toJPEG(80).toString('base64');
+    const thumb = img ? img.resize({ height: 152 }).toJPEG(80).toString('base64') : '';
+    let shown = false;
+    const show = () => {
+      if (shown || w.isDestroyed()) return;
+      shown = true;
+      w.showInactive(); w.setAlwaysOnTop(true, 'screen-saver'); w.moveTop();
+      setTimeout(() => { if (!w.isDestroyed()) w.destroy(); }, 3000);
+    };
+    w.once('ready-to-show', show);
+    w.webContents.once('did-finish-load', () => setTimeout(show, 50));
+    setTimeout(() => { if (!shown) { log('aviso da captura demorou para abrir'); show(); } }, 1500);
     void w.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(toastPage(thumb, title, label))}`);
-    w.once('ready-to-show', () => { if (!w.isDestroyed()) w.showInactive(); });
-    setTimeout(() => { if (!w.isDestroyed()) w.destroy(); }, 3000);
+    if (img) void this.d.w32.beep(this.shutter());
+  }
+
+  private shutterFile = '';
+  private shutter() {
+    if (this.shutterFile && existsSync(this.shutterFile)) return this.shutterFile;
+    const rate = 22050, n = Math.round(rate * 0.16), data = Buffer.alloc(n * 2);
+    for (let i = 0; i < n; i++) {
+      const t = i / rate, noise = (Math.random() * 2 - 1) * Math.pow(Math.max(0, 1 - t / 0.09), 3) * 0.45;
+      const click = t > 0.06 && t < 0.15 ? Math.sin(2 * Math.PI * 2400 * t) * 0.12 * Math.max(0, 1 - (t - 0.06) / 0.09) : 0;
+      data.writeInt16LE(Math.round(Math.max(-1, Math.min(1, noise + click)) * 32767), i * 2);
+    }
+    const head = Buffer.alloc(44);
+    head.write('RIFF', 0); head.writeUInt32LE(36 + data.length, 4); head.write('WAVE', 8); head.write('fmt ', 12);
+    head.writeUInt32LE(16, 16); head.writeUInt16LE(1, 20); head.writeUInt16LE(1, 22); head.writeUInt32LE(rate, 24);
+    head.writeUInt32LE(rate * 2, 28); head.writeUInt16LE(2, 32); head.writeUInt16LE(16, 34); head.write('data', 36); head.writeUInt32LE(data.length, 40);
+    this.shutterFile = join(app.getPath('temp'), 'cartucho-shutter.wav');
+    writeFileSync(this.shutterFile, Buffer.concat([head, data]));
+    return this.shutterFile;
   }
 
   list(title: string) {

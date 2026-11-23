@@ -1,9 +1,10 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { type DB, kvGet, kvSet } from '../db';
 import type { Fetch } from '../ports/github';
 import { type Artwork, artPlatform, cleanTitle, looseKey } from './service';
 import { tt } from '@shared/i18n';
+import { steamManifest } from '../steam';
 
 export interface Score { value: number; by: 'Metacritic' | 'OpenCritic' | 'IGDB'; url: string | null; platform: string | null; via: 'Wikidata' | 'Steam' | 'IGDB' }
 export interface GameInfo { overview: string | null; lang: 'pt' | 'en' | null; developer: string | null; year: number | null; score: Score | null; ttb?: Ttb | null; lbPending?: boolean }
@@ -142,20 +143,7 @@ export function steamAppId(installDir?: string | null, exe?: string | null): str
   for (const d of dirs) {
     try { const t = readFileSync(join(d, 'steam_appid.txt'), 'utf8').trim(); if (/^\d+$/.test(t)) return t; } catch { }
   }
-  for (const p of [exe, installDir]) {
-    const m = p?.match(/^(.*?[\\/]steamapps)[\\/]common[\\/]([^\\/]+)/i);
-    if (!m) continue;
-    const apps = m[1]!, folder = m[2]!.toLowerCase();
-    let files: string[] = [];
-    try { files = readdirSync(apps).filter(f => /^appmanifest_\d+\.acf$/i.test(f)); } catch { continue; }
-    for (const f of files) {
-      let t = '';
-      try { t = readFileSync(join(apps, f), 'utf8'); } catch { continue; }
-      const dir = t.match(/"installdir"\s+"([^"]+)"/i)?.[1], id = t.match(/"appid"\s+"(\d+)"/i)?.[1];
-      if (dir && id && dir.toLowerCase() === folder) return id;
-    }
-  }
-  return null;
+  return steamManifest(exe, installDir)?.appid ?? null;
 }
 
 const ENT: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };

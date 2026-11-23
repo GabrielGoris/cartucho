@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Combos, padKeys, safeName } from '../src/main/ingame';
-import { HOLD, readBinds } from '../src/shared/binds';
-import { moveTo, ownedBy } from '../src/main/win32';
+import { bindsFor, HOLD, readAllBinds } from '../src/shared/binds';
+import { moveTo, ownedBy, xinputButtons } from '../src/main/win32';
 import { mergeSessions } from '../src/main/play';
 
 const xbox = (pressed: number[]) => ({ index: 0, id: 'Xbox Wireless Controller', mapping: 'standard', b: Array.from({ length: 18 }, (_, i) => (pressed.includes(i) ? '1' : '0')).join('') });
@@ -11,13 +11,13 @@ describe('atalhos do controle durante o jogo', () => {
   it('o Cartucho só aparece com o Home segurado por 1 s', () => {
     const c = new Combos();
     expect(c.feed(0, padKeys(xbox([])), 0)).toEqual([]);
-    expect(c.feed(0, padKeys(xbox([16])), 100)).toEqual([]);
+    expect(c.feed(0, padKeys(xbox([16])), 100)).toEqual(['arm']);
     expect(c.next(100)).toBe(HOLD);
     expect(c.tick(1000)).toEqual([]);
     expect(c.tick(100 + HOLD)).toEqual(['summon']);
     expect(c.tick(5000)).toEqual([]);
     expect(c.feed(0, padKeys(xbox([])), 5100)).toEqual([]);
-    expect(c.feed(0, padKeys(xbox([16])), 6000)).toEqual([]);
+    expect(c.feed(0, padKeys(xbox([16])), 6000)).toEqual(['arm']);
     expect(c.feed(0, padKeys(xbox([])), 6400)).toEqual([]);
     expect(c.tick(9000)).toEqual([]);
     expect(c.next(9000)).toBeNull();
@@ -29,23 +29,25 @@ describe('atalhos do controle durante o jogo', () => {
   it('captura no atalho padrão (Home + RB) sem chamar o Cartucho', () => {
     const c = new Combos();
     c.feed(0, padKeys(xbox([])), 0);
-    expect(c.feed(0, padKeys(xbox([16])), 10)).toEqual([]);
+    expect(c.feed(0, padKeys(xbox([16])), 10)).toEqual(['arm']);
     expect(c.feed(0, padKeys(xbox([16, 5])), 200)).toEqual(['shot']);
     expect(c.tick(5000)).toEqual([]);
     expect(c.feed(0, padKeys(xbox([16, 5])), 5100)).toEqual([]);
   });
 
   it('atalhos configurados, inclusive botões extras e adaptador de PS2', () => {
-    const binds = { summon: ['#17'], shot: ['Select', 'Start'] };
-    const c = new Combos(() => binds);
+    const all = readAllBinds(JSON.stringify({ summon: ['Home'], 'Xbox Wireless Controller': { summon: ['#17'], shot: ['Select', 'Start'] }, 'Twin USB Joystick (Vendor: 0810 Product: 0001)': { shot: ['Select', 'Start'] } }));
+    const c = new Combos(id => bindsFor(all, id));
     c.feed(0, padKeys(xbox([])), 0);
-    expect(c.feed(0, padKeys(xbox([8, 9])), 10)).toEqual(['shot']);
-    expect(c.feed(0, padKeys(xbox([17])), 100)).toEqual([]);
+    expect(c.feed(0, padKeys(xbox([8, 9])), 10, 'Xbox Wireless Controller')).toEqual(['shot']);
+    expect(c.feed(0, padKeys(xbox([17])), 100, 'Xbox Wireless Controller')).toEqual([]);
     expect(c.tick(100 + HOLD)).toEqual(['summon']);
     c.feed(1, padKeys(ps2([])), 0);
-    expect(c.feed(1, padKeys(ps2([8, 9])), 10)).toEqual(['shot']);
-    expect(readBinds('{"shot":["#17","x"]}')).toEqual({ summon: ['Home'], shot: ['#17'] });
-    expect(readBinds('lixo').shot).toEqual(['Home', 'RB']);
+    expect(c.feed(1, padKeys(ps2([8, 9])), 10, 'Twin USB Joystick (Vendor: 0810 Product: 0001)')).toEqual(['shot']);
+    c.feed(2, padKeys({ ...xbox([]), index: 2 }), 0, 'Outro controle');
+    expect(c.feed(2, padKeys({ ...xbox([16, 5]), index: 2 }), 10, 'Outro controle')).toEqual(['shot']);
+    expect(bindsFor(readAllBinds('{"p":{"shot":["#17","x"]}}'), 'p')).toEqual({ summon: ['Home'], shot: ['#17'] });
+    expect(bindsFor(readAllBinds('lixo'), 'p').shot).toEqual(['Home', 'RB']);
   });
 
   it('nome da pasta das capturas sem caracteres proibidos no Windows', () => {
@@ -61,6 +63,14 @@ describe('atalhos do controle durante o jogo', () => {
     expect(ownedBy({ pid: 9, path: 'C:\\Games\\Zelda\\bin\\zelda.exe' }, new Set(), ['C:\\Games\\Zelda'])).toBe(true);
     expect(ownedBy({ pid: 9, path: 'C:\\Games\\Zelda2\\z.exe' }, new Set(), ['C:\\Games\\Zelda'])).toBe(false);
     expect(ownedBy({ pid: 9, path: '' }, new Set([9]), [])).toBe(true);
+  });
+});
+
+describe('XInput lido direto', () => {
+  it('converte os bits do XInput no layout padrão, com o botão Xbox', () => {
+    const b = xinputButtons(0x0400 | 0x0200);
+    expect(padKeys({ index: 100, id: 'x', mapping: 'standard', b: b.map(v => (v ? '1' : '0')).join('') })).toEqual(new Set(['Home', 'RB']));
+    expect(xinputButtons(0x1000 | 0x20000).flatMap((v, i) => (v ? [i] : []))).toEqual([0, 7]);
   });
 });
 
