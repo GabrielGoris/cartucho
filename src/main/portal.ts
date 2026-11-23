@@ -1,6 +1,10 @@
 import { copyFileSync, unlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { type MessageBus, sessionBus, Variant } from 'dbus-next';
+import type { MessageBus } from 'dbus-next';
+
+type Dbus = typeof import('dbus-next');
+let lib: Dbus | null = null;
+const dbus = () => (lib ??= require('dbus-next') as Dbus);
 import { tt } from '@shared/i18n';
 
 const DEST = 'org.freedesktop.portal.Desktop', ROOT = '/org/freedesktop/portal/desktop';
@@ -19,7 +23,7 @@ export class Portal {
 
   private async connect() {
     if (this.bus) return this.bus;
-    const bus = sessionBus();
+    const bus = dbus().sessionBus();
     bus.on('error', e => { this.err = String(e); if (this.bus === bus) this.bus = null; });
     if (!(bus as unknown as { name?: string }).name) await new Promise<void>((ok, fail) => { const t = setTimeout(() => fail(new Error(tt('sem conexão com o D-Bus da sessão'))), 5000); bus.once('connect', () => { clearTimeout(t); ok(); }); });
     this.bus = bus;
@@ -41,6 +45,7 @@ export class Portal {
         });
       });
       const shot = (await bus.getProxyObject(DEST, ROOT, SHOT_XML)).getInterface('org.freedesktop.portal.Screenshot');
+      const { Variant } = dbus();
       await shot.Screenshot!('', { handle_token: new Variant('s', token), interactive: new Variant('b', false), modal: new Variant('b', false) });
       const { code, uri } = await answer;
       if (code !== 0 || !uri) { this.err = code === 1 ? tt('a captura foi negada no sistema') : tt('o sistema não fez a captura ({0})', { 0: code }); return false; }
