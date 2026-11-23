@@ -9,6 +9,7 @@ import { useInfo } from '../lib/art';
 import { GameArt } from './GameArt';
 import { SearchBox } from './SearchBox';
 import type { HubGame } from '../hubs/data';
+import { tt } from '@shared/i18n';
 
 export type DFilter = 'top' | 'all' | 'new' | 'play' | 'wip' | 'inst';
 export type DSort = 'pop' | 'az' | 'year' | 'recent';
@@ -16,8 +17,8 @@ export interface DState { q: string; filter: DFilter; sort: DSort; zone: 'search
 export const initialDiscover = (): DState => ({ q: '', filter: 'top', sort: 'pop', zone: 'body', row: 0, col: 0, chip: 0, menu: false, mi: 0, grp: null });
 export interface DOpt { k: string; l: string; icon?: ReactNode }
 
-const FILTERS: [DFilter, string][] = [['top', 'Destaques'], ['all', 'Todos'], ['new', 'Novos'], ['play', 'Jogáveis'], ['wip', 'Em progresso'], ['inst', 'Instalados']];
-const SORTS: [DSort, string][] = [['pop', 'Populares'], ['az', 'A–Z'], ['year', 'Ano'], ['recent', 'Recentes']];
+const FILTERS: [DFilter, string][] = [['top', tt('Destaques')], ['all', tt('Todos')], ['new', tt('Novos')], ['play', tt('Jogáveis')], ['wip', tt('Em progresso')], ['inst', tt('Instalados')]];
+const SORTS: [DSort, string][] = [['pop', tt('Populares')], ['az', 'A–Z'], ['year', tt('Ano')], ['recent', tt('Recentes')]];
 const GAP = 26;
 const SHAPES = { tall: { COLS: 5, CARD_W: 220, ROW_H: 430, GRID_ROW: 400 }, wide: { COLS: 4, CARD_W: 290, ROW_H: 340, GRID_ROW: 310 }, square: { COLS: 5, CARD_W: 220, ROW_H: 330, GRID_ROW: 300 } };
 
@@ -33,7 +34,7 @@ function sorter(s: DSort) {
   };
 }
 
-export function Discover({ theme, cname, games: all, extra: allExtra = [], self, st, set, options, run, onOpen, onBack, hints, shape = 'tall', onTab, groupOf, groupLabel = 'Plataforma', allLabel = 'Todas', title = 'Descobrir', place, active = true, onSection, onTopEdge }: {
+export function Discover({ theme, cname, games: all, extra: allExtra = [], self, st, set, options, run, onOpen, onBack, hints, shape = 'tall', onTab, groupOf, groupLabel = tt('Plataforma'), allLabel = tt('Todas'), title = tt('Descobrir'), place, active = true, onSection, onTopEdge }: {
   theme: string; cname: string; games: HubGame[]; extra?: HubGame[]; self: boolean;
   st: DState; set: (f: (s: DState) => DState) => void;
   options: (g: HubGame) => DOpt[]; run: (k: string, g: HubGame) => void; onOpen: (g: HubGame) => void; onBack: () => void;
@@ -68,15 +69,15 @@ export function Discover({ theme, cname, games: all, extra: allExtra = [], self,
     if (st.filter === 'top') {
       const by = sorter('pop');
       const R: Row[] = [
-        { key: 'new', title: 'Novos no catálogo', items: games.filter(g => g.isNew).sort(sorter('recent')) },
-        { key: 'pop', title: 'Mais populares', items: [...games].sort(by).slice(0, 20) },
-        { key: 'full', title: 'Totalmente jogáveis', items: games.filter(g => g.status === 'full').sort(by) },
-        { key: 'play', title: 'Jogáveis', items: games.filter(g => g.status === 'play').sort(by) },
-        { key: 'wip', title: 'Em progresso', items: games.filter(g => g.status === 'wip').sort(by) },
+        { key: 'new', title: tt('Novos no catálogo'), items: games.filter(g => g.isNew).sort(sorter('recent')) },
+        { key: 'pop', title: tt('Mais populares'), items: [...games].sort(by).slice(0, 20) },
+        { key: 'full', title: tt('Totalmente jogáveis'), items: games.filter(g => g.status === 'full').sort(by) },
+        { key: 'play', title: tt('Jogáveis'), items: games.filter(g => g.status === 'play').sort(by) },
+        { key: 'wip', title: tt('Em progresso'), items: games.filter(g => g.status === 'wip').sort(by) },
       ];
       const dec = new Map<number, HubGame[]>();
       for (const g of games) { const y = g.catalog?.year; if (y) { const d = Math.floor(y / 10) * 10; dec.set(d, [...(dec.get(d) ?? []), g]); } }
-      for (const [d, L] of [...dec].sort((a, b) => a[0] - b[0])) if (L.length >= 2) R.push({ key: `d${d}`, title: `Lançados nos anos ${String(d).slice(2)}`, items: L.sort(by) });
+      for (const [d, L] of [...dec].sort((a, b) => a[0] - b[0])) if (L.length >= 2) R.push({ key: `d${d}`, title: tt('Lançados nos anos {0}', { 0: String(d).slice(2) }), items: L.sort(by) });
       const out = R.filter(r => r.items.length);
       return { rows: out.length > 1 ? out : [], grid: out.length > 1 ? [] : [...games].sort(by), suggest: [] };
     }
@@ -176,7 +177,7 @@ export function Discover({ theme, cname, games: all, extra: allExtra = [], self,
   const card = (x: HubGame, on: boolean, click: () => void) => (
     <button key={x.key} className={`dsc-c ${on ? 'on' : ''} ${x.installed ? 'inst' : ''}`} onClick={click}>
       <span className="cv-w"><GameArt title={x.title} console={x.console} platformName={x.platformName} fallback={x.coverUrl} variant="cover" />
-        {x.isNew && <span className="b new">NOVO</span>}{x.installed && <span className="b inst">INSTALADO</span>}</span>
+        {x.isNew && <span className="b new">{tt('NOVO')}</span>}{x.installed && <span className="b inst">{tt('INSTALADO')}</span>}</span>
       <span className="t">{x.title}</span>
     </button>
   );
@@ -188,9 +189,9 @@ export function Discover({ theme, cname, games: all, extra: allExtra = [], self,
         <h2>{title}<small>{cname}</small></h2>
         <div className={`dsc-q ${st.zone === 'search' ? 'f' : ''}`} onClick={focusSearch}>
           <span className="ic">⌕</span>
-          <SearchBox ref={searchRef} value={st.q} nav={false} className="dsc-qi" placeholder={`Buscar em ${place ?? cname} por nome, estúdio ou ano`}
+          <SearchBox ref={searchRef} value={st.q} nav={false} className="dsc-qi" placeholder={tt('Buscar em {0} por nome, estúdio ou ano', { 0: place ?? cname })}
             onChange={v => up({ q: v, row: 0, col: 0 })} onDone={() => up({ zone: st.q.trim() ? 'body' : 'chips' })} />
-          {st.q && <span className="cnt">{plural(grid.length, 'resultado', 'resultados')}</span>}
+          {st.q && <span className="cnt">{plural(grid.length, tt('resultado'), tt('resultados'))}</span>}
         </div>
       </div>
       <div className="dsc-chips">
@@ -198,7 +199,7 @@ export function Discover({ theme, cname, games: all, extra: allExtra = [], self,
           <button key={k} className={`${st.filter === k && !q ? 'cur' : ''} ${st.zone === 'chips' && st.chip === i ? 'on' : ''}`} onClick={() => pickChip(i)}>{l}</button>
         ))}
         <span className="sp" />
-        <button className={`sort ${st.zone === 'chips' && st.chip === FILTERS.length ? 'on' : ''}`} onClick={() => pickChip(FILTERS.length)}>Ordenar: {SORTS.find(s => s[0] === st.sort)![1]}</button>
+        <button className={`sort ${st.zone === 'chips' && st.chip === FILTERS.length ? 'on' : ''}`} onClick={() => pickChip(FILTERS.length)}>{tt('Ordenar: {0}', { 0: SORTS.find(s => s[0] === st.sort)![1] })}</button>
       </div>
 
       {hasGroups && (
@@ -229,17 +230,17 @@ export function Discover({ theme, cname, games: all, extra: allExtra = [], self,
           </div>
         ) : list.length ? (
           <>
-            {!grid.length && suggest.length > 0 && <div className="dsc-msg">Nada encontrado para “{q}”. Você quis dizer:</div>}
+            {!grid.length && suggest.length > 0 && <div className="dsc-msg">{tt('Nada encontrado para “{0}”. Você quis dizer:', { 0: q })}</div>}
             <div className="dsc-grid" style={{ transform: `translateY(-${rowTop * GRID_ROW}px)` }}>
               {list.map((x, i) => card(x, focusBody && i === idx, () => { if (focusBody && i === idx) onOpen(x); else mv({ zone: 'body', row: Math.floor(i / COLS), col: i % COLS }); }))}
             </div>
           </>
         ) : (
-          <div className="dsc-msg">{q ? `Nada encontrado para “${q}”.` : games.length ? 'Nada com esse filtro.' : `O catálogo ainda não tem jogos de ${cname}. O radar avisa quando aparecer o primeiro.`}</div>
+          <div className="dsc-msg">{q ? tt('Nada encontrado para “{0}”.', { 0: q }) : games.length ? tt('Nada com esse filtro.') : tt('O catálogo ainda não tem jogos de {0}. O radar avisa quando aparecer o primeiro.', { 0: cname })}</div>
         )}
       </div>
 
-      <aside className="dsc-det">{g ? <Detail g={g} self={self} /> : <div className="dsc-none">{plural(total, 'jogo', 'jogos')}</div>}</aside>
+      <aside className="dsc-det">{g ? <Detail g={g} self={self} /> : <div className="dsc-none">{plural(total, tt('jogo'), tt('jogos'))}</div>}</aside>
 
       {st.menu && g && (
         <div className="dsc-menu">
@@ -249,11 +250,11 @@ export function Discover({ theme, cname, games: all, extra: allExtra = [], self,
       )}
       {hints !== false && (
         <div className="dsc-ft">
-          {st.menu ? <><span><Glyph a="ok" />Confirmar</span><span><Glyph a="back" />Fechar</span></>
-            : st.zone === 'search' ? <><span><Glyph a="ok" />Digitar</span><span><Glyph a={onTab ? 'lr' : 'ud'} />Filtros</span><span><Glyph a="back" />{st.q ? 'Limpar' : 'Voltar'}</span></>
-            : st.zone === 'groups' ? <><span><Glyph a="lr" />{groupLabel}</span><span><Glyph a="ud" />Jogos</span><span><Glyph a="back" />Voltar</span></>
-            : st.zone === 'chips' ? <><span><Glyph a="lr" />Filtro</span>{onTab && <span><Glyph a="lb" /><Glyph a="rb" />Seção</span>}<span><Glyph a="ok" />Escolher</span><span><Glyph a="back" />Voltar</span></>
-            : <><span><Glyph a="ok" />Ver jogo</span><span><Glyph a="x" />Ações</span><span><Glyph a="y" />Buscar</span><span><Glyph a="lb" /><Glyph a="rb" />{onTab ? 'Seção' : 'Filtro'}</span><span><Glyph a="back" />{st.q ? 'Limpar busca' : 'Voltar'}</span></>}
+          {st.menu ? <><span><Glyph a="ok" />{tt('Confirmar')}</span><span><Glyph a="back" />{tt('Fechar')}</span></>
+            : st.zone === 'search' ? <><span><Glyph a="ok" />{tt('Digitar')}</span><span><Glyph a={onTab ? 'lr' : 'ud'} />{tt('Filtros')}</span><span><Glyph a="back" />{st.q ? tt('Limpar') : tt('Voltar')}</span></>
+            : st.zone === 'groups' ? <><span><Glyph a="lr" />{groupLabel}</span><span><Glyph a="ud" />{tt('Jogos')}</span><span><Glyph a="back" />{tt('Voltar')}</span></>
+            : st.zone === 'chips' ? <><span><Glyph a="lr" />{tt('Filtro')}</span>{onTab && <span><Glyph a="lb" /><Glyph a="rb" />{tt('Seção')}</span>}<span><Glyph a="ok" />{tt('Escolher')}</span><span><Glyph a="back" />{tt('Voltar')}</span></>
+            : <><span><Glyph a="ok" />{tt('Ver jogo')}</span><span><Glyph a="x" />{tt('Ações')}</span><span><Glyph a="y" />{tt('Buscar')}</span><span><Glyph a="lb" /><Glyph a="rb" />{onTab ? tt('Seção') : tt('Filtro')}</span><span><Glyph a="back" />{st.q ? tt('Limpar busca') : tt('Voltar')}</span></>}
         </div>
       )}
     </div>
@@ -271,13 +272,13 @@ function Detail({ g, self }: { g: HubGame; self: boolean }) {
       <h3>{g.title}</h3>
       <p className="meta">{[g.catalog?.year, g.catalog?.developer].filter(Boolean).join(' · ') || g.platformName}</p>
       <div className="pills">
-        {score && <span className={`pill score ${score.value >= 75 ? 'hi' : score.value >= 50 ? 'mid' : 'lo'}`} title={`${score.by === 'IGDB' ? 'Média da crítica (IGDB)' : `Nota do ${score.by}`}${score.platform ? ` · ${score.platform}` : ''}`}>{score.value}</span>}
-        {ttb && <span className="pill ttb" title="Tempo para zerar, média de jogadores no IGDB.com">{Math.floor(ttb)}h{ttb % 1 ? '30' : ''}</span>}
+        {score && <span className={`pill score ${score.value >= 75 ? 'hi' : score.value >= 50 ? 'mid' : 'lo'}`} title={`${score.by === 'IGDB' ? tt('Média da crítica (IGDB)') : tt('Nota do {0}', { 0: score.by })}${score.platform ? ` · ${score.platform}` : ''}`}>{score.value}</span>}
+        {ttb && <span className="pill ttb" title={tt('Tempo para zerar, média de jogadores no IGDB.com')}>{Math.floor(ttb)}h{ttb % 1 ? '30' : ''}</span>}
         {g.status && <span className={`pill ${g.status}`}>{STATUS_LABEL[g.status]}</span>}
-        {g.isNew && <span className="pill new">Novo</span>}
-        {i && <span className="pill inst">{i.missing ? 'Pasta não encontrada' : i.playMs ? `${fmtPlay(i.playMs)} jogadas` : 'Instalado'}</span>}
+        {g.isNew && <span className="pill new">{tt('Novo')}</span>}
+        {i && <span className="pill inst">{i.missing ? tt('Pasta não encontrada') : i.playMs ? tt('{0} jogadas', { 0: fmtPlay(i.playMs) }) : tt('Instalado')}</span>}
       </div>
-      {needs.text && <p className="needs"><b>Precisa:</b> {needs.text}</p>}
+      {needs.text && <p className="needs"><b>{tt('Precisa:')}</b> {needs.text}</p>}
       {self && !i && <p className="needs">{SELF_INSTALL_NOTE}</p>}
     </div>
   );

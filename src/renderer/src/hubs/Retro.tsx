@@ -17,6 +17,7 @@ import { useFeed, useHubData, type HubGame } from './data';
 import { useGameMenu } from './menu';
 import { otherConsoles } from '../stage/consoles';
 import { Obj, SHELLS, shellH, type Kind } from './shells';
+import { tt } from '@shared/i18n';
 
 type Tab = 'games' | 'disc' | 'news' | 'ach' | 'time' | 'cfg';
 interface Cfg { kind: Kind; sfx: string; boot: 'retro' | 'soft' | 'white' }
@@ -36,9 +37,9 @@ export const RETRO: Record<string, Cfg> = {
   gb: { kind: 'gb', sfx: 'square', boot: 'retro' },
   other: { kind: 'box', sfx: 'soft', boot: 'soft' },
 };
-const TABS: [Tab, string][] = [['games', 'Meus jogos'], ['disc', 'Descobrir'], ['news', 'Novidades'], ['ach', 'Conquistas'], ['time', 'Tempo'], ['cfg', 'Ajustes']];
-const FEED = { new: 'Novo no catálogo', upd: 'Versão nova', up: 'Mudou de status' } as const;
-const CFG_ROWS: Row[] = [{ key: 'dir', id: 'dir', t: 'Pasta dos jogos' }, { key: 'snd', id: 'snd', t: 'Sons' }, { key: 'radar', id: 'radar', t: 'Radar de novidades' }, { key: 'off', id: 'off', t: 'Voltar ao Cartucho' }];
+const TABS: [Tab, string][] = [['games', tt('Meus jogos')], ['disc', tt('Descobrir')], ['news', tt('Novidades')], ['ach', tt('Conquistas')], ['time', tt('Tempo')], ['cfg', tt('Ajustes')]];
+const FEED = { new: tt('Novo no catálogo'), upd: tt('Versão nova'), up: tt('Mudou de status') } as const;
+const CFG_ROWS: Row[] = [{ key: 'dir', id: 'dir', t: tt('Pasta dos jogos') }, { key: 'snd', id: 'snd', t: tt('Sons') }, { key: 'radar', id: 'radar', t: tt('Radar de novidades') }, { key: 'off', id: 'off', t: tt('Voltar ao Cartucho') }];
 const VISIBLE = 7;
 
 export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: string; tab?: 'lib' | 'cat'; onBack: () => void }) {
@@ -55,7 +56,7 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
   const up = (p: Partial<St>) => set(x => ({ ...x, ...p }));
   const [dst, setDst] = useState(initialDiscover);
   const clock = useClock();
-  const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show('Pasta dos jogos alterada'); } }));
+  const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show(tt('Pasta dos jogos alterada')); } }));
 
   useEffect(() => { setSfxProfile(cfg.sfx); const t = setTimeout(() => sfx.play('boot'), 150); return () => clearTimeout(t); }, [cfg.sfx]);
 
@@ -83,7 +84,7 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
   const rows: Row[] = tk === 'news' ? data.feed.map(f => ({ key: String(f.id), f, g: data.catalog.find(y => y.catalog?.id === f.gameId), t: f.title, s: `${FEED[f.kind]}${f.detail && !(self && f.kind === 'new') ? ` · ${f.detail}` : ''}`, v: ago(f.at) }))
     : tk === 'ach' ? data.lib.map(x => ({ key: x.key, g: x, t: x.title, v: x.installed?.achievements?.total ? `${x.installed.achievements.unlocked}/${x.installed.achievements.total}` : '—' }))
     : tk === 'time' ? byPlay.map(x => ({ key: x.key, g: x, t: x.title, v: fmtPlay(x.installed?.playMs ?? 0) || '0m', bar: (x.installed?.playMs ?? 0) / maxPlay }))
-    : tk === 'cfg' ? CFG_ROWS.map(r => ({ ...r, v: r.id === 'snd' ? (s.snd ? 'Ligados' : 'Desligados') : '' }))
+    : tk === 'cfg' ? CFG_ROWS.map(r => ({ ...r, v: r.id === 'snd' ? (s.snd ? tt('Ligados') : tt('Desligados')) : '' }))
     : [];
   const row = rows[st.li];
   const feed = useFeed(data.feed, tk === 'news' && !st.game);
@@ -116,7 +117,7 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
       if (row.id === 'dir') return pickDir.mutate();
       if (row.id === 'snd') return setSettings({ snd: !getSettings().snd });
       if (row.id === 'off') return onBack();
-      return show('O radar confere o catálogo toda vez que o Cartucho abre');
+      return show(tt('O radar confere o catálogo toda vez que o Cartucho abre'));
     }
     if (tk === 'ach') { if (achList.length) { sfx.play('ok'); up({ achOpen: !st.achOpen, ai2: 0 }); } return; }
     if (row.f) feed.done(row.f);
@@ -160,13 +161,13 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
   }, !(game || tk === 'disc'));
 
   const hints: Hint[] = tk === 'games'
-    ? (g ? [['ok', options(g)[0]!.l], ['x', 'Página do jogo'], ['y', 'Buscar'], ['rb', 'Seção'], ['back', 'Sair']] : [['ok', 'Descobrir jogos'], ['rb', 'Seção'], ['back', 'Sair']])
-    : tk === 'news' && rows.length ? [['ok', 'Ver jogo'], ['x', 'Dispensar'], ['y', 'Limpar tudo'], ['rb', 'Seção'], ['back', 'Voltar']]
-    : [['ok', tk === 'cfg' ? 'OK' : tk === 'ach' ? (st.achOpen ? 'Fechar' : 'Ver lista') : 'Abrir'], ['ud', 'Mover'], ['rb', 'Seção'], ['back', 'Voltar']];
+    ? (g ? [['ok', options(g)[0]!.l], ['x', tt('Página do jogo')], ['y', tt('Buscar')], ['rb', tt('Seção')], ['back', tt('Sair')]] : [['ok', tt('Descobrir jogos')], ['rb', tt('Seção')], ['back', tt('Sair')]])
+    : tk === 'news' && rows.length ? [['ok', tt('Ver jogo')], ['x', tt('Dispensar')], ['y', tt('Limpar tudo')], ['rb', tt('Seção')], ['back', tt('Voltar')]]
+    : [['ok', tk === 'cfg' ? 'OK' : tk === 'ach' ? (st.achOpen ? tt('Fechar') : tt('Ver lista')) : tt('Abrir')], ['ud', tt('Mover')], ['rb', tt('Seção')], ['back', tt('Voltar')]];
   const H = <div className="rh-ft">{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>;
   const off = Math.max(0, Math.min(st.li - 3, rows.length - VISIBLE));
   const line = (x: HubGame) => id === 'other' ? `${sourceOf(x)} · ${line0(x)}` : line0(x);
-  const line0 = (x: HubGame) => x.installed?.missing ? 'Pasta não encontrada' : x.installed?.running ? 'Jogando agora' : x.installed?.playMs ? `${fmtPlay(x.installed.playMs)} jogadas` : 'Ainda não jogado';
+  const line0 = (x: HubGame) => x.installed?.missing ? tt('Pasta não encontrada') : x.installed?.running ? tt('Jogando agora') : x.installed?.playMs ? tt('{0} jogadas', { 0: fmtPlay(x.installed.playMs) }) : tt('Ainda não jogado');
 
   const header = (
     <header className="rh-hd">
@@ -198,9 +199,9 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
 
   const empty = (
     <div className="rw rg-empty">
-      <b>Nenhum jogo de {c.name} instalado ainda</b>
-      <p>{data.catalog.length ? `O catálogo tem ${plural(data.catalog.length, 'jogo', 'jogos')} para este console. Procure um em Descobrir.` : `O radar avisa quando aparecer o primeiro recomp de ${c.name}.`}</p>
-      {data.catalog.length > 0 && <button className="on" onClick={() => { sfx.play('ok'); up({ tab: 1 }); }}><Glyph a="ok" />Descobrir jogos</button>}
+      <b>{tt('Nenhum jogo de {0} instalado ainda', { 0: c.name })}</b>
+      <p>{data.catalog.length ? tt('O catálogo tem {0} para este console. Procure um em Descobrir.', { 0: plural(data.catalog.length, tt('jogo'), tt('jogos')) }) : tt('O radar avisa quando aparecer o primeiro recomp de {0}.', { 0: c.name })}</p>
+      {data.catalog.length > 0 && <button className="on" onClick={() => { sfx.play('ok'); up({ tab: 1 }); }}><Glyph a="ok" />{tt('Descobrir jogos')}</button>}
     </div>
   );
 
@@ -225,7 +226,7 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
 
         {tk !== 'games' && tk !== 'disc' && (
           <div className="rw rl">
-            {tk === 'time' && <div className="rl-sum">{fmtPlay(data.playMs) || '0m'} neste console · {statsAll.reduce((a, q) => a + (q.data?.sessions ?? 0), 0)} sessões</div>}
+            {tk === 'time' && <div className="rl-sum">{tt('{0} neste console · {1} sessões', { 0: fmtPlay(data.playMs) || '0m', 1: statsAll.reduce((a, q) => a + (q.data?.sessions ?? 0), 0) })}</div>}
             {st.achOpen && achGame ? (
               <>
                 <div className="rl-sum">{achGame.title} · {achList.filter(a => a.unlockedAt != null).length}/{achList.length}</div>
@@ -240,9 +241,9 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
                   {r.bar != null && <span className="bar"><i style={{ width: `${r.bar * 100}%` }} /></span>}
                 </button>
               ))}</div>
-            ) : <div className="rl-empty">{tk === 'news' ? 'Nada novo por aqui.' : 'Nenhum jogo instalado.'}</div>}
-            {tk === 'cfg' && row && <div className="rl-note">{row.id === 'dir' ? <PortsDir /> : row.id === 'snd' ? 'Sons de navegação da interface.' : row.id === 'radar' ? 'Confere o catálogo toda vez que o Cartucho abre.' : 'Desliga este console e volta ao palco.'}</div>}
-            {tk === 'ach' && !st.achOpen && achGame && !achGame.installed?.adapter && <div className="rl-note">O Cartucho ainda não lê as conquistas deste port.</div>}
+            ) : <div className="rl-empty">{tk === 'news' ? tt('Nada novo por aqui.') : tt('Nenhum jogo instalado.')}</div>}
+            {tk === 'cfg' && row && <div className="rl-note">{row.id === 'dir' ? <PortsDir /> : row.id === 'snd' ? tt('Sons de navegação da interface.') : row.id === 'radar' ? tt('Confere o catálogo toda vez que o Cartucho abre.') : tt('Desliga este console e volta ao palco.')}</div>}
+            {tk === 'ach' && !st.achOpen && achGame && !achGame.installed?.adapter && <div className="rl-note">{tt('O Cartucho ainda não lê as conquistas deste port.')}</div>}
           </div>
         )}
 
@@ -252,7 +253,7 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
         {tk === 'disc' && !game && (
           <Discover theme="d-retro" shape={kind === 'snes' || kind === 'n64' ? 'wide' : kind === 'mc1' || kind === 'gb' || kind === 'nds' ? 'square' : 'tall'} cname={c.name} games={data.catalog} extra={data.lib.filter(x => !x.catalog)} self={self} st={dst} set={setDst}
             options={x => options(x).filter(o => o.k !== 'info')} run={run} onOpen={openGame} onBack={() => { sfx.play('back'); up({ tab: 0 }); }} onTab={goTab}
-            {...(id === 'other' ? { groupOf: sourceOf, groupLabel: 'Plataforma' } : {})} />
+            {...(id === 'other' ? { groupOf: sourceOf, groupLabel: tt('Plataforma') } : {})} />
         )}
         {game && <GameView theme="d-retro" g={game} opts={options(game, true)} run={run} self={self} onBack={() => up({ game: null })} />}
         {toast}
@@ -270,7 +271,7 @@ function DsTop({ g, line }: { g: HubGame; line: string }) {
         <h2>{g.title}</h2>
         <p>{[g.catalog?.developer, g.catalog?.year].filter(Boolean).join(' · ')}</p>
         <p className="hi">{line}</p>
-        {g.installed?.achievements?.total ? <p>{g.installed.achievements.unlocked}/{g.installed.achievements.total} conquistas</p> : null}
+        {g.installed?.achievements?.total ? <p>{tt('{0}/{1} conquistas', { 0: g.installed.achievements.unlocked, 1: g.installed.achievements.total })}</p> : null}
       </div>
     </div>
   );
@@ -281,7 +282,7 @@ function AchList({ list, sel }: { list: AchievementView[]; sel: number }) {
   return (
     <div className="rl-rows">{list.slice(off, off + 6).map((a, j) => (
       <div key={a.id} className={`rl-r ach ${off + j === sel ? 'on' : ''} ${a.unlockedAt != null ? '' : 'lock'}`}>
-        <span className="t">{a.unlockedAt != null ? '★ ' : '· '}{a.name}</span><span className="v">{a.unlockedAt != null ? fmtDate(a.unlockedAt).split(',')[0] : 'Bloqueada'}</span>
+        <span className="t">{a.unlockedAt != null ? '★ ' : '· '}{a.name}</span><span className="v">{a.unlockedAt != null ? fmtDate(a.unlockedAt).split(',')[0] : tt('Bloqueada')}</span>
         {a.description && <span className="s">{a.description}</span>}
       </div>
     ))}</div>
@@ -294,4 +295,4 @@ function PortsDir() {
   return <>{q.data ?? '…'}</>;
 }
 
-const sourceOf = (g: HubGame) => (g.console === 'other' ? g.platformName ?? 'Outros' : CONSOLE_NAME[g.console]);
+const sourceOf = (g: HubGame) => (g.console === 'other' ? g.platformName ?? tt('Outros') : CONSOLE_NAME[g.console]);

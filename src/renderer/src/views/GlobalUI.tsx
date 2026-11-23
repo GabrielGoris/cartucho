@@ -9,6 +9,7 @@ import { sfx } from '../lib/sfx';
 import { askConfirm, setMenuOpen, useConfirmReq } from '../lib/dialogs';
 import { CONSOLES } from '../stage/consoles';
 import { SearchBox } from '../components/SearchBox';
+import { tt } from '@shared/i18n';
 
 export function ConfirmHost() {
   const req = useConfirmReq();
@@ -21,8 +22,8 @@ export function ConfirmHost() {
         <h3>{req.title}</h3>
         {req.text && <p>{req.text}</p>}
         <div className="gl-btns">
-          <button className="btn" data-hf data-main onClick={() => { sfx.play('back'); req.resolve(false); }}>{req.cancel ?? 'Cancelar'}</button>
-          <button className={`btn ${req.danger ? 'danger' : 'acc'}`} data-hf onClick={() => { sfx.play('ok'); req.resolve(true); }}>{req.ok ?? 'Confirmar'}</button>
+          <button className="btn" data-hf data-main onClick={() => { sfx.play('back'); req.resolve(false); }}>{req.cancel ?? tt('Cancelar')}</button>
+          <button className={`btn ${req.danger ? 'danger' : 'acc'}`} data-hf onClick={() => { sfx.play('ok'); req.resolve(true); }}>{req.ok ?? tt('Confirmar')}</button>
         </div>
       </div>
     </div>
@@ -37,11 +38,11 @@ export function PadSetupHost() {
   return (
     <div className="ov gl-ov">
       <div className="gl-box gl-padset">
-        <h3>Configurar o controle</h3>
-        <p>Aperte no controle o botão que você quer para cada ação.</p>
+        <h3>{tt('Configurar o controle')}</h3>
+        <p>{tt('Aperte no controle o botão que você quer para cada ação.')}</p>
         <div className="gl-padstep"><b>{name}</b><span>{hint}</span></div>
         <div className="gl-padprog">{SETUP_STEPS.map((x, i) => <i key={x[0]} className={i < st.step ? 'done' : i === st.step ? 'cur' : ''} />)}</div>
-        <p className="gl-padnote">{st.step >= 2 ? 'Para pular esta ação, aperte o botão de Confirmar.' : 'O direcional e o analógico esquerdo já funcionam sozinhos.'} Esc no teclado cancela.</p>
+        <p className="gl-padnote">{tt('{0} Esc no teclado cancela.', { 0: st.step >= 2 ? tt('Para pular esta ação, aperte o botão de Confirmar.') : tt('O direcional e o analógico esquerdo já funcionam sozinhos.') })}</p>
       </div>
     </div>
   );
@@ -62,17 +63,17 @@ export function PlatformHost() {
   return (
     <div className="ov gl-ov">
       <div className="gl-box gl-plat" ref={root}>
-        <h3>De qual plataforma é {req.title}?</h3>
-        <p>O jogo vai aparecer nessa plataforma, e o Cartucho usa ela para achar capa, sinopse e nota.</p>
+        <h3>{tt('De qual plataforma é {0}?', { 0: req.title })}</h3>
+        <p>{tt('O jogo vai aparecer nessa plataforma, e o Cartucho usa ela para achar capa, sinopse e nota.')}</p>
         <div className="gl-plats">{PLATFORM_ORDER.map(id => {
           const c = CONSOLES.find(x => x.id === id)!;
           return (
             <button key={id} className={`btn ${id === req.current ? 'cur' : ''}`} data-hf {...(id === main ? { 'data-main': '' } : {})} onClick={() => done(id)}>
-              <i style={{ background: c.color }} />{id === 'pc' ? 'PC (Windows)' : c.name}
+              <i style={{ background: c.color }} />{id === 'pc' ? tt('PC (Windows)') : c.name}
             </button>
           );
         })}</div>
-        <div className="gl-btns"><button className="btn" data-hf onClick={() => done(null)}>{req.current ? 'Cancelar' : 'Decidir depois'}</button></div>
+        <div className="gl-btns"><button className="btn" data-hf onClick={() => done(null)}>{req.current ? tt('Cancelar') : tt('Decidir depois')}</button></div>
       </div>
     </div>
   );
@@ -114,24 +115,24 @@ export function PickerHost() {
     const t = text.trim();
     if (!t || t === path) { setTyped(path); setCol('list'); return; }
     const r = await stat.mutateAsync({ path: t });
-    if (!r.exists) { setErr('Não encontrei esse endereço.'); setCol('path'); setTimeout(() => addr.current?.focus(), 0); return; }
+    if (!r.exists) { setErr(tt('Não encontrei esse endereço.')); setCol('path'); setTimeout(() => addr.current?.focus(), 0); return; }
     if (r.dir) { sfx.play('ok'); go(r.path); return; }
     if (req?.kind === 'exe') { sfx.play('ok'); done(r.path); return; }
-    setErr('Esse endereço é de um arquivo. Escolha uma pasta.'); setCol('path'); setTimeout(() => addr.current?.focus(), 0);
+    setErr(tt('Esse endereço é de um arquivo. Escolha uma pasta.')); setCol('path'); setTimeout(() => addr.current?.focus(), 0);
   };
-  const paste = () => void clip.mutateAsync().then(t => { const s = (t ?? '').split(/\r?\n/)[0]!.trim(); if (s) { setTyped(s); void goTyped(s); } else setErr('A área de transferência está vazia.'); });
+  const paste = () => void clip.mutateAsync().then(t => { const s = (t ?? '').split(/\r?\n/)[0]!.trim(); if (s) { setTyped(s); void goTyped(s); } else setErr(tt('A área de transferência está vazia.')); });
   const up = () => { if (q.data?.parent) { sfx.play('back'); go(q.data.parent); } };
   const entries = q.data?.entries ?? [];
   const places = q.data?.places ?? [];
   const rows: { k: string; label: string; act: () => void; kind: 'use' | 'up' | 'dir' | 'file' }[] = req ? [
-    ...(req.kind === 'dir' ? [{ k: 'use', label: 'Usar esta pasta', act: () => { sfx.play('ok'); done(path); }, kind: 'use' as const }] : []),
+    ...(req.kind === 'dir' ? [{ k: 'use', label: tt('Usar esta pasta'), act: () => { sfx.play('ok'); done(path); }, kind: 'use' as const }] : []),
     ...(q.data?.parent ? [{ k: 'up', label: '.. (voltar uma pasta)', act: up, kind: 'up' as const }] : []),
     ...entries.map(e => ({ k: e.path, label: e.name, act: () => { sfx.play('ok'); if (e.dir) go(e.path); else done(e.path); }, kind: e.dir ? 'dir' as const : 'file' as const })),
   ] : [];
   const side = req ? [
-    { k: 'paste', label: 'Colar endereço', act: () => { sfx.play('ok'); paste(); } },
+    { k: 'paste', label: tt('Colar endereço'), act: () => { sfx.play('ok'); paste(); } },
     ...places.map(p => ({ k: p.path, label: p.name, act: () => { sfx.play('move'); go(p.path); } })),
-    { k: 'native', label: 'Janela do Windows…', act: () => { sfx.play('ok'); done(null, true); } },
+    { k: 'native', label: tt('Janela do Windows…'), act: () => { sfx.play('ok'); done(null, true); } },
   ] : [];
   useEffect(() => { listRef.current?.querySelector('.on')?.scrollIntoView({ block: 'nearest' }); }, [sel, col, si]);
   useEffect(() => { if (col !== 'path' && document.activeElement === addr.current) addr.current?.blur(); }, [col]);
@@ -187,10 +188,10 @@ export function PickerHost() {
       <div className="gl-pick">
         <h3>{req.title}</h3>
         <div className={`gl-addr ${col === 'path' ? 'f' : ''}`}>
-          <SearchBox ref={addr} className="gl-path" nav={false} placeholder="Endereço da pasta" value={typed}
+          <SearchBox ref={addr} className="gl-path" nav={false} placeholder={tt('Endereço da pasta')} value={typed}
             onChange={v => { setTyped(v); setErr(null); }} onDone={() => void goTyped(typed)} />
-          <button className="btn" onClick={() => void goTyped(typed)}>Ir</button>
-          <button className="btn" onClick={paste} title="Colar endereço (Ctrl+V)">Colar</button>
+          <button className="btn" onClick={() => void goTyped(typed)}>{tt('Ir')}</button>
+          <button className="btn" onClick={paste} title={tt('Colar endereço (Ctrl+V)')}>{tt('Colar')}</button>
         </div>
         {err && <div className="gl-err">{err}</div>}
         <div className="gl-cols">
@@ -198,22 +199,22 @@ export function PickerHost() {
             <button key={p.k} className={`${col === 'side' && j === si ? 'on' : ''} ${p.k === 'paste' ? 'paste' : ''}`} onClick={p.act}>{p.label}</button>
           ))}</div>
           <div className={`gl-list ${col === 'list' ? 'f' : ''}`} ref={listRef}>
-            {q.isLoading ? <div className="gl-empty">Lendo…</div> : rows.map((r, j) => (
+            {q.isLoading ? <div className="gl-empty">{tt('Lendo…')}</div> : rows.map((r, j) => (
               <button key={r.k} className={`${r.kind} ${col === 'list' && j === sel ? 'on' : ''}`}
                 onClick={() => { if (r.kind === 'use' || r.kind === 'up') r.act(); else { setCol('list'); setSel(j); } }} onDoubleClick={() => { if (r.kind !== 'use' && r.kind !== 'up') r.act(); }}>
                 <span className="ic">{r.kind === 'use' ? '✔' : r.kind === 'up' ? '↰' : r.kind === 'dir' ? '▸' : '◆'}</span>{r.label}
               </button>
             ))}
-            {!q.isLoading && !entries.length && <div className="gl-empty">{req.kind === 'exe' ? 'Nenhuma pasta ou programa aqui.' : 'Nenhuma pasta aqui.'}</div>}
+            {!q.isLoading && !entries.length && <div className="gl-empty">{req.kind === 'exe' ? tt('Nenhuma pasta ou programa aqui.') : tt('Nenhuma pasta aqui.')}</div>}
           </div>
         </div>
         <div className="gl-h">
           {kb ? <>
-            <span><Glyph a="ok" />Abrir</span><span><b className="gp kb">⌫</b>Pasta acima</span><span><b className="gp kb">Ctrl+L</b>Endereço</span>
-            <span><b className="gp kb">Ctrl+V</b>Colar</span><span>Digite para pular para uma pasta</span><span><Glyph a="back" />Cancelar</span>
+            <span><Glyph a="ok" />{tt('Abrir')}</span><span><b className="gp kb">⌫</b>{tt('Pasta acima')}</span><span><b className="gp kb">{tt('Ctrl+L')}</b>{tt('Endereço')}</span>
+            <span><b className="gp kb">{tt('Ctrl+V')}</b>{tt('Colar')}</span><span>{tt('Digite para pular para uma pasta')}</span><span><Glyph a="back" />{tt('Cancelar')}</span>
           </> : <>
-            <span><Glyph a="ok" />Abrir</span>{req.kind === 'dir' && <span><Glyph a="y" />Usar esta pasta</span>}
-            <span><Glyph a="x" />Pasta acima</span><span><Glyph a="ud" />Endereço no topo</span><span><Glyph a="lb" />Locais</span><span><Glyph a="back" />Cancelar</span>
+            <span><Glyph a="ok" />{tt('Abrir')}</span>{req.kind === 'dir' && <span><Glyph a="y" />{tt('Usar esta pasta')}</span>}
+            <span><Glyph a="x" />{tt('Pasta acima')}</span><span><Glyph a="ud" />{tt('Endereço no topo')}</span><span><Glyph a="lb" />{tt('Locais')}</span><span><Glyph a="back" />{tt('Cancelar')}</span>
           </>}
         </div>
       </div>
@@ -236,18 +237,18 @@ export function CartuchoMenu({ inside, onSettings, onRadar, onProfile, onPickCon
   return (
     <div className="ov gl-ov" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="gl-menu" ref={root}>
-        <h3><i />CARTUCHO{inside ? <small>{inside}</small> : null}</h3>
-        <button data-hf className="sup-b" onClick={go(onSupport)}>♥ Apoiar o Cartucho</button>
-        {inside && <button data-hf data-main onClick={go(onLeave)}>◀ Voltar ao palco</button>}
-        <button data-hf data-main={inside ? undefined : true} onClick={go(onSettings)}>⚙ Configurações</button>
-        {inside !== 'Todos os jogos' && <button data-hf onClick={go(onAll)}>▤ Todos os jogos</button>}
-        <button data-hf onClick={go(onRadar)}>● Novidades do radar</button>
-        <button data-hf onClick={go(onProfile)}>◉ Perfil e conta</button>
-        <button data-hf onClick={go(onPickConsoles)}>▦ Consoles no palco</button>
-        <button data-hf onClick={() => { sfx.play('move'); cyclePad(); }}>🎮 Botões: {s.pad === 'auto' ? `Auto (${PAD_NAMES[pad]})` : PAD_NAMES[s.pad]}</button>
-        <button data-hf onClick={() => { setSettings({ snd: !s.snd }); sfx.play('move'); }}>♪ Sons: {s.snd ? 'ligados' : 'desligados'}</button>
-        <button data-hf className="quit" onClick={() => { sfx.play('ok'); void askConfirm({ title: 'Sair do Cartucho?', text: 'O Cartucho fecha de vez, sem ficar na bandeja. Jogos abertos continuam rodando, mas o tempo deles para de contar.', ok: 'Sair', cancel: 'Ficar' }).then(y => { if (y) quit.mutate(); }); }}>⏻ Sair do Cartucho</button>
-        <div className="gl-h"><span><Glyph a="ok" />Escolher</span><span><Glyph a="back" />Fechar</span></div>
+        <h3><i />{tt('CARTUCHO')}{inside ? <small>{inside}</small> : null}</h3>
+        <button data-hf className="sup-b" onClick={go(onSupport)}>{tt('♥ Apoiar o Cartucho')}</button>
+        {inside && <button data-hf data-main onClick={go(onLeave)}>{tt('◀ Voltar ao palco')}</button>}
+        <button data-hf data-main={inside ? undefined : true} onClick={go(onSettings)}>{tt('⚙ Configurações')}</button>
+        {inside !== tt('Todos os jogos') && <button data-hf onClick={go(onAll)}>{tt('▤ Todos os jogos')}</button>}
+        <button data-hf onClick={go(onRadar)}>{tt('● Novidades do radar')}</button>
+        <button data-hf onClick={go(onProfile)}>{tt('◉ Perfil e conta')}</button>
+        <button data-hf onClick={go(onPickConsoles)}>{tt('▦ Consoles no palco')}</button>
+        <button data-hf onClick={() => { sfx.play('move'); cyclePad(); }}>{tt('🎮 Botões: {0}', { 0: s.pad === 'auto' ? tt('Auto ({0})', { 0: PAD_NAMES[pad] }) : PAD_NAMES[s.pad] })}</button>
+        <button data-hf onClick={() => { setSettings({ snd: !s.snd }); sfx.play('move'); }}>{tt('♪ Sons: {0}', { 0: s.snd ? 'ligados' : 'desligados' })}</button>
+        <button data-hf className="quit" onClick={() => { sfx.play('ok'); void askConfirm({ title: tt('Sair do Cartucho?'), text: tt('O Cartucho fecha de vez, sem ficar na bandeja. Jogos abertos continuam rodando, mas o tempo deles para de contar.'), ok: tt('Sair'), cancel: tt('Ficar') }).then(y => { if (y) quit.mutate(); }); }}>{tt('⏻ Sair do Cartucho')}</button>
+        <div className="gl-h"><span><Glyph a="ok" />{tt('Escolher')}</span><span><Glyph a="back" />{tt('Fechar')}</span></div>
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
 import { useFeed, useGameProgress, useHubActions, useHubData, type HubGame } from './data';
+import { tt } from '@shared/i18n';
 
 type Page = 'home' | 'cat' | 'news' | 'ach' | 'time' | 'cfg' | 'game';
 type Zone = 'fn' | 'row' | 'cards' | 'side' | 'main' | 'gacts' | 'gshots' | 'gtext';
@@ -27,18 +28,18 @@ type Side = { k: string; l: string; ic?: IconName; g?: HubGame; v?: string | num
 type Row = { key: string; g?: HubGame; md?: 'got' | 'lock'; icon?: string | null; t: string; s: string; rt: ReactNode; isNew?: boolean; f?: RadarEvent };
 
 const FN: [string, string, IconName][] = [
-  ['news', 'Novidades', 'bell'], ['ach', 'Conquistas', 'medal'], ['time', 'Tempo de jogo', 'clock'], ['cat', 'Descobrir', 'compass'],
-  ['search', 'Buscar', 'search'], ['cfg', 'Ajustes', 'gear'], ['off', 'Voltar ao Cartucho', 'power'],
+  ['news', tt('Novidades'), 'bell'], ['ach', tt('Conquistas'), 'medal'], ['time', tt('Tempo de jogo'), 'clock'], ['cat', tt('Descobrir'), 'compass'],
+  ['search', tt('Buscar'), 'search'], ['cfg', tt('Ajustes'), 'gear'], ['off', tt('Voltar ao Cartucho'), 'power'],
 ];
-const TITLE: Record<string, string> = { cat: 'Descobrir', news: 'Novidades', ach: 'Conquistas', time: 'Tempo de jogo', cfg: 'Ajustes' };
-const TAGS = { new: 'Novo no catálogo', upd: 'Versão nova', up: 'Mudou de status' } as const;
-const SHORT = { new: 'Novo', upd: 'Versão nova', up: 'Status' } as const;
+const TITLE: Record<string, string> = { cat: tt('Descobrir'), news: tt('Novidades'), ach: tt('Conquistas'), time: tt('Tempo de jogo'), cfg: tt('Ajustes') };
+const TAGS = { new: tt('Novo no catálogo'), upd: tt('Versão nova'), up: tt('Mudou de status') } as const;
+const SHORT = { new: tt('Novo'), upd: tt('Versão nova'), up: tt('Status') } as const;
 const CAT_SIDE: Side[] = [
-  { k: 'all', l: 'Todos', ic: 'grid' }, { k: 'new', l: 'Novos', ic: 'star' }, { k: 'play', l: 'Jogáveis', ic: 'play' },
-  { k: 'wip', l: 'Em progresso', ic: 'chart' }, { k: 'inst', l: 'Instalados', ic: 'dl' }, { k: 'search', l: 'Buscar', ic: 'search' },
+  { k: 'all', l: tt('Todos'), ic: 'grid' }, { k: 'new', l: tt('Novos'), ic: 'star' }, { k: 'play', l: tt('Jogáveis'), ic: 'play' },
+  { k: 'wip', l: tt('Em progresso'), ic: 'chart' }, { k: 'inst', l: tt('Instalados'), ic: 'dl' }, { k: 'search', l: tt('Buscar'), ic: 'search' },
 ];
-const NEWS_SIDE: Side[] = [{ k: 'all', l: 'Tudo', ic: 'bell' }, { k: 'new', l: 'Novos no catálogo', ic: 'star' }, { k: 'upd', l: 'Versões novas', ic: 'dl' }, { k: 'up', l: 'Mudou de status', ic: 'chart' }];
-const CFG_SIDE: Side[] = [{ k: 'dir', l: 'Pasta dos jogos', ic: 'folder' }, { k: 'snd', l: 'Sons da interface', ic: 'sound' }, { k: 'radar', l: 'Radar de novidades', ic: 'bell' }, { k: 'off', l: 'Voltar ao Cartucho', ic: 'power' }];
+const NEWS_SIDE: Side[] = [{ k: 'all', l: tt('Tudo'), ic: 'bell' }, { k: 'new', l: tt('Novos no catálogo'), ic: 'star' }, { k: 'upd', l: tt('Versões novas'), ic: 'dl' }, { k: 'up', l: tt('Mudou de status'), ic: 'chart' }];
+const CFG_SIDE: Side[] = [{ k: 'dir', l: tt('Pasta dos jogos'), ic: 'folder' }, { k: 'snd', l: tt('Sons da interface'), ic: 'sound' }, { k: 'radar', l: tt('Radar de novidades'), ic: 'bell' }, { k: 'off', l: tt('Voltar ao Cartucho'), ic: 'power' }];
 const ROW_H = 132, SIDE_H = 78, TILE = 220, GAP = 14;
 
 const Art = ({ g, v }: { g: HubGame; v: 'cover' | 'wide' | 'square' }) =>
@@ -67,7 +68,7 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   const [pop, setPop] = useState<RadarEvent | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const clock = useClock();
-  const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show('Pasta dos jogos alterada'); } }));
+  const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show(tt('Pasta dos jogos alterada')); } }));
   const chooseExe = useMutation(trpc.games.chooseExe.mutationOptions({ onSuccess: () => void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }) }));
   const openFolder = useMutation(trpc.games.openFolder.mutationOptions());
 
@@ -106,7 +107,7 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   const side: Side[] = st.page === 'cat' ? CAT_SIDE.map(x => ({ ...x, v: x.k === 'new' ? data.catalog.filter(y => y.isNew).length || undefined : undefined }))
     : st.page === 'news' ? NEWS_SIDE.map(x => ({ ...x, v: (x.k === 'all' ? data.feed.length : data.feed.filter(f => f.kind === x.k).length) || undefined }))
     : st.page === 'ach' ? data.lib.map(x => ({ k: x.key, l: x.title, g: x, v: x.installed?.achievements?.total ? `${x.installed.achievements.unlocked}/${x.installed.achievements.total}` : undefined }))
-    : st.page === 'time' ? [{ k: 'sum', l: 'Resumo', ic: 'chart' as IconName }, ...byPlay.map(x => ({ k: x.key, l: x.title, g: x, v: fmtPlay(x.installed?.playMs ?? 0) || '0m' }))]
+    : st.page === 'time' ? [{ k: 'sum', l: tt('Resumo'), ic: 'chart' as IconName }, ...byPlay.map(x => ({ k: x.key, l: x.title, g: x, v: fmtPlay(x.installed?.playMs ?? 0) || '0m' }))]
     : st.page === 'cfg' ? CFG_SIDE
     : [];
   const sk = side[st.si]?.k;
@@ -128,10 +129,10 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   const rows: Row[] = st.page === 'cat' ? catList.map(x => ({
       key: x.key, g: x, t: x.title, isNew: x.isNew,
       s: [x.catalog?.developer, x.catalog?.year, x.platformName].filter(Boolean).join(' · ') || (x.repo ?? ''),
-      rt: <>{x.status ? STATUS_LABEL[x.status] : ''}<br />{x.installed ? 'Instalado' : self ? 'Você instala' : x.repo ? 'Disponível' : ''}</>,
+      rt: <>{x.status ? STATUS_LABEL[x.status] : ''}<br />{x.installed ? tt('Instalado') : self ? tt('Você instala') : x.repo ? tt('Disponível') : ''}</>,
     }))
     : st.page === 'news' ? feedList.map(f => { const x = feedGame(f); return { key: String(f.id), f, g: x ?? undefined, t: f.title, s: f.kind === 'new' ? (self ? '' : x?.repo ?? '') : f.detail, rt: <>{TAGS[f.kind]}<br />{ago(f.at)}</>, isNew: f.kind === 'new' }; })
-    : st.page === 'ach' ? achList.map((a): Row => ({ key: String(a.id), md: a.unlockedAt != null ? 'got' : 'lock', icon: a.icon, t: a.name, s: a.description ?? '', rt: <>{a.points != null ? `${a.points} pontos` : ''}<br />{a.unlockedAt != null ? fmtDate(a.unlockedAt) : 'Bloqueada'}</> }))
+    : st.page === 'ach' ? achList.map((a): Row => ({ key: String(a.id), md: a.unlockedAt != null ? 'got' : 'lock', icon: a.icon, t: a.name, s: a.description ?? '', rt: <>{a.points != null ? tt('{0} pontos', { 0: a.points }) : ''}<br />{a.unlockedAt != null ? fmtDate(a.unlockedAt) : tt('Bloqueada')}</> }))
     : [];
   const feed = useFeed(feedList, st.page === 'news');
 
@@ -139,22 +140,23 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     const inst = x.installed;
     const L: Opt[] = [];
     if (inst?.missing) {
-      if (x.catalog?.repo && !self) L.push({ k: 'reinstall', l: 'Instalar de novo', ic: 'dl' });
-      L.push({ k: 'relink', l: 'Procurar a pasta', ic: 'folder' });
-      L.push({ k: 'remove', l: 'Tirar da biblioteca', ic: 'stop' });
+      if (x.catalog?.repo && !self) L.push({ k: 'reinstall', l: tt('Instalar de novo'), ic: 'dl' });
+      L.push({ k: 'relink', l: tt('Procurar a pasta'), ic: 'folder' });
+      L.push({ k: 'remove', l: tt('Tirar da biblioteca'), ic: 'stop' });
     } else if (inst) {
-      L.push(inst.running ? { k: 'quit', l: 'Fechar o jogo', ic: 'stop' } : inst.exe ? { k: 'play', l: 'Jogar', ic: 'play' } : { k: 'exe', l: 'Escolher o .exe', ic: 'folder' });
-      if (x.update?.updateAvailable && !self) L.push({ k: 'update', l: `Atualizar para ${x.update.latest?.tag}`, ic: 'dl' });
-      if (inst.adapter) L.push({ k: 'ach', l: 'Conquistas', ic: 'medal' });
-      L.push({ k: 'folder', l: 'Abrir pasta', ic: 'folder' });
-      if (inst.exe) L.push({ k: 'exe', l: 'Escolher o .exe', ic: 'folder' });
+      L.push(inst.running ? { k: 'play', l: tt('Voltar para o jogo'), ic: 'play' } : inst.exe ? { k: 'play', l: tt('Jogar'), ic: 'play' } : { k: 'exe', l: tt('Escolher o .exe'), ic: 'folder' });
+      if (inst.running) L.push({ k: 'quit', l: tt('Fechar o jogo'), ic: 'stop' });
+      if (x.update?.updateAvailable && !self) L.push({ k: 'update', l: tt('Atualizar para {0}', { 0: x.update.latest?.tag }), ic: 'dl' });
+      if (inst.adapter) L.push({ k: 'ach', l: tt('Conquistas'), ic: 'medal' });
+      L.push({ k: 'folder', l: tt('Abrir pasta'), ic: 'folder' });
+      if (inst.exe) L.push({ k: 'exe', l: tt('Escolher o .exe'), ic: 'folder' });
     } else {
-      if (x.repo && !self) L.push({ k: 'install', l: 'Instalar', ic: 'dl' });
-      L.push({ k: 'add', l: self ? 'Já instalei: adicionar pasta' : 'Escolher pasta', ic: 'folder' });
+      if (x.repo && !self) L.push({ k: 'install', l: tt('Instalar'), ic: 'dl' });
+      L.push({ k: 'add', l: self ? tt('Já instalei: adicionar pasta') : tt('Escolher pasta'), ic: 'folder' });
     }
-    if (x.repo) L.push({ k: 'gh', l: 'Ver no GitHub', ic: 'link' });
-    if (st.page !== 'game') L.push({ k: 'info', l: 'Página do jogo', ic: 'info' });
-    if (home) L.push({ k: 'off', l: 'Voltar ao Cartucho', ic: 'power' });
+    if (x.repo) L.push({ k: 'gh', l: tt('Ver no GitHub'), ic: 'link' });
+    if (st.page !== 'game') L.push({ k: 'info', l: tt('Página do jogo'), ic: 'info' });
+    if (home) L.push({ k: 'off', l: tt('Voltar ao Cartucho'), ic: 'power' });
     return L;
   };
   const primaryOf = (x: HubGame) => options(x, false)[0]!;
@@ -164,22 +166,22 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
 
   const run = (k: string, x: HubGame) => {
     setMenu(null);
-    if (k === 'play' || k === 'quit' || k === 'install') {
+    if (k === 'quit') { act.quit(x); sfx.play('back'); show(tt('Fechando {0}…', { 0: x.title })); return; }
+    if (k === 'play' || k === 'install') {
       const r = act.primary(x);
-      sfx.play(r === 'quit' ? 'back' : 'ok');
-      if (r === 'play') show(`${x.title} aberto · o tempo de jogo começou a contar`);
-      else if (r === 'install') show(`Baixando ${x.repo} do GitHub…`);
-      else if (r === 'quit') show(`Fechando ${x.title}…`);
+      sfx.play('ok');
+      if (r === 'play') show(tt('{0} aberto · o tempo de jogo começou a contar', { 0: x.title }));
+      else if (r === 'install') show(tt('Baixando {0} do GitHub…', { 0: x.repo }));
       else if (r === 'pick') chooseExe.mutate({ id: x.installed!.id });
-      else if (r === 'relink') show('Escolha onde o jogo está agora');
+      else if (r === 'relink') show(tt('Escolha onde o jogo está agora'));
       return;
     }
     sfx.play('ok');
-    if (k === 'add') { act.addFolder(x); return show('Escolha a pasta onde o jogo está instalado'); }
-    if (k === 'reinstall') { act.reinstall(x); return show(`Baixando ${x.repo} de novo… o tempo de jogo continua`); }
-    if (k === 'relink') { act.relink(x); return show('Escolha onde o jogo está agora'); }
-    if (k === 'remove') { act.remove(x); if (st.page === 'game') back(true); return show(`${x.title} saiu da biblioteca · nenhum arquivo foi apagado`); }
-    if (k === 'update') { act.update(x); return show(`Atualizando para ${x.update?.latest?.tag}… configurações e saves ficam`); }
+    if (k === 'add') { act.addFolder(x); return show(tt('Escolha a pasta onde o jogo está instalado')); }
+    if (k === 'reinstall') { act.reinstall(x); return show(tt('Baixando {0} de novo… o tempo de jogo continua', { 0: x.repo })); }
+    if (k === 'relink') { act.relink(x); return show(tt('Escolha onde o jogo está agora')); }
+    if (k === 'remove') { act.remove(x); if (st.page === 'game') back(true); return show(tt('{0} saiu da biblioteca · nenhum arquivo foi apagado', { 0: x.title })); }
+    if (k === 'update') { act.update(x); return show(tt('Atualizando para {0}… configurações e saves ficam', { 0: x.update?.latest?.tag })); }
     if (k === 'ach') return up({ page: 'ach', zone: 'side', si: Math.max(0, data.lib.indexOf(x)), mi: 0 });
     if (k === 'folder') return openFolder.mutate({ id: x.installed!.id });
     if (k === 'exe') return chooseExe.mutate({ id: x.installed!.id });
@@ -216,7 +218,7 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
         if (sk === 'dir') return pickDir.mutate();
         if (sk === 'snd') return setSettings({ snd: !getSettings().snd });
         if (sk === 'off') return onBack();
-        return show('O radar confere o catálogo do Recompendium toda vez que o Cartucho abre');
+        return show(tt('O radar confere o catálogo do Recompendium toda vez que o Cartucho abre'));
       }
       return toMain();
     }
@@ -274,14 +276,14 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     else if (L) mv({ zone: 'side' });
   }, !((st.page === 'cat' && !st.game && !menu) || st.page === 'game'));
 
-  const hints: Hint[] = menu ? [['ok', 'Confirmar'], ['back', 'Fechar']]
-    : st.page === 'home' ? (st.zone === 'row' && g ? [['ok', primaryOf(g).l], ['x', 'Opções'], ['back', 'Sair']] : st.zone === 'cards' ? [['ok', 'Abrir'], ['back', 'Voltar']] : [['ok', 'Confirmar'], ['back', st.zone === 'row' ? 'Sair' : 'Voltar']])
-    : st.zone === 'main' && st.page === 'news' ? [['ok', 'Ver jogo'], ['x', 'Dispensar'], ['y', 'Limpar tudo'], ['back', 'Voltar']]
-    : st.zone === 'main' && st.page === 'cat' ? [['ok', 'Ver jogo'], ['x', 'Opções'], ['back', 'Voltar']]
-    : st.page === 'cat' && sk === 'search' && st.zone === 'side' ? [['ok', 'Digitar'], ['back', 'Voltar']]
-    : st.page === 'time' || (st.page === 'ach' && (st.zone === 'main' || !rows.length)) ? [['ud', 'Escolher'], ['back', 'Voltar']]
-    : st.page === 'cfg' ? [['ok', sk === 'dir' ? 'Trocar pasta' : sk === 'snd' ? (s.snd ? 'Desligar' : 'Ligar') : sk === 'off' ? 'Sair' : 'Confirmar'], ['back', 'Voltar']]
-    : [['ok', 'Confirmar'], ['back', 'Voltar']];
+  const hints: Hint[] = menu ? [['ok', tt('Confirmar')], ['back', tt('Fechar')]]
+    : st.page === 'home' ? (st.zone === 'row' && g ? [['ok', primaryOf(g).l], ['x', tt('Opções')], ['back', tt('Sair')]] : st.zone === 'cards' ? [['ok', tt('Abrir')], ['back', tt('Voltar')]] : [['ok', tt('Confirmar')], ['back', st.zone === 'row' ? tt('Sair') : tt('Voltar')]])
+    : st.zone === 'main' && st.page === 'news' ? [['ok', tt('Ver jogo')], ['x', tt('Dispensar')], ['y', tt('Limpar tudo')], ['back', tt('Voltar')]]
+    : st.zone === 'main' && st.page === 'cat' ? [['ok', tt('Ver jogo')], ['x', tt('Opções')], ['back', tt('Voltar')]]
+    : st.page === 'cat' && sk === 'search' && st.zone === 'side' ? [['ok', tt('Digitar')], ['back', tt('Voltar')]]
+    : st.page === 'time' || (st.page === 'ach' && (st.zone === 'main' || !rows.length)) ? [['ud', tt('Escolher')], ['back', tt('Voltar')]]
+    : st.page === 'cfg' ? [['ok', sk === 'dir' ? tt('Trocar pasta') : sk === 'snd' ? (s.snd ? tt('Desligar') : tt('Ligar')) : sk === 'off' ? tt('Sair') : tt('Confirmar')], ['back', tt('Voltar')]]
+    : [['ok', tt('Confirmar')], ['back', tt('Voltar')]];
   const Hints = ({ className }: { className: string }) => <div className={className}>{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>;
 
   const setMenuIdx = (mi: number) => { if (menu) { if (menu.mi === mi) { const o = options(menu.g, st.page === 'home')[mi]; if (o) run(o.k, menu.g); } else { sfx.play('move'); setMenu({ ...menu, mi }); } } };
@@ -299,7 +301,7 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
         <Ribbons />
         {st.page === 'home' ? (
           <Home row={row} g={g} st={st} self={self} clock={clock} catCount={data.catalog.length} cname={c.name} feed={data.feed}
-            primary={g ? primaryOf(g).l : 'Abrir'}
+            primary={g ? primaryOf(g).l : tt('Abrir')}
             onFn={j => { up({ zone: 'fn', di: j }); fn(j); }}
             onTile={i => click('row', { idx: i }, st.zone === 'row' && st.idx === i)}
             onCard={j => click('cards', { ci: j }, st.zone === 'cards' && st.ci === j)} />
@@ -323,7 +325,7 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
                     {x.g ? <span className="th"><Art g={x.g} v="square" /></span> : x.ic ? <Ic n={x.ic} /> : null}
                     <span className="l">{x.l}</span>{x.v != null && <span className="v">{x.v}</span>}
                   </button>
-                )) : <div className="p4-si dim">Nenhum jogo instalado</div>}
+                )) : <div className="p4-si dim">{tt('Nenhum jogo instalado')}</div>}
               </div>
             </nav>
             <div className="p4-main">
@@ -359,7 +361,7 @@ function Home({ row, g, st, self, clock, catCount, cname, feed, primary, onFn, o
   return (
     <>
       <div className="p4-top">
-        <span className="p4-me"><i><Ic n="pad" /></i>Cartucho</span>
+        <span className="p4-me"><i><Ic n="pad" /></i>{tt('Cartucho')}</span>
         {f && <span className="p4-ntf"><Ic n="info" /><b>{f.title}</b>{TAGS[f.kind].toLowerCase()}</span>}
         <span className="sp" />
         <nav className="p4-fn">{FN.map(([k, l, ic], j) => {
@@ -382,20 +384,20 @@ function Home({ row, g, st, self, clock, catCount, cname, feed, primary, onFn, o
             <span className="band">{k === i ? primary : ''}</span>
           </button>
         ))}
-        <button className={`p4-t add ${i === n && z !== 'fn' ? 'on' : ''}`} onClick={() => onTile(n)}><Ic n="compass" />Descobrir</button>
+        <button className={`p4-t add ${i === n && z !== 'fn' ? 'on' : ''}`} onClick={() => onTile(n)}><Ic n="compass" />{tt('Descobrir')}</button>
       </div>
       {g ? (
         <>
           <div className="p4-ti">
             <span className="t">{g.title}</span>
-            <small>{p ? p.error ?? `${p.stage}${p.pct > 0 && p.pct < 1 ? ` · ${Math.round(p.pct * 100)}%` : ''}` : g.installed?.missing ? 'pasta do jogo não encontrada' : g.status ? STATUS_LABEL[g.status] : ''}</small>
+            <small>{p ? p.error ?? `${p.stage}${p.pct > 0 && p.pct < 1 ? ` · ${Math.round(p.pct * 100)}%` : ''}` : g.installed?.missing ? tt('pasta do jogo não encontrada') : g.status ? STATUS_LABEL[g.status] : ''}</small>
           </div>
           <Cards g={g} st={st} self={self} feed={gf} onCard={onCard} />
         </>
       ) : (
         <div className="p4-ti">
-          <span className="t">{n ? 'Descobrir' : 'Nenhum jogo por aqui ainda'}</span>
-          <small>{catCount ? `${plural(catCount, 'recomp', 'recomps')} de ${cname} no catálogo` : 'O radar avisa quando aparecer o primeiro'}</small>
+          <span className="t">{n ? tt('Descobrir') : tt('Nenhum jogo por aqui ainda')}</span>
+          <small>{catCount ? tt('{0} de {1} no catálogo', { 0: plural(catCount, tt('recomp'), tt('recomps')), 1: cname }) : tt('O radar avisa quando aparecer o primeiro')}</small>
         </div>
       )}
     </>
@@ -425,27 +427,27 @@ function Cards({ g, st, self, feed, onCard }: { g: HubGame; st: St; self: boolea
   return (
     <div className="p4-cards">
       <C k={0}>
-        <small><Ic n="clock" /> Seu tempo</small>
+        <small><Ic n="clock" />{' '}{tt('Seu tempo')}</small>
         <b>{inst ? fmtPlay(inst.playMs) || '0m' : '—'}</b>
-        <span>{inst ? `${plural(stats.data?.sessions ?? 0, 'sessão', 'sessões')}${inst.lastPlayed ? ` · ${ago(inst.lastPlayed)}` : ''}` : 'Ainda não jogado'}</span>
+        <span>{inst ? `${plural(stats.data?.sessions ?? 0, tt('sessão'), tt('sessões'))}${inst.lastPlayed ? ` · ${ago(inst.lastPlayed)}` : ''}` : tt('Ainda não jogado')}</span>
         {inst && d.length > 0 && <Bars d={d} cls="p4-mb" />}
       </C>
       <C k={1}>
-        <small><Ic n="medal" /> Conquistas</small>
+        <small><Ic n="medal" />{' '}{tt('Conquistas')}</small>
         <div className="p4-ring">
           <Ring p={a?.total ? a.unlocked / a.total : 0} />
-          <div><b>{a?.total ? `${a.unlocked}/${a.total}` : '—'}</b><span>{a?.total ? `${Math.round((a.unlocked / a.total) * 100)}% completo` : inst?.adapter ? 'Nenhuma ainda' : 'Sem conquistas'}</span></div>
+          <div><b>{a?.total ? `${a.unlocked}/${a.total}` : '—'}</b><span>{a?.total ? tt('{0}% completo', { 0: Math.round((a.unlocked / a.total) * 100) }) : inst?.adapter ? tt('Nenhuma ainda') : tt('Sem conquistas')}</span></div>
         </div>
       </C>
       <C k={2}>
-        <small><Ic n="bell" /> Novidades</small>
+        <small><Ic n="bell" />{' '}{tt('Novidades')}</small>
         <b>{feed ? SHORT[feed.kind] : '—'}</b>
-        <span>{feed ? `${feed.detail ? feed.detail + ' · ' : ''}${ago(feed.at)}` : 'Nada novo para este jogo'}</span>
+        <span>{feed ? `${feed.detail ? feed.detail + ' · ' : ''}${ago(feed.at)}` : tt('Nada novo para este jogo')}</span>
       </C>
       <C k={3}>
-        <small><Ic n="dl" /> Versão</small>
+        <small><Ic n="dl" />{' '}{tt('Versão')}</small>
         <b>{g.update?.installed ?? inst?.version ?? '—'}</b>
-        <span>{self ? 'Atualizações por sua conta' : g.update?.updateAvailable ? `${g.update.latest?.tag} disponível` : inst ? (g.update?.updateAvailable === false ? 'Em dia' : 'Versão desconhecida') : 'Não instalado'}</span>
+        <span>{self ? tt('Atualizações por sua conta') : g.update?.updateAvailable ? tt('{0} disponível', { 0: g.update.latest?.tag }) : inst ? (g.update?.updateAvailable === false ? tt('Em dia') : tt('Versão desconhecida')) : tt('Não instalado')}</span>
       </C>
     </div>
   );
@@ -455,7 +457,7 @@ function Main({ page, sk, st, rows, cname, self, catalogCount, query, setQuery, 
   page: Page; sk: string | undefined; st: St; rows: Row[]; cname: string; self: boolean; catalogCount: number;
   query: string; setQuery: (v: string) => void; searchRef: RefObject<HTMLInputElement | null>; onSearchDone: () => void;
   achGame: HubGame | null; achLoading: boolean; sideGame: HubGame | null; lib: HubGame[];
-  stats: Map<string, { totalMs: number; sessions: number; lastPlayed: number | null; days: number[] } | undefined>; sndOn: boolean;
+  stats: Map<string, { totalMs: number; sessions: number; avgMs: number; lastPlayed: number | null; days: number[] } | undefined>; sndOn: boolean;
   onRow: (j: number) => void;
 }) {
   const list = (empty: string, top = 0) => rows.length ? (
@@ -465,7 +467,7 @@ function Main({ page, sk, st, rows, cname, self, catalogCount, query, setQuery, 
           <button key={r.key} className={`p4-r ${st.zone === 'main' && j === st.mi ? 'on' : ''}`} onClick={() => onRow(j)}>
             {r.md ? <span className={`p4-md ${r.md}`}>{r.icon ? <img src={r.icon} alt="" /> : <Ic n={r.md === 'got' ? 'medal' : 'lock'} />}</span>
               : r.g ? <span className="th"><Art g={r.g} v="square" /></span> : <span />}
-            <span className="tx"><span className="t">{r.t}{r.isNew && <span className="new">NOVO</span>}</span>{r.s && <span className="s">{r.s}</span>}</span>
+            <span className="tx"><span className="t">{r.t}{r.isNew && <span className="new">{tt('NOVO')}</span>}</span>{r.s && <span className="s">{r.s}</span>}</span>
             <span className="rt">{r.rt}</span>
           </button>
         ))}
@@ -476,27 +478,27 @@ function Main({ page, sk, st, rows, cname, self, catalogCount, query, setQuery, 
   if (page === 'cat') {
     if (sk === 'search') return (
       <>
-        <SearchBox ref={searchRef} value={query} onChange={setQuery} nav={false} className="p4-search" placeholder="Nome do jogo…" onDone={onSearchDone} />
-        {query.trim() ? list(`Nada encontrado para “${query.trim()}”.`, 100) : <div className="p4-note">Digite o nome de um jogo de {cname}.</div>}
+        <SearchBox ref={searchRef} value={query} onChange={setQuery} nav={false} className="p4-search" placeholder={tt('Nome do jogo…')} onDone={onSearchDone} />
+        {query.trim() ? list(tt('Nada encontrado para “{0}”.', { 0: query.trim() }), 100) : <div className="p4-note">{tt('Digite o nome de um jogo de {0}.', { 0: cname })}</div>}
       </>
     );
-    return list(catalogCount ? 'Nada nesta categoria.' : `O catálogo ainda não tem recomps para ${cname}.${self ? '' : ' O radar avisa quando aparecer o primeiro.'}`);
+    return list(catalogCount ? tt('Nada nesta categoria.') : tt('O catálogo ainda não tem recomps para {0}.{1}', { 0: cname, 1: self ? '' : tt(' O radar avisa quando aparecer o primeiro.') }));
   }
-  if (page === 'news') return list('Nada novo por aqui. O Cartucho confere o Recompendium toda vez que abre.');
+  if (page === 'news') return list(tt('Nada novo por aqui. O Cartucho confere o Recompendium toda vez que abre.'));
   if (page === 'ach') {
-    if (!achGame) return <div className="p4-note">Nenhum jogo instalado em {cname}. As conquistas aparecem aqui quando você instalar ou adicionar um jogo.</div>;
-    if (!achGame.installed?.adapter) return <div className="p4-note">O Cartucho ainda não sabe ler as conquistas de {achGame.title}. Quando houver um leitor para este port, elas aparecem aqui sozinhas.</div>;
-    if (!rows.length) return <div className="p4-note">{achLoading ? 'Lendo as conquistas…' : 'Nenhuma conquista encontrada.'}</div>;
+    if (!achGame) return <div className="p4-note">{tt('Nenhum jogo instalado em {0}. As conquistas aparecem aqui quando você instalar ou adicionar um jogo.', { 0: cname })}</div>;
+    if (!achGame.installed?.adapter) return <div className="p4-note">{tt('O Cartucho ainda não sabe ler as conquistas de {0}. Quando houver um leitor para este port, elas aparecem aqui sozinhas.', { 0: achGame.title })}</div>;
+    if (!rows.length) return <div className="p4-note">{achLoading ? tt('Lendo as conquistas…') : tt('Nenhuma conquista encontrada.')}</div>;
     const got = rows.filter(r => r.md === 'got').length;
     return (
       <>
-        <div className="p4-ah"><b>{got}/{rows.length}</b><span>{Math.round((got / rows.length) * 100)}% completo</span><div className="p4-pb"><i style={{ width: `${(got / rows.length) * 100}%` }} /></div></div>
+        <div className="p4-ah"><b>{got}/{rows.length}</b><span>{tt('{0}% completo', { 0: Math.round((got / rows.length) * 100) })}</span><div className="p4-pb"><i style={{ width: `${(got / rows.length) * 100}%` }} /></div></div>
         {list('', 110)}
       </>
     );
   }
   if (page === 'time') {
-    if (!lib.length) return <div className="p4-note">Nenhum jogo instalado ainda. O tempo começa a contar quando você abre um jogo por aqui.</div>;
+    if (!lib.length) return <div className="p4-note">{tt('Nenhum jogo instalado ainda. O tempo começa a contar quando você abre um jogo por aqui.')}</div>;
     if (!sideGame) {
       const total = lib.reduce((a, x) => a + (x.installed?.playMs ?? 0), 0);
       const week = lib.reduce((a, x) => a + (stats.get(x.key)?.days.slice(7).reduce((p, q) => p + q, 0) ?? 0), 0) * 3600_000;
@@ -505,10 +507,10 @@ function Main({ page, sk, st, rows, cname, self, catalogCount, query, setQuery, 
       return (
         <>
           <div className="p4-big">
-            <div className="p4-bg"><b>{fmtPlay(total) || '0m'}</b><span>neste console</span></div>
-            <div className="p4-bg"><b>{fmtPlay(week) || '0m'}</b><span>nesta semana</span></div>
-            <div className="p4-bg"><b>{ses}</b><span>{ses === 1 ? 'sessão' : 'sessões'}</span></div>
-            <div className="p4-bg"><b>{lib.length}</b><span>{lib.length === 1 ? 'jogo' : 'jogos'}</span></div>
+            <div className="p4-bg"><b>{fmtPlay(total) || '0m'}</b><span>{tt('neste console')}</span></div>
+            <div className="p4-bg"><b>{fmtPlay(week) || '0m'}</b><span>{tt('nesta semana')}</span></div>
+            <div className="p4-bg"><b>{ses}</b><span>{ses === 1 ? tt('sessão') : tt('sessões')}</span></div>
+            <div className="p4-bg"><b>{lib.length}</b><span>{lib.length === 1 ? tt('jogo') : tt('jogos')}</span></div>
           </div>
           <div className="p4-tl">{lib.slice(0, 5).map(x => (
             <div key={x.key} className="p4-r flat">
@@ -525,20 +527,20 @@ function Main({ page, sk, st, rows, cname, self, catalogCount, query, setQuery, 
     return (
       <>
         <div className="p4-big">
-          <div className="p4-bg"><b>{fmtPlay(inst.playMs) || '0m'}</b><span>tempo total</span></div>
-          <div className="p4-bg"><b>{inst.lastPlayed ? ago(inst.lastPlayed) : '—'}</b><span>última vez</span></div>
-          <div className="p4-bg"><b>{t?.sessions ?? 0}</b><span>sessões</span></div>
-          <div className="p4-bg"><b>{t?.sessions ? fmtPlay(inst.playMs / t.sessions) || '<1m' : '—'}</b><span>por sessão</span></div>
+          <div className="p4-bg"><b>{fmtPlay(inst.playMs) || '0m'}</b><span>{tt('tempo total')}</span></div>
+          <div className="p4-bg"><b>{inst.lastPlayed ? ago(inst.lastPlayed) : '—'}</b><span>{tt('última vez')}</span></div>
+          <div className="p4-bg"><b>{t?.sessions ?? 0}</b><span>{tt('sessões')}</span></div>
+          <div className="p4-bg"><b>{t?.avgMs ? fmtPlay(t.avgMs) || '<1m' : '—'}</b><span>{tt('por sessão')}</span></div>
         </div>
-        <div className="p4-ch"><Bars d={d} cls="b" /><div className="a"><span>14 dias atrás</span><span>{fmtPlay(week) || '0m'} nesta semana</span><span>hoje</span></div></div>
+        <div className="p4-ch"><Bars d={d} cls="b" /><div className="a"><span>{tt('14 dias atrás')}</span><span>{tt('{0} nesta semana', { 0: fmtPlay(week) || '0m' })}</span><span>{tt('hoje')}</span></div></div>
       </>
     );
   }
   if (page === 'cfg') {
-    if (sk === 'dir') return <><div className="p4-note">Onde o Cartucho instala os jogos que você baixa por aqui. Jogos que você adiciona com “Escolher pasta” continuam onde estão.</div><div className="p4-form"><label>Pasta atual</label><div><PortsDir /></div></div></>;
-    if (sk === 'snd') return <div className="p4-note">Sons da interface: {sndOn ? 'ligados' : 'desligados'}. Confirme para {sndOn ? 'desligar' : 'ligar'}.</div>;
-    if (sk === 'radar') return <div className="p4-note">O radar confere o catálogo do Recompendium e os releases do GitHub toda vez que o Cartucho abre e avisa quando algo muda em {cname}.</div>;
-    return <div className="p4-note">Sai deste console e volta para o palco do Cartucho.</div>;
+    if (sk === 'dir') return <><div className="p4-note">{tt('Onde o Cartucho instala os jogos que você baixa por aqui. Jogos que você adiciona com “Escolher pasta” continuam onde estão.')}</div><div className="p4-form"><label>{tt('Pasta atual')}</label><div><PortsDir /></div></div></>;
+    if (sk === 'snd') return <div className="p4-note">{tt('Sons da interface: {0}. Confirme para {1}.', { 0: sndOn ? tt('ligados') : tt('desligados'), 1: sndOn ? tt('desligar') : tt('ligar') })}</div>;
+    if (sk === 'radar') return <div className="p4-note">{tt('O radar confere o catálogo do Recompendium e os releases do GitHub toda vez que o Cartucho abre e avisa quando algo muda em {0}.', { 0: cname })}</div>;
+    return <div className="p4-note">{tt('Sai deste console e volta para o palco do Cartucho.')}</div>;
   }
   return null;
 }

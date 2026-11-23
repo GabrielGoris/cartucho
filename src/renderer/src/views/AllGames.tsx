@@ -7,8 +7,9 @@ import { GameView } from '../components/GameView';
 import { Fit, useHubToast } from '../hubs/HubFrame';
 import { useHubData, type HubGame } from '../hubs/data';
 import { useGameMenu } from '../hubs/menu';
+import { tt } from '@shared/i18n';
 
-const groupOf = (g: HubGame) => (g.console === 'other' ? g.platformName ?? 'Outros' : CONSOLE_NAME[g.console]);
+const groupOf = (g: HubGame) => (g.console === 'other' ? g.platformName ?? tt('Outros') : CONSOLE_NAME[g.console]);
 
 export function AllGames({ onBack }: { onBack: () => void }) {
   const data = useHubData(null);
@@ -25,8 +26,8 @@ export function AllGames({ onBack }: { onBack: () => void }) {
   return (
     <section className="view hub sk-all">
       <Fit w={1920} h={1080} className="all-g">
-        <Discover theme="d-app" title="Todos os jogos" cname={`${plural(consoles, 'plataforma', 'plataformas')} · ${plural(data.catalog.length + extra.length, 'jogo', 'jogos')}`}
-          games={data.catalog} extra={extra} self={false} st={st} set={set} groupOf={groupOf} groupLabel="Console" allLabel="Todos" place="todos os consoles"
+        <Discover theme="d-app" title={tt('Todos os jogos')} cname={`${plural(consoles, tt('plataforma'), tt('plataformas'))} · ${plural(data.catalog.length + extra.length, tt('jogo'), tt('jogos'))}`}
+          games={data.catalog} extra={extra} self={false} st={st} set={set} groupOf={groupOf} groupLabel={tt('Console')} allLabel={tt('Todos')} place={tt('todos os consoles')}
           options={x => menu.options(x).filter(o => o.k !== 'info')} run={menu.run} onOpen={x => { sfx.play('ok'); setGame(x.key); }} onBack={() => { sfx.play('back'); onBack(); }} />
         {g && <GameView theme="d-app" g={g} self={isSelfInstall(g.console)} opts={menu.options(g, true)} run={menu.run} onBack={() => setGame(null)} />}
         {toast}

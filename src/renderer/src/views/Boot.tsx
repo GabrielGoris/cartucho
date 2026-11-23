@@ -5,6 +5,7 @@ import { reduceMotion } from '../lib/settings';
 import { initAudio, sfx } from '../lib/sfx';
 import { fmtPlay, plural } from '../lib/format';
 import { CONSOLES } from '../stage/consoles';
+import { tt } from '@shared/i18n';
 
 export function Boot({ summary, onDone }: { summary: LibrarySummary | undefined; onDone: () => void }) {
   const [stage, setStage] = useState<0 | 1 | 2>(0);
@@ -16,12 +17,12 @@ export function Boot({ summary, onDone }: { summary: LibrarySummary | undefined;
   const snd = useRef<number[]>([]);
 
   const lines = summary ? [
-    <>› catálogo: <b>{summary.catalogTotal} recomps</b> em {CONSOLES.length} consoles</>,
-    <>› biblioteca: <b>{plural(summary.installed, 'jogo instalado', 'jogos instalados')}</b></>,
-    <>› radar: <b>{plural(summary.radar.fresh, 'novo', 'novos')}</b> e {plural(summary.radar.updates, 'atualização', 'atualizações')} desde a última visita</>,
-    <>› conquistas: <b>{summary.achievements.unlocked}</b> de {summary.achievements.total}{summary.playMs ? <> · tempo de jogo: <b>{fmtPlay(summary.playMs)}</b></> : null}</>,
-    <>› controle: <b>{PAD_NAMES[pad]}</b></>,
-  ] : [<>› lendo a biblioteca…</>];
+    <>{tt('› catálogo:')}{' '}<b>{tt('{0} recomps', { 0: summary.catalogTotal })}</b>{' '}{tt('em {0} consoles', { 0: CONSOLES.length })}</>,
+    <>{tt('› biblioteca:')}{' '}<b>{plural(summary.installed, tt('jogo instalado'), tt('jogos instalados'))}</b></>,
+    <>{tt('› radar:')}{' '}<b>{plural(summary.radar.fresh, tt('novo'), tt('novos'))}</b>{' '}{tt('e {0} desde a última visita', { 0: plural(summary.radar.updates, tt('atualização'), tt('atualizações')) })}</>,
+    <>{tt('› conquistas:')}{' '}<b>{summary.achievements.unlocked}</b>{' '}{tt('de {0}', { 0: summary.achievements.total })}{summary.playMs ? <>{' '}{tt('· tempo de jogo:')}{' '}<b>{fmtPlay(summary.playMs)}</b></> : null}</>,
+    <>{tt('› controle:')}{' '}<b>{PAD_NAMES[pad]}</b></>,
+  ] : [<>{tt('› lendo a biblioteca…')}</>];
 
   useEffect(() => {
     initAudio();
@@ -47,14 +48,14 @@ export function Boot({ summary, onDone }: { summary: LibrarySummary | undefined;
   useKeys(() => press());
 
   return (
-    <div id="boot" className={`${skip ? 'skip' : ''} ${stage === 2 ? 'go' : ''}`} onClick={press} aria-label="Abertura do Cartucho">
+    <div id="boot" className={`${skip ? 'skip' : ''} ${stage === 2 ? 'go' : ''}`} onClick={press} aria-label={tt('Abertura do Cartucho')}>
       <div className="line" />
       <div className="bt-in">
-        <div className="bt-dev"><div className="bt-c"><span>RECOMP</span></div><div className="bt-slot" /></div>
-        <div className="bt-logo">CARTUCHO</div>
-        <div className="bt-sub">RECOMPS · PORTS · EMULADORES</div>
+        <div className="bt-dev"><div className="bt-c"><span>{tt('RECOMP')}</span></div><div className="bt-slot" /></div>
+        <div className="bt-logo">{tt('CARTUCHO')}</div>
+        <div className="bt-sub">{tt('RECOMPS · PORTS · EMULADORES')}</div>
         <div className="bt-log">{lines.slice(0, shown).map((l, i) => <div key={i}>{l}</div>)}</div>
-        <div className={`bt-start ${stage >= 1 ? 'on' : ''}`}>{stage >= 1 && <>APERTE <Glyph a="ok" /> PARA COMEÇAR</>}</div>
+        <div className={`bt-start ${stage >= 1 ? 'on' : ''}`}>{stage >= 1 && <>{tt('APERTE')}{' '}<Glyph a="ok" />{' '}{tt('PARA COMEÇAR')}</>}</div>
       </div>
     </div>
   );

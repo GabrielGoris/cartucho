@@ -17,6 +17,7 @@ import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
 import { useFeed, useGameProgress, useHubActions, useHubData, type HubGame } from './data';
+import { tt } from '@shared/i18n';
 
 type Page = 'home' | 'cat' | 'ach' | 'news' | 'cfg' | 'game';
 type Zone = 'top' | 'row' | 'acts' | 'cards' | 'tabs' | 'shelf' | 'side' | 'main' | 'gacts' | 'gshots' | 'gtext';
@@ -24,10 +25,10 @@ interface St { page: Page; zone: Zone; di: number; idx: number; ai: number; ci: 
 type Opt = { k: string; l: string; ic: IconName };
 type Hint = [Parameters<typeof Glyph>[0]['a'], string];
 
-const TOP: [string, string | IconName][] = [['games', 'Jogos'], ['cat', 'Descobrir'], ['search', 'search'], ['news', 'bell'], ['cfg', 'gear'], ['ach', 'medal']];
-const TAGS = { new: 'Novo no catálogo', upd: 'Versão nova', up: 'Mudou de status' } as const;
-const SHORT = { new: 'Novo', upd: 'Versão nova', up: 'Status' } as const;
-const CFG: Opt[] = [{ k: 'dir', l: 'Pasta dos jogos', ic: 'folder' }, { k: 'snd', l: 'Sons da interface', ic: 'sound' }, { k: 'radar', l: 'Radar de novidades', ic: 'bell' }, { k: 'off', l: 'Voltar ao Cartucho', ic: 'power' }];
+const TOP: [string, string | IconName][] = [['games', tt('Jogos')], ['cat', tt('Descobrir')], ['search', 'search'], ['news', 'bell'], ['cfg', 'gear'], ['ach', 'medal']];
+const TAGS = { new: tt('Novo no catálogo'), upd: tt('Versão nova'), up: tt('Mudou de status') } as const;
+const SHORT = { new: tt('Novo'), upd: tt('Versão nova'), up: tt('Status') } as const;
+const CFG: Opt[] = [{ k: 'dir', l: tt('Pasta dos jogos'), ic: 'folder' }, { k: 'snd', l: tt('Sons da interface'), ic: 'sound' }, { k: 'radar', l: tt('Radar de novidades'), ic: 'bell' }, { k: 'off', l: tt('Voltar ao Cartucho'), ic: 'power' }];
 
 const Art = ({ g, v }: { g: HubGame; v: 'cover' | 'wide' | 'square' }) =>
   <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant={v} />;
@@ -46,7 +47,7 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   const [dst, setDst] = useState(initialDiscover);
   const toSearch = () => { setDst(d => ({ ...d, zone: 'search' })); setTimeout(focusSearch, 80); };
   const clock = useClock();
-  const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show('Pasta dos jogos alterada'); } }));
+  const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show(tt('Pasta dos jogos alterada')); } }));
   const chooseExe = useMutation(trpc.games.chooseExe.mutationOptions({ onSuccess: () => void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }) }));
   const openFolder = useMutation(trpc.games.openFolder.mutationOptions());
 
@@ -79,42 +80,43 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     const inst = x.installed;
     const L: Opt[] = [];
     if (inst?.missing) {
-      if (x.catalog?.repo && !self) L.push({ k: 'reinstall', l: 'Instalar de novo', ic: 'dl' });
-      L.push({ k: 'relink', l: 'Procurar a pasta', ic: 'folder' });
-      L.push({ k: 'remove', l: 'Tirar da biblioteca', ic: 'stop' });
+      if (x.catalog?.repo && !self) L.push({ k: 'reinstall', l: tt('Instalar de novo'), ic: 'dl' });
+      L.push({ k: 'relink', l: tt('Procurar a pasta'), ic: 'folder' });
+      L.push({ k: 'remove', l: tt('Tirar da biblioteca'), ic: 'stop' });
     } else if (inst) {
-      L.push(inst.running ? { k: 'quit', l: 'Fechar o jogo', ic: 'stop' } : inst.exe ? { k: 'play', l: 'Jogar', ic: 'play' } : { k: 'exe', l: 'Escolher o .exe', ic: 'folder' });
-      if (x.update?.updateAvailable && !self) L.push({ k: 'update', l: `Atualizar para ${x.update.latest?.tag}`, ic: 'dl' });
-      if (inst.adapter) L.push({ k: 'ach', l: 'Conquistas', ic: 'medal' });
-      L.push({ k: 'folder', l: 'Abrir pasta', ic: 'folder' });
-      if (inst.exe) L.push({ k: 'exe', l: 'Escolher o .exe', ic: 'folder' });
+      L.push(inst.running ? { k: 'play', l: tt('Voltar para o jogo'), ic: 'play' } : inst.exe ? { k: 'play', l: tt('Jogar'), ic: 'play' } : { k: 'exe', l: tt('Escolher o .exe'), ic: 'folder' });
+      if (inst.running) L.push({ k: 'quit', l: tt('Fechar o jogo'), ic: 'stop' });
+      if (x.update?.updateAvailable && !self) L.push({ k: 'update', l: tt('Atualizar para {0}', { 0: x.update.latest?.tag }), ic: 'dl' });
+      if (inst.adapter) L.push({ k: 'ach', l: tt('Conquistas'), ic: 'medal' });
+      L.push({ k: 'folder', l: tt('Abrir pasta'), ic: 'folder' });
+      if (inst.exe) L.push({ k: 'exe', l: tt('Escolher o .exe'), ic: 'folder' });
     } else {
-      if (x.repo && !self) L.push({ k: 'install', l: 'Instalar', ic: 'dl' });
-      L.push({ k: 'add', l: self ? 'Já instalei: adicionar pasta' : 'Escolher pasta', ic: 'folder' });
+      if (x.repo && !self) L.push({ k: 'install', l: tt('Instalar'), ic: 'dl' });
+      L.push({ k: 'add', l: self ? tt('Já instalei: adicionar pasta') : tt('Escolher pasta'), ic: 'folder' });
     }
-    if (x.repo) L.push({ k: 'gh', l: 'Ver no GitHub', ic: 'link' });
-    if (st.page !== 'game') L.push({ k: 'info', l: 'Página do jogo', ic: 'info' });
-    if (home) L.push({ k: 'off', l: 'Voltar ao Cartucho', ic: 'power' });
+    if (x.repo) L.push({ k: 'gh', l: tt('Ver no GitHub'), ic: 'link' });
+    if (st.page !== 'game') L.push({ k: 'info', l: tt('Página do jogo'), ic: 'info' });
+    if (home) L.push({ k: 'off', l: tt('Voltar ao Cartucho'), ic: 'power' });
     return L;
   };
   const run = (k: string, x: HubGame) => {
     setMenu(null);
-    if (k === 'play' || k === 'quit' || k === 'install') {
+    if (k === 'quit') { act.quit(x); sfx.play('back'); show(tt('Fechando {0}…', { 0: x.title })); return; }
+    if (k === 'play' || k === 'install') {
       const r = act.primary(x);
-      sfx.play(r === 'quit' ? 'back' : 'ok');
-      if (r === 'play') show(`${x.title} aberto · o tempo de jogo começou a contar`);
-      else if (r === 'install') show(`Baixando ${x.repo} do GitHub…`);
-      else if (r === 'quit') show(`Fechando ${x.title}…`);
+      sfx.play('ok');
+      if (r === 'play') show(tt('{0} aberto · o tempo de jogo começou a contar', { 0: x.title }));
+      else if (r === 'install') show(tt('Baixando {0} do GitHub…', { 0: x.repo }));
       else if (r === 'pick') chooseExe.mutate({ id: x.installed!.id });
-      else if (r === 'relink') show('Escolha onde o jogo está agora');
+      else if (r === 'relink') show(tt('Escolha onde o jogo está agora'));
       return;
     }
     sfx.play('ok');
-    if (k === 'add') { act.addFolder(x); return show('Escolha a pasta onde o jogo está instalado'); }
-    if (k === 'reinstall') { act.reinstall(x); return show(`Baixando ${x.repo} de novo… o tempo de jogo continua`); }
-    if (k === 'relink') { act.relink(x); return show('Escolha onde o jogo está agora'); }
-    if (k === 'remove') { act.remove(x); if (st.page === 'game') up({ page: st.from?.page ?? 'home', zone: st.from?.zone ?? 'row', game: null, from: null }); return show(`${x.title} saiu da biblioteca · nenhum arquivo foi apagado`); }
-    if (k === 'update') { act.update(x); return show(`Atualizando para ${x.update?.latest?.tag}… configurações e saves ficam`); }
+    if (k === 'add') { act.addFolder(x); return show(tt('Escolha a pasta onde o jogo está instalado')); }
+    if (k === 'reinstall') { act.reinstall(x); return show(tt('Baixando {0} de novo… o tempo de jogo continua', { 0: x.repo })); }
+    if (k === 'relink') { act.relink(x); return show(tt('Escolha onde o jogo está agora')); }
+    if (k === 'remove') { act.remove(x); if (st.page === 'game') up({ page: st.from?.page ?? 'home', zone: st.from?.zone ?? 'row', game: null, from: null }); return show(tt('{0} saiu da biblioteca · nenhum arquivo foi apagado', { 0: x.title })); }
+    if (k === 'update') { act.update(x); return show(tt('Atualizando para {0}… configurações e saves ficam', { 0: x.update?.latest?.tag })); }
     if (k === 'ach') { up({ page: 'ach', zone: 'side', gi: Math.max(0, achGames.indexOf(x)), si: 0 }); return; }
     if (k === 'folder') return openFolder.mutate({ id: x.installed!.id });
     if (k === 'exe') return chooseExe.mutate({ id: x.installed!.id });
@@ -155,7 +157,7 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       if (k === 'dir') return pickDir.mutate();
       if (k === 'snd') return setSettings({ snd: !getSettings().snd });
       if (k === 'off') return onBack();
-      return show('O radar confere o catálogo do Recompendium toda vez que o Cartucho abre');
+      return show(tt('O radar confere o catálogo do Recompendium toda vez que o Cartucho abre'));
     }
     if (p === 'news') { const f = data.feed[st.si]; feed.done(f); const x = f && data.catalog.find(y => y.catalog?.id === f.gameId); if (x) { sfx.play('ok'); setMenu({ g: x, mi: 0 }); } }
   };
@@ -206,10 +208,10 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     if (D && st.si < total - 1) mv({ si: st.si + 1 }); else if (U && st.si > 0) mv({ si: st.si - 1 });
   }, !(st.page === 'cat' || st.page === 'game'));
 
-  const hints: Hint[] = menu ? [['ok', 'Confirmar'], ['back', 'Fechar']]
-    : st.page === 'home' && st.zone === 'row' && g ? [['ok', primaryOf(g).l], ['x', 'Opções']]
-    : st.page === 'news' && data.feed.length ? [['ok', 'Abrir'], ['x', 'Dispensar'], ['y', 'Limpar tudo'], ['back', 'Voltar']]
-    : [['ok', 'Confirmar'], ['back', 'Voltar']];
+  const hints: Hint[] = menu ? [['ok', tt('Confirmar')], ['back', tt('Fechar')]]
+    : st.page === 'home' && st.zone === 'row' && g ? [['ok', primaryOf(g).l], ['x', tt('Opções')]]
+    : st.page === 'news' && data.feed.length ? [['ok', tt('Abrir')], ['x', tt('Dispensar')], ['y', tt('Limpar tudo')], ['back', tt('Voltar')]]
+    : [['ok', tt('Confirmar')], ['back', tt('Voltar')]];
   const H = ({ className }: { className: string }) => <div className={className}>{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>;
 
   const setMenuIdx = (mi: number) => { if (menu) { if (menu.mi === mi) { const o = options(menu.g, st.page === 'home')[mi]; if (o) run(o.k, menu.g); } else setMenu({ ...menu, mi }); } };
@@ -225,7 +227,7 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       <Fit w={1920} h={1080} className="p5" style={{ ['--cc' as string]: c.color }}>
         {st.page === 'home' ? (
           <Home c={c.name} g={g} row={row} st={st} self={self} clock={clock} feedCount={data.feed.length} catCount={data.catalog.length}
-            primary={g ? primaryOf(g).l : 'Descobrir'} feed={g ? data.feed.find(f => f.gameId === g.catalog?.id) ?? null : null}
+            primary={g ? primaryOf(g).l : tt('Descobrir')} feed={g ? data.feed.find(f => f.gameId === g.catalog?.id) ?? null : null}
             onTile={i => { if (st.zone === 'row' && st.idx === i) enter(); else { sfx.play('move'); setMenu(null); up({ zone: 'row', idx: i }); } }}
             onTop={j => { up({ zone: 'top', di: j }); top(j); }}
             onAct={j => { if (st.zone === 'acts' && st.ai === j) enter(); else { sfx.play('move'); up({ zone: 'acts', ai: j }); } }}
@@ -242,15 +244,15 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
             )}
             {st.page === 'ach' && (
               <>
-                <div className="p5-ph"><span className="ic"><Ic n="medal" /></span>Conquistas</div>
+                <div className="p5-ph"><span className="ic"><Ic n="medal" /></span>{tt('Conquistas')}</div>
                 <div className="p5-gl">{achGames.map((x, j) => (
                   <button key={x.key} className={j === st.gi ? (st.zone === 'side' ? 'on' : 'sel') : ''} aria-label={x.title} onClick={() => { sfx.play('move'); up({ zone: 'side', gi: j, si: 0 }); }}><Art g={x} v="wide" /></button>
                 ))}</div>
                 <div className="p5-list">
                   {achGame && <div className="p5-lt">{achGame.title}</div>}
-                  {!achGame ? <div className="p5-li">Nenhum jogo instalado neste console.</div>
-                    : !achGame.installed?.adapter ? <div className="p5-li tall">O Cartucho ainda não sabe ler as conquistas de {achGame.title}.</div>
-                    : !achList.length ? <div className="p5-li">{ach.isLoading ? 'Lendo…' : 'Nenhuma conquista encontrada.'}</div>
+                  {!achGame ? <div className="p5-li">{tt('Nenhum jogo instalado neste console.')}</div>
+                    : !achGame.installed?.adapter ? <div className="p5-li tall">{tt('O Cartucho ainda não sabe ler as conquistas de {0}.', { 0: achGame.title })}</div>
+                    : !achList.length ? <div className="p5-li">{ach.isLoading ? tt('Lendo…') : tt('Nenhuma conquista encontrada.')}</div>
                     : <div style={{ transform: `translateY(-${Math.max(0, st.si - 5) * 100}px)`, transition: 'transform .25s' }}>{achList.map((a, j) => (
                         <button key={a.id} className={`p5-li ${st.zone === 'main' && j === st.si ? 'on' : ''}`} onClick={() => { sfx.play('move'); up({ zone: 'main', si: j }); }}>
                           <span className={`md ${a.unlockedAt != null ? 'got' : 'lock'}`}>{a.icon ? <img src={a.icon} alt="" /> : <Ic n={a.unlockedAt != null ? 'medal' : 'lock'} />}</span>
@@ -259,12 +261,12 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
                         </button>
                       ))}</div>}
                 </div>
-                {achList.length > 0 && (() => { const got = achList.filter(a => a.unlockedAt != null).length; return <div className="p5-prog"><b>{Math.round((got / achList.length) * 100)}%</b>{got} de {achList.length}</div>; })()}
+                {achList.length > 0 && (() => { const got = achList.filter(a => a.unlockedAt != null).length; return <div className="p5-prog"><b>{Math.round((got / achList.length) * 100)}%</b>{tt('{0} de {1}', { 0: got, 1: achList.length })}</div>; })()}
               </>
             )}
             {st.page === 'news' && (
               <>
-                <div className="p5-ph"><span className="ic"><Ic n="bell" /></span>Novidades</div>
+                <div className="p5-ph"><span className="ic"><Ic n="bell" /></span>{tt('Novidades')}</div>
                 <div className="p5-list wide">{data.feed.length ? data.feed.map((f, j) => {
                   const x = data.catalog.find(y => y.catalog?.id === f.gameId);
                   return (
@@ -274,15 +276,15 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
                       <span className="v">{TAGS[f.kind]} · {ago(f.at)}</span>
                     </button>
                   );
-                }) : <div className="p5-li">Nada novo por aqui. O Cartucho confere o Recompendium toda vez que abre.</div>}</div>
+                }) : <div className="p5-li">{tt('Nada novo por aqui. O Cartucho confere o Recompendium toda vez que abre.')}</div>}</div>
               </>
             )}
             {st.page === 'cfg' && (
               <>
-                <div className="p5-ph"><span className="ic"><Ic n="gear" /></span>Ajustes</div>
+                <div className="p5-ph"><span className="ic"><Ic n="gear" /></span>{tt('Ajustes')}</div>
                 <div className="p5-list mid">{CFG.map((o, j) => (
                   <button key={o.k} className={`p5-li ${j === st.si ? 'on' : ''}`} onClick={() => { if (st.si === j) enter(); else { sfx.play('move'); up({ si: j }); } }}>
-                    <Ic n={o.ic} />{o.l}<span className="v">{o.k === 'snd' ? (s.snd ? 'Ligados' : 'Desligados') : o.k === 'dir' ? <PortsDir /> : ''}</span>
+                    <Ic n={o.ic} />{o.l}<span className="v">{o.k === 'snd' ? (s.snd ? tt('Ligados') : tt('Desligados')) : o.k === 'dir' ? <PortsDir /> : ''}</span>
                   </button>
                 ))}</div>
               </>
@@ -321,10 +323,10 @@ function Home({ c, g, row, st, self, clock, feedCount, catCount, primary, feed, 
         {TOP.map(([k, l], j) => {
           const on = z === 'top' && st.di === j;
           if (k === 'games' || k === 'cat') return <button key={k} className={`p5-tab ${k === 'games' ? 'cur' : ''} ${on ? 'on' : ''}`} onClick={() => onTop(j)}>{l}</button>;
-          if (k === 'ach') return <button key={k} className={`p5-av ${on ? 'on' : ''}`} aria-label="Conquistas" onClick={() => onTop(j)}>{me.initial}</button>;
+          if (k === 'ach') return <button key={k} className={`p5-av ${on ? 'on' : ''}`} aria-label={tt('Conquistas')} onClick={() => onTop(j)}>{me.initial}</button>;
           return <button key={k} className={`i ${on ? 'on' : ''}`} aria-label={k} onClick={() => onTop(j)}><Ic n={l as IconName} />{k === 'news' && feedCount > 0 && <span className="n">{feedCount}</span>}</button>;
         }).reduce<ReactNode[]>((a, x, j) => (j === 2 ? [...a, <span key="sp" className="sp" />, x] : [...a, x]), [])}
-        <span className="p5-brand">Cartucho</span>
+        <span className="p5-brand">{tt('Cartucho')}</span>
         <span className="p5-clock">{clock}</span>
       </div>
       <div className="p5-row" style={{ transform: `translateX(-${Math.max(0, i - 2) * 126}px)` }}>
@@ -335,8 +337,8 @@ function Home({ c, g, row, st, self, clock, feedCount, catCount, primary, feed, 
             {k === i && z === 'row' && <span className="p5-lab">{x.title}</span>}
           </button>
         ))}
-        <button className={`p5-t add ${i === n ? 'on' : ''}`} aria-label="Descobrir" onClick={() => onTile(n)}>
-          <Ic n="plus" />{i === n && z === 'row' && <span className="p5-lab">Descobrir</span>}
+        <button className={`p5-t add ${i === n ? 'on' : ''}`} aria-label={tt('Descobrir')} onClick={() => onTile(n)}>
+          <Ic n="plus" />{i === n && z === 'row' && <span className="p5-lab">{tt('Descobrir')}</span>}
         </button>
       </div>
       {g ? (
@@ -344,19 +346,19 @@ function Home({ c, g, row, st, self, clock, feedCount, catCount, primary, feed, 
           <h1>{g.title}</h1>
           <p>
             {g.status ? `${STATUS_LABEL[g.status]} · ` : ''}
-            {g.installed?.missing ? 'pasta do jogo não encontrada' : g.installed?.running ? 'jogando agora' : g.installed?.playMs ? `${fmtPlay(g.installed.playMs)} jogadas${g.installed.lastPlayed ? ` · última vez ${ago(g.installed.lastPlayed)}` : ''}` : 'ainda não jogado'}
+            {g.installed?.missing ? tt('pasta do jogo não encontrada') : g.installed?.running ? tt('jogando agora') : g.installed?.playMs ? tt('{0} jogadas{1}', { 0: fmtPlay(g.installed.playMs), 1: g.installed.lastPlayed ? tt(' · última vez {0}', { 0: ago(g.installed.lastPlayed) }) : '' }) : tt('ainda não jogado')}
           </p>
           {p && <p className="prog">{p.error ?? `${p.stage}${p.pct > 0 && p.pct < 1 ? ` · ${Math.round(p.pct * 100)}%` : ''}`}</p>}
           <div className="p5-acts">
             <button className={`p5-b pri ${z === 'acts' && st.ai === 0 ? 'on' : ''}`} onClick={() => onAct(0)}>{primary}</button>
-            <button className={`p5-b icon ${z === 'acts' && st.ai === 1 ? 'on' : ''}`} aria-label="Opções" onClick={() => onAct(1)}><Ic n="dots" /></button>
+            <button className={`p5-b icon ${z === 'acts' && st.ai === 1 ? 'on' : ''}`} aria-label={tt('Opções')} onClick={() => onAct(1)}><Ic n="dots" /></button>
           </div>
         </div>
       ) : (
         <div className="p5-hero">
-          <h1>{n ? 'Descobrir' : 'Nenhum jogo por aqui ainda'}</h1>
-          <p>{catCount ? `${plural(catCount, 'recomp', 'recomps')} de ${c} no catálogo.${self ? ' Você instala por conta própria e adiciona a pasta aqui.' : ''}` : 'O radar avisa quando aparecer o primeiro.'}</p>
-          <div className="p5-acts"><button className={`p5-b pri ${z === 'acts' ? 'on' : ''}`} onClick={() => onAct(0)}>Abrir Descobrir</button></div>
+          <h1>{n ? tt('Descobrir') : tt('Nenhum jogo por aqui ainda')}</h1>
+          <p>{catCount ? tt('{0} de {1} no catálogo.{2}', { 0: plural(catCount, tt('recomp'), tt('recomps')), 1: c, 2: self ? tt(' Você instala por conta própria e adiciona a pasta aqui.') : '' }) : tt('O radar avisa quando aparecer o primeiro.')}</p>
+          <div className="p5-acts"><button className={`p5-b pri ${z === 'acts' ? 'on' : ''}`} onClick={() => onAct(0)}>{tt('Abrir Descobrir')}</button></div>
         </div>
       )}
       {g && <Cards g={g} st={st} self={self} feed={feed} onCard={onCard} />}
@@ -377,25 +379,25 @@ function Cards({ g, st, self, feed, onCard }: { g: HubGame; st: St; self: boolea
   return (
     <div className="p5-cards">
       <C k={0}>
-        <small><Ic n="medal" /> Conquistas</small>
-        {a?.total ? <><b>{a.unlocked}/{a.total}</b><span>{Math.round((a.unlocked / a.total) * 100)}% completo</span><div className="bar"><i style={{ width: `${(a.unlocked / a.total) * 100}%` }} /></div></>
-          : <><b>—</b><span>{inst?.adapter ? 'Nenhuma ainda' : 'Sem conquistas para este jogo'}</span></>}
+        <small><Ic n="medal" />{' '}{tt('Conquistas')}</small>
+        {a?.total ? <><b>{a.unlocked}/{a.total}</b><span>{tt('{0}% completo', { 0: Math.round((a.unlocked / a.total) * 100) })}</span><div className="bar"><i style={{ width: `${(a.unlocked / a.total) * 100}%` }} /></div></>
+          : <><b>—</b><span>{inst?.adapter ? tt('Nenhuma ainda') : tt('Sem conquistas para este jogo')}</span></>}
       </C>
       <C k={1}>
-        <small><Ic n="clock" /> Tempo de jogo</small>
+        <small><Ic n="clock" />{' '}{tt('Tempo de jogo')}</small>
         <b>{inst ? fmtPlay(inst.playMs) || '0m' : '—'}</b>
-        <span>{inst ? `${fmtPlay(week) || '0m'} nesta semana` : 'Ainda não jogado'}</span>
+        <span>{inst ? tt('{0} nesta semana', { 0: fmtPlay(week) || '0m' }) : tt('Ainda não jogado')}</span>
         {inst && d.length > 0 && <div className="mb">{d.map((v, j) => <i key={j} className={v ? '' : 'z'} style={{ height: `${v ? Math.max(6, (v / m) * 100) : 3}%` }} />)}</div>}
       </C>
       <C k={2}>
-        <small><Ic n="bell" /> Novidades</small>
+        <small><Ic n="bell" />{' '}{tt('Novidades')}</small>
         <b>{feed ? SHORT[feed.kind] : '—'}</b>
-        <span>{feed ? `${feed.detail ? feed.detail + ' · ' : ''}${ago(feed.at)}` : 'Nada novo para este jogo'}</span>
+        <span>{feed ? `${feed.detail ? feed.detail + ' · ' : ''}${ago(feed.at)}` : tt('Nada novo para este jogo')}</span>
       </C>
       <C k={3}>
-        <small><Ic n="dl" /> Versão</small>
+        <small><Ic n="dl" />{' '}{tt('Versão')}</small>
         <b>{g.update?.installed ?? inst?.version ?? '—'}</b>
-        <span>{self ? 'Atualizações por sua conta' : g.update?.updateAvailable ? `${g.update.latest?.tag} disponível` : inst ? (g.update?.updateAvailable === false ? 'Em dia' : 'Versão desconhecida') : 'Não instalado'}</span>
+        <span>{self ? tt('Atualizações por sua conta') : g.update?.updateAvailable ? tt('{0} disponível', { 0: g.update.latest?.tag }) : inst ? (g.update?.updateAvailable === false ? tt('Em dia') : tt('Versão desconhecida')) : tt('Não instalado')}</span>
       </C>
     </div>
   );

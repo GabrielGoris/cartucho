@@ -1,7 +1,6 @@
-/** Peças comuns dos hubs: tela em tamanho fixo escalada para caber, abertura do console e avisos. */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { locale } from '../lib/format';
 
-/** Desenha numa tela de w×h (ex.: 1920×1080) e escala para caber no espaço disponível, como uma TV. */
 export function Fit({ w, h, className = '', style, children }: { w: number; h: number; className?: string; style?: CSSProperties; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const [s, setS] = useState(0);
@@ -16,14 +15,12 @@ export function Fit({ w, h, className = '', style, children }: { w: number; h: n
   );
 }
 
-/** A "ligada" do console: cada família tem a sua (bloco que salta, faixa de luz, tela branca…). */
 export function BootOverlay({ kind, label = '' }: { kind: 'retro' | 'tiles' | 'soft' | 'sweep' | 'white'; label?: string }) {
   const [on, setOn] = useState(true);
   useEffect(() => { const t = setTimeout(() => setOn(false), 2000); return () => clearTimeout(t); }, []);
   return on ? <div className={`hboot hboot-${kind}`}><span>{kind === 'tiles' || kind === 'sweep' ? '' : label}</span></div> : null;
 }
 
-/** Aviso curto no rodapé do hub. */
 export function useHubToast() {
   const [msg, setMsg] = useState<{ t: string; k: number } | null>(null);
   const show = useCallback((t: string) => setMsg({ t, k: Date.now() }), []);
@@ -32,7 +29,6 @@ export function useHubToast() {
   return [node, show] as const;
 }
 
-/** Bateria e rede reais (num desktop sem bateria, só a rede aparece). */
 export function useDeviceStatus() {
   const [online, setOnline] = useState(navigator.onLine);
   const [batt, setBatt] = useState<{ level: number; charging: boolean } | null>(null);
@@ -51,9 +47,8 @@ export function useDeviceStatus() {
   return { online, batt };
 }
 
-/** Relógio que atualiza sozinho. */
 export function useClock() {
-  const f = () => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const f = () => new Date().toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   const [t, setT] = useState(f);
   useEffect(() => { const i = setInterval(() => setT(f()), 10_000); return () => clearInterval(i); }, []);
   return t;

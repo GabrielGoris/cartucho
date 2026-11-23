@@ -9,6 +9,7 @@ import { type DB, kvGet, kvSet } from '../db';
 import type { AchievementService } from '../achievements/service';
 import { type GitHub, type Release, githubToken, parseRepo } from './github';
 import { NotReadyToRun, fetchRelease, filesIn, findGameExe, guessProgram, installInto, isRunning, manifestOf, placeRelease, removeInstalled, unpackRelease, type Progress } from './files';
+import { tt } from '@shared/i18n';
 
 const CHECK_MS = 3 * 3600_000;
 
@@ -24,33 +25,33 @@ export class Ports {
 
   async installFromCatalog(catalogId: string): Promise<InstalledGame> {
     const cat = this.db.prepare('SELECT id, title, console, repo FROM catalog_game WHERE id = ?').get(catalogId) as { id: string; title: string; console: string; repo: string | null } | undefined;
-    if (!cat) throw new Error('Esse jogo não está no catálogo.');
-    if (!cat.repo) throw new Error('O catálogo não diz em qual projeto do GitHub este jogo está.');
+    if (!cat) throw new Error(tt('Esse jogo não está no catálogo.'));
+    if (!cat.repo) throw new Error(tt('O catálogo não diz em qual projeto do GitHub este jogo está.'));
     if (isSelfInstall(cat.console)) throw new Error(SELF_INSTALL_NOTE);
     const have = this.db.prepare('SELECT id, install_dir FROM installed_game WHERE catalog_id = ? OR lower(source_repo) = lower(?)').get(catalogId, cat.repo) as { id: string; install_dir: string } | undefined;
-    if (have && existsSync(have.install_dir)) throw new Error('Este jogo já está na sua biblioteca.');
+    if (have && existsSync(have.install_dir)) throw new Error(tt('Este jogo já está na sua biblioteca.'));
     return this.install(parseRepo(cat.repo), { key: catalogId, catalogId, title: cat.title, console: cat.console, replace: have?.id });
   }
 
   async install(repo: string, opts: { key?: string; catalogId?: string; title?: string; console?: string; replace?: string } = {}): Promise<InstalledGame> {
     const key = opts.key ?? repo;
-    if (this.busy.has(key)) throw new Error('Já está instalando.');
+    if (this.busy.has(key)) throw new Error(tt('Já está instalando.'));
     this.busy.add(key);
     const send = this.sender(key);
     const tmp = await fsp.mkdtemp(join(tmpdir(), 'cartucho-'));
     try {
-      send({ stage: 'Procurando a versão mais nova…', pct: 0 });
+      send({ stage: tt('Procurando a versão mais nova…'), pct: 0 });
       const rel = await this.gh.findRelease(repo);
-      const notReady = () => new NotReadyToRun(`${repo} não publica uma versão pronta para Windows (o jogo é montado a partir da sua cópia por uma ferramenta própria). Instale como a página do projeto explica e depois use "Adicionar jogo".`);
+      const notReady = () => new NotReadyToRun(tt('{0} não publica uma versão pronta para Windows (o jogo é montado a partir da sua cópia por uma ferramenta própria). Instale como a página do projeto explica e depois use "Adicionar jogo".', { 0: repo }));
       if (/setup|install/i.test(rel.assetName) && /\.(exe|msi)$/i.test(rel.assetName)) throw notReady();
       if (/\.zip$/i.test(rel.assetName)) {
-        send({ stage: 'Olhando dentro do pacote…', pct: 0 });
+        send({ stage: tt('Olhando dentro do pacote…'), pct: 0 });
         const names = await this.gh.remoteZipNames(rel.url);
         if (names && !names.some(n => /\.exe$/i.test(n))) throw notReady();
       }
       const { archive, scan } = await fetchRelease(rel, tmp, send, this.gh.fetch, githubToken());
       const src = await unpackRelease(rel, archive, tmp, send);
-      send({ stage: 'Copiando para a pasta de jogos…', pct: 1 });
+      send({ stage: tt('Copiando para a pasta de jogos…'), pct: 1 });
 
       const base = this.portsDir(); mkdirSync(base, { recursive: true });
       const used = (f: string) => !!this.db.prepare('SELECT 1 FROM installed_game WHERE lower(install_dir) = lower(?) AND id != ?').get(resolve(f), opts.replace ?? '');
@@ -70,10 +71,10 @@ export class Ports {
         });
       kvSet(this.db, `upd.${game.id}`, JSON.stringify({ at: Date.now(), latest: rel }));
       console.log(`[instalar] ${repo} ${rel.tag} (${rel.assetName}, defender: ${scan}) em ${folder}`);
-      send({ stage: 'Pronto', pct: 1, done: true });
+      send({ stage: tt('Pronto'), pct: 1, done: true });
       return this.games.getGame(game.id);
     } catch (e) {
-      send({ stage: 'Erro', pct: 0, done: true, error: (e as Error).message });
+      send({ stage: tt('Erro'), pct: 0, done: true, error: (e as Error).message });
       throw e;
     } finally {
       this.busy.delete(key);
@@ -106,30 +107,30 @@ export class Ports {
 
   async update(gameId: string) {
     const g = this.games.getGame(gameId);
-    if (isSelfInstall(g.console)) throw new Error('O Cartucho não atualiza recomps deste console: instale a versão nova por cima da pasta do jogo.');
-    if (!g.sourceRepo) throw new Error('Este jogo não tem um projeto do GitHub ligado a ele.');
-    if (g.missing) throw new Error('A pasta do jogo não existe mais. Instale de novo ou escolha onde ele está.');
-    if (this.busy.has(gameId)) throw new Error('Já está atualizando.');
-    if (this.running(gameId) || isRunning(g.exe)) throw new Error('Feche o jogo antes de atualizar.');
+    if (isSelfInstall(g.console)) throw new Error(tt('O Cartucho não atualiza recomps deste console: instale a versão nova por cima da pasta do jogo.'));
+    if (!g.sourceRepo) throw new Error(tt('Este jogo não tem um projeto do GitHub ligado a ele.'));
+    if (g.missing) throw new Error(tt('A pasta do jogo não existe mais. Instale de novo ou escolha onde ele está.'));
+    if (this.busy.has(gameId)) throw new Error(tt('Já está atualizando.'));
+    if (this.running(gameId) || isRunning(g.exe)) throw new Error(tt('Feche o jogo antes de atualizar.'));
     this.busy.add(gameId);
     const send = this.sender(gameId);
     const tmp = await fsp.mkdtemp(join(tmpdir(), 'cartucho-'));
     try {
-      send({ stage: 'Procurando a versão mais nova…', pct: 0 });
+      send({ stage: tt('Procurando a versão mais nova…'), pct: 0 });
       const rel = await this.gh.findRelease(g.sourceRepo);
       const { release: inst, manifest } = this.games.internals(gameId);
       if (inst?.uploader && rel.uploader && inst.uploader.toLowerCase() !== rel.uploader.toLowerCase())
-        throw new Error(`A versão ${rel.tag} foi publicada por outra conta (${rel.uploader}; antes era ${inst.uploader}). O Cartucho não instalou: confira a página do projeto.`);
+        throw new Error(tt('A versão {0} foi publicada por outra conta ({1}; antes era {2}). O Cartucho não instalou: confira a página do projeto.', { 0: rel.tag, 1: rel.uploader, 2: inst.uploader }));
       const exeName = g.exe?.split(/[\\/]/).pop()?.toLowerCase();
       if (exeName && /\.zip$/i.test(rel.assetName)) {
-        send({ stage: 'Olhando dentro do pacote…', pct: 0 });
+        send({ stage: tt('Olhando dentro do pacote…'), pct: 0 });
         const names = await this.gh.remoteZipNames(rel.url);
-        if (names && !names.some(n => n.split('/').pop()!.toLowerCase() === exeName)) throw new NotReadyToRun(`${g.title} se atualiza pela própria ferramenta dele (o pacote novo não traz o ${exeName}).`);
+        if (names && !names.some(n => n.split('/').pop()!.toLowerCase() === exeName)) throw new NotReadyToRun(tt('{0} se atualiza pela própria ferramenta dele (o pacote novo não traz o {1}).', { 0: g.title, 1: exeName }));
       }
       const { archive, scan } = await fetchRelease(rel, tmp, send, this.gh.fetch, githubToken());
       const src = await unpackRelease(rel, archive, tmp, send);
       const root = g.exe ? placeRelease(src, g.exe) : g.installDir;
-      if (!root) throw new NotReadyToRun(`${g.title} se atualiza pela própria ferramenta dele.`);
+      if (!root) throw new NotReadyToRun(tt('{0} se atualiza pela própria ferramenta dele.', { 0: g.title }));
       const { kept, backup } = await installInto(root, src, inst?.tag ?? null, send);
       let exe = g.exe;
       if (exe && !existsSync(exe)) exe = guessProgram(root, g.sourceRepo);
@@ -137,10 +138,10 @@ export class Ports {
       this.games.patchGame(gameId, { exe, release: this.toInstalled(rel, inst), manifest: newManifest });
       kvSet(this.db, `upd.${gameId}`, JSON.stringify({ at: Date.now(), latest: rel }));
       console.log(`[atualizar] ${g.title} → ${rel.tag} (defender: ${scan}, ${kept.length} configurações mantidas)`);
-      send({ stage: 'Pronto', pct: 1, done: true });
+      send({ stage: tt('Pronto'), pct: 1, done: true });
       return { ...this.status(this.games.getGame(gameId), rel, Date.now()), backup, kept: kept.length };
     } catch (e) {
-      send({ stage: 'Erro', pct: 0, done: true, error: (e as Error).message });
+      send({ stage: tt('Erro'), pct: 0, done: true, error: (e as Error).message });
       throw e;
     } finally {
       this.busy.delete(gameId);
@@ -150,13 +151,13 @@ export class Ports {
 
   async uninstall(gameId: string) {
     const g = this.games.getGame(gameId);
-    if (!g.managed) throw new Error('O Cartucho só desinstala jogos que ele mesmo instalou. Use "Remover da biblioteca" (os arquivos ficam).');
-    if (this.running(gameId) || isRunning(g.exe)) throw new Error('Feche o jogo antes.');
+    if (!g.managed) throw new Error(tt('O Cartucho só desinstala jogos que ele mesmo instalou. Use "Remover da biblioteca" (os arquivos ficam).'));
+    if (this.running(gameId) || isRunning(g.exe)) throw new Error(tt('Feche o jogo antes.'));
     const { manifest } = this.games.internals(gameId);
-    if (!manifest) throw new Error('Não sei quais arquivos vieram com a instalação, então não apaguei nada.');
+    if (!manifest) throw new Error(tt('Não sei quais arquivos vieram com a instalação, então não apaguei nada.'));
     let r;
     try { r = await removeInstalled(g.installDir, manifest); }
-    catch (e) { throw new Error(/EBUSY|EPERM/.test((e as NodeJS.ErrnoException).code || '') ? 'Um arquivo está em uso. Feche o jogo e tente de novo.' : (e as Error).message); }
+    catch (e) { throw new Error(/EBUSY|EPERM/.test((e as NodeJS.ErrnoException).code || '') ? tt('Um arquivo está em uso. Feche o jogo e tente de novo.') : (e as Error).message); }
     this.games.removeGame(gameId);
     this.db.prepare('DELETE FROM kv WHERE key = ?').run(`upd.${gameId}`);
     return r;

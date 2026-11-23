@@ -1,15 +1,11 @@
-/**
- * Releases do GitHub: achar a versão mais nova de um projeto e o arquivo certo para este PC.
- * Lógica adaptada do Harbour (https://github.com/, licença MIT-0), traduzida e com as mensagens em português.
- */
 import { spawnSync } from 'node:child_process';
+import { tt } from '@shared/i18n';
 
 export type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 
 export interface Asset { id: number; name: string; size: number; browser_download_url: string; url?: string; updated_at?: string; digest?: string | null; uploader?: { login?: string } | null }
 interface ApiRelease { tag_name: string; name?: string | null; draft?: boolean; prerelease?: boolean; published_at?: string; body?: string | null; html_url?: string; assets: Asset[]; author?: { login?: string } | null }
 
-/** Uma versão escolhida para baixar. */
 export interface Release {
   tag: string; name: string; publishedAt: string | null;
   assetId: number; assetName: string; size: number; url: string; api: string | null;
@@ -20,18 +16,13 @@ export class GitHubError extends Error { constructor(msg: string, readonly statu
 
 const UA = { 'User-Agent': 'Cartucho', Accept: 'application/vnd.github+json' };
 
-/** "dono/projeto" a partir de um link ou do próprio texto. */
 export function parseRepo(input: string) {
   const text = String(input || '').trim().replace(/\.git$/i, '').replace(/\/+$/, '');
   const m = text.match(/^(?:https?:\/\/(?:www\.)?github\.com\/)?([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))\/([A-Za-z0-9._-]{1,100})(?:\/.*)?$/);
-  if (!m || m[2] === '.' || m[2] === '..') throw new GitHubError('Use o formato dono/projeto, por exemplo hedge-dev/UnleashedRecomp.');
+  if (!m || m[2] === '.' || m[2] === '..') throw new GitHubError(tt('Use o formato dono/projeto, por exemplo hedge-dev/UnleashedRecomp.'));
   return `${m[1]}/${m[2]}`;
 }
 
-/**
- * Sem conta, o GitHub permite 60 consultas por hora. Se o GitHub CLI (gh) estiver logado neste PC, usamos o
- * token dele (5.000 por hora). Ele só é enviado para api.github.com.
- */
 let token: string | null | undefined;
 export function githubToken() {
   if (token !== undefined) return token;
@@ -43,7 +34,6 @@ export function githubToken() {
   return token;
 }
 
-/** Escolhe o download para este computador quando o projeto não diz qual é. */
 export function guessAsset(assets: Asset[], platform: NodeJS.Platform = process.platform): Asset | null {
   const score = (a: Asset) => {
     const n = a.name.toLowerCase();
@@ -55,11 +45,11 @@ export function guessAsset(assets: Asset[], platform: NodeJS.Platform = process.
       if (/(macos|mac|osx|darwin|linux|android|ios|appimage|flatpak)/.test(n)) return -1;
       if (/win|windows|msvc|mingw/.test(n)) v += 4;
       if (/x64|x86_64|amd64|win64/.test(n)) v += 2;
-      if (/\.(zip|7z|rar)$/.test(n)) v += 2;                 // portátil antes de instalador
+      if (/\.(zip|7z|rar)$/.test(n)) v += 2;
       if (/setup|install/.test(n)) v -= 3;
-      if (/rog-?ally|steam-?deck|legacy/.test(n)) return -1;  // versões para um portátil ou CPU antiga
+      if (/rog-?ally|steam-?deck|legacy/.test(n)) return -1;
       if (/no-?avx|no-?sse|compat|fallback|safe-?mode/.test(n)) v -= 3;
-      if (/msvc|clang|mingw|llvm/.test(n)) v -= 0.5;         // entre variantes de compilador, a simples
+      if (/msvc|clang|mingw|llvm/.test(n)) v -= 0.5;
       if (/pgo/.test(n)) v += 1;
     } else if (platform === 'darwin') {
       if (/(windows|win64|win32|\.exe$|linux|appimage|android|\.deb$|\.rpm$|\.dmg$)/.test(n)) return -1;
@@ -84,14 +74,13 @@ export function createGitHub({ fetch = globalThis.fetch as Fetch, api = 'https:/
     const r = await fetch(url, { headers: tk ? { ...UA, Authorization: `Bearer ${tk}` } : UA, signal: AbortSignal.timeout(30_000) });
     if (!r.ok) {
       throw new GitHubError(
-        r.status === 403 || r.status === 429 ? 'O limite de consultas do GitHub acabou por agora. Tente de novo daqui a uma hora (ou faça login no GitHub CLI com "gh auth login").'
-          : r.status === 404 ? 'O GitHub não encontrou esse projeto (pode ter sido removido ou ficado privado).'
-          : `O GitHub não respondeu (erro ${r.status}). Tente mais tarde.`, r.status);
+        r.status === 403 || r.status === 429 ? tt('O limite de consultas do GitHub acabou por agora. Tente de novo daqui a uma hora (ou faça login no GitHub CLI com "gh auth login").')
+          : r.status === 404 ? tt('O GitHub não encontrou esse projeto (pode ter sido removido ou ficado privado).')
+          : tt('O GitHub não respondeu (erro {0}). Tente mais tarde.', { 0: r.status }), r.status);
     }
     return r.json() as Promise<T>;
   }
 
-  /** A versão mais nova com um download para este PC. Projetos que só publicam pré-versões também contam. */
   async function findRelease(repo: string, { asset: pattern, prerelease = false }: { asset?: string; prerelease?: boolean } = {}): Promise<Release> {
     const re = pattern ? new RegExp(pattern, 'i') : null;
     let list: ApiRelease[];
@@ -102,7 +91,7 @@ export function createGitHub({ fetch = globalThis.fetch as Fetch, api = 'https:/
         if ((e as GitHubError).status !== 404) throw e;
         list = (await json<ApiRelease[]>(`${api}/repos/${repo}/releases?per_page=15`)).filter(r => !r.draft);
       }
-      if (!list.length) throw new GitHubError(`${repo} ainda não publicou nenhuma versão para baixar.`);
+      if (!list.length) throw new GitHubError(tt('{0} ainda não publicou nenhuma versão para baixar.', { 0: repo }));
     }
     for (const rel of list) {
       if (rel.draft) continue;
@@ -114,18 +103,14 @@ export function createGitHub({ fetch = globalThis.fetch as Fetch, api = 'https:/
         uploader: a.uploader?.login || rel.author?.login || null, prerelease: !!rel.prerelease,
       };
     }
-    throw new GitHubError(`Nenhum download para ${platform === 'win32' ? 'Windows' : platform === 'darwin' ? 'macOS' : 'Linux'} nas versões recentes de ${repo}.`);
+    throw new GitHubError(tt('Nenhum download para {0} nas versões recentes de {1}.', { 0: platform === 'win32' ? 'Windows' : platform === 'darwin' ? 'macOS' : 'Linux', 1: repo }));
   }
 
-  /**
-   * Os arquivos de dentro de um zip remoto, lidos do fim com alguns pedidos pequenos em vez de baixar tudo.
-   * Também traz o tamanho de cada arquivo. null quando o servidor não aceita pedaços (aí só o download decide).
-   */
   async function remoteZipNames(url: string): Promise<(string[] & { sizes: Map<string, number> }) | null> {
     try {
       const part = async (start: number, end: number) => {
         const r = await fetch(url, { headers: { 'User-Agent': UA['User-Agent'], Range: `bytes=${start}-${end}` }, signal: AbortSignal.timeout(20_000) });
-        if (r.status !== 206) throw new Error('sem pedaços');
+        if (r.status !== 206) throw new Error(tt('sem pedaços'));
         return { bytes: Buffer.from(await r.arrayBuffer()), size: Number((r.headers.get('content-range') || '').split('/')[1]) };
       };
       const { size } = await part(0, 0);
@@ -153,7 +138,6 @@ export function createGitHub({ fetch = globalThis.fetch as Fetch, api = 'https:/
     } catch { return null; }
   }
 
-  /** O nome atual de um projeto (o GitHub redireciona projetos renomeados), ou null se sumiu. */
   async function currentName(repo: string): Promise<string | null> {
     try { return (await json<{ full_name: string }>(`${api}/repos/${repo}`)).full_name; }
     catch (e) { if ((e as GitHubError).status === 404) return null; throw e; }

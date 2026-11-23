@@ -5,6 +5,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { Palette } from '../lib/palettes';
 import { stageSize, type StageConsole } from './consoles';
 import { loadStageModel, setModelFocus, type StageModel } from './models';
+import { tt } from '@shared/i18n';
 
 const PAD_Y = 0.026, PAD_TOP = PAD_Y + 0.04;
 function geometry(n: number) {
@@ -53,7 +54,7 @@ export function Stage(p: Props) {
         gl={{ antialias: false, powerPreference: 'high-performance' }}
         camera={{ fov: 36, near: 0.1, far: 80, position: geometry(p.list.length).CAM_HOME.toArray() }}
         frameloop={p.mode === 'hidden' ? 'never' : 'always'}
-        aria-label="Consoles em 3D girando num palco"
+        aria-label={tt('Consoles em 3D girando num palco')}
       >
         <Scene {...p} />
       </Canvas>

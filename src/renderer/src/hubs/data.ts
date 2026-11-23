@@ -6,6 +6,7 @@ import { useProgress } from '../lib/progress';
 import { isSelfInstall } from '@shared/consoles';
 import { askConfirm } from '../lib/dialogs';
 import { sfx } from '../lib/sfx';
+import { tt } from '@shared/i18n';
 
 export interface HubGame {
   key: string;
@@ -66,6 +67,7 @@ export function useHubActions() {
   const refresh = () => { void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }); void qc.invalidateQueries({ queryKey: trpc.library.summary.queryKey() }); };
   const play = useMutation(trpc.play.start.mutationOptions({ onSuccess: refresh }));
   const quit = useMutation(trpc.play.quit.mutationOptions());
+  const resume = useMutation(trpc.ingame.back.mutationOptions());
   const install = useMutation(trpc.ports.install.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
   const update = useMutation(trpc.ports.update.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
   const add = useMutation(trpc.games.addFromDialog.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
@@ -77,8 +79,8 @@ export function useHubActions() {
   return {
     error: error?.message ?? null,
     reset: () => { play.reset(); install.reset(); update.reset(); quit.reset(); add.reset(); relink.reset(); },
-    primary(g: HubGame): 'play' | 'quit' | 'install' | 'add' | 'pick' | 'relink' | 'none' {
-      if (g.installed?.running) { quit.mutate({ id: g.installed.id }); return 'quit'; }
+    primary(g: HubGame): 'play' | 'resume' | 'install' | 'add' | 'pick' | 'relink' | 'none' {
+      if (g.installed?.running) { resume.mutate(); return 'resume'; }
       if (g.installed?.missing) {
         if (g.catalog?.repo && !isSelfInstall(g.console)) { install.mutate({ catalogId: g.catalog.id }); return 'install'; }
         relink.mutate({ id: g.installed.id }); return 'relink';
@@ -88,6 +90,7 @@ export function useHubActions() {
       if (g.catalog?.repo) { install.mutate({ catalogId: g.catalog.id }); return 'install'; }
       return 'none';
     },
+    quit: (g: HubGame) => { if (g.installed) quit.mutate({ id: g.installed.id }); },
     update: (g: HubGame) => { if (g.installed && !isSelfInstall(g.console)) update.mutate({ id: g.installed.id }); },
     relink: (g: HubGame) => { if (g.installed) relink.mutate({ id: g.installed.id }); },
     remove: (g: HubGame) => { if (g.installed) remove.mutate({ id: g.installed.id }); },
@@ -123,7 +126,7 @@ export function useFeed(feed: RadarEvent[], showing: boolean) {
     drop: (f: RadarEvent | null | undefined) => { if (!f) return false; sfx.play('back'); dismiss.mutate({ ids: [f.id] }); return true; },
     clear: async (list: RadarEvent[] = feed) => {
       if (!list.length) return;
-      if (await askConfirm({ title: 'Limpar as notificações?', text: `${list.length === 1 ? 'A notificação some' : `As ${list.length} notificações somem`} da lista. Jogos novos e versões novas que chegarem depois aparecem normalmente.`, ok: 'Limpar', cancel: 'Cancelar' })) {
+      if (await askConfirm({ title: tt('Limpar as notificações?'), text: tt('{0} da lista. Jogos novos e versões novas que chegarem depois aparecem normalmente.', { 0: list.length === 1 ? tt('A notificação some') : tt('As {0} notificações somem', { 0: list.length }) }), ok: tt('Limpar'), cancel: tt('Cancelar') })) {
         sfx.play('back'); dismiss.mutate({ ids: list.map(f => f.id) });
       }
     },

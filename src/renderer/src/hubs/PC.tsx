@@ -17,6 +17,7 @@ import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
 import { useFeed, useHubActions, useHubData, type HubGame } from './data';
+import { tt } from '@shared/i18n';
 
 type Sec = 'lib' | 'cat' | 'news' | 'ach' | 'time' | 'cfg';
 type Zone = 'tabs' | 'search' | 'main' | 'gacts' | 'gshots' | 'gtext';
@@ -25,11 +26,11 @@ interface Row { key: string; g?: HubGame; ic?: IconName; t: string; s?: string; 
 type Opt = { k: string; l: string; ic: IconName };
 type Hint = [Parameters<typeof Glyph>[0]['a'], string];
 
-const SIDE: [Sec, string, IconName][] = [['lib', 'Biblioteca', 'grid'], ['cat', 'Descobrir', 'compass'], ['news', 'Novidades', 'bell'], ['ach', 'Conquistas', 'medal'], ['time', 'Tempo de jogo', 'clock'], ['cfg', 'Ajustes', 'gear']];
-const FEED = { new: 'Novo no catálogo', upd: 'Versão nova', up: 'Mudou de status' } as const;
+const SIDE: [Sec, string, IconName][] = [['lib', tt('Biblioteca'), 'grid'], ['cat', tt('Descobrir'), 'compass'], ['news', tt('Novidades'), 'bell'], ['ach', tt('Conquistas'), 'medal'], ['time', tt('Tempo de jogo'), 'clock'], ['cfg', tt('Ajustes'), 'gear']];
+const FEED = { new: tt('Novo no catálogo'), upd: tt('Versão nova'), up: tt('Mudou de status') } as const;
 const CFG: Row[] = [
-  { key: 'dir', id: 'dir', t: 'Pasta dos jogos', ic: 'folder' }, { key: 'snd', id: 'snd', t: 'Sons da interface', ic: 'sound' },
-  { key: 'radar', id: 'radar', t: 'Radar de novidades', ic: 'bell' }, { key: 'off', id: 'off', t: 'Voltar ao Cartucho', ic: 'power' },
+  { key: 'dir', id: 'dir', t: tt('Pasta dos jogos'), ic: 'folder' }, { key: 'snd', id: 'snd', t: tt('Sons da interface'), ic: 'sound' },
+  { key: 'radar', id: 'radar', t: tt('Radar de novidades'), ic: 'bell' }, { key: 'off', id: 'off', t: tt('Voltar ao Cartucho'), ic: 'power' },
 ];
 const COLS = 6;
 
@@ -50,7 +51,7 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
   const searchRef = useRef<HTMLInputElement>(null);
   const mainRef = useRef<HTMLDivElement>(null);
   const clock = useClock();
-  const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show('Pasta dos jogos alterada'); } }));
+  const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show(tt('Pasta dos jogos alterada')); } }));
   const chooseExe = useMutation(trpc.games.chooseExe.mutationOptions({ onSuccess: () => void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }) }));
   const openFolder = useMutation(trpc.games.openFolder.mutationOptions());
 
@@ -82,8 +83,8 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
   const cur = grid[st.fi] ?? null;
   const rows: Row[] = sec === 'news' ? data.feed.map(f => ({ key: String(f.id), f, g: data.catalog.find(y => y.catalog?.id === f.gameId), t: f.title, s: `${FEED[f.kind]}${f.detail && !(self && f.kind === 'new') ? ` · ${f.detail}` : ''}`, v: ago(f.at) }))
     : sec === 'ach' ? lib.map(g => ({ key: g.key, g, t: g.title, v: g.installed?.achievements?.total ? `${g.installed.achievements.unlocked}/${g.installed.achievements.total}` : '—' }))
-    : sec === 'time' ? [{ key: 'sum', ic: 'chart' as IconName, t: 'Resumo', v: fmtPlay(data.playMs) || '0m' }, ...byPlay.map(g => ({ key: g.key, g, t: g.title, v: fmtPlay(g.installed?.playMs ?? 0) || '0m' }))]
-    : sec === 'cfg' ? CFG.map(r => ({ ...r, v: r.id === 'snd' ? (s.snd ? 'Ligados' : 'Desligados') : '' }))
+    : sec === 'time' ? [{ key: 'sum', ic: 'chart' as IconName, t: tt('Resumo'), v: fmtPlay(data.playMs) || '0m' }, ...byPlay.map(g => ({ key: g.key, g, t: g.title, v: fmtPlay(g.installed?.playMs ?? 0) || '0m' }))]
+    : sec === 'cfg' ? CFG.map(r => ({ ...r, v: r.id === 'snd' ? (s.snd ? tt('Ligados') : tt('Desligados')) : '' }))
     : [];
   const row = rows[st.li];
   const feed = useFeed(data.feed, sec === 'news' && !st.game);
@@ -102,21 +103,22 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
     const inst = x.installed;
     const L: Opt[] = [];
     if (inst?.missing) {
-      if (x.catalog?.repo && !self) L.push({ k: 'reinstall', l: 'Instalar de novo', ic: 'dl' });
-      L.push({ k: 'relink', l: 'Procurar a pasta', ic: 'folder' });
-      L.push({ k: 'remove', l: 'Tirar da biblioteca', ic: 'stop' });
+      if (x.catalog?.repo && !self) L.push({ k: 'reinstall', l: tt('Instalar de novo'), ic: 'dl' });
+      L.push({ k: 'relink', l: tt('Procurar a pasta'), ic: 'folder' });
+      L.push({ k: 'remove', l: tt('Tirar da biblioteca'), ic: 'stop' });
     } else if (inst) {
-      L.push(inst.running ? { k: 'quit', l: 'Fechar o jogo', ic: 'stop' } : inst.exe ? { k: 'play', l: 'Jogar', ic: 'play' } : { k: 'exe', l: 'Escolher o .exe', ic: 'folder' });
-      if (x.update?.updateAvailable && !self) L.push({ k: 'update', l: `Atualizar para ${x.update.latest?.tag}`, ic: 'dl' });
-      if (inst.adapter) L.push({ k: 'ach', l: 'Conquistas', ic: 'medal' });
-      L.push({ k: 'folder', l: 'Abrir pasta', ic: 'folder' });
-      if (inst.exe) L.push({ k: 'exe', l: 'Escolher o .exe', ic: 'folder' });
+      L.push(inst.running ? { k: 'play', l: tt('Voltar para o jogo'), ic: 'play' } : inst.exe ? { k: 'play', l: tt('Jogar'), ic: 'play' } : { k: 'exe', l: tt('Escolher o .exe'), ic: 'folder' });
+      if (inst.running) L.push({ k: 'quit', l: tt('Fechar o jogo'), ic: 'stop' });
+      if (x.update?.updateAvailable && !self) L.push({ k: 'update', l: tt('Atualizar para {0}', { 0: x.update.latest?.tag }), ic: 'dl' });
+      if (inst.adapter) L.push({ k: 'ach', l: tt('Conquistas'), ic: 'medal' });
+      L.push({ k: 'folder', l: tt('Abrir pasta'), ic: 'folder' });
+      if (inst.exe) L.push({ k: 'exe', l: tt('Escolher o .exe'), ic: 'folder' });
     } else {
-      if (x.repo && !self) L.push({ k: 'install', l: 'Instalar', ic: 'dl' });
-      L.push({ k: 'add', l: self ? 'Já instalei: adicionar pasta' : 'Escolher pasta', ic: 'folder' });
+      if (x.repo && !self) L.push({ k: 'install', l: tt('Instalar'), ic: 'dl' });
+      L.push({ k: 'add', l: self ? tt('Já instalei: adicionar pasta') : tt('Escolher pasta'), ic: 'folder' });
     }
-    if (x.repo) L.push({ k: 'gh', l: 'Ver no GitHub', ic: 'link' });
-    if (!st.game) L.push({ k: 'info', l: 'Página do jogo', ic: 'info' });
+    if (x.repo) L.push({ k: 'gh', l: tt('Ver no GitHub'), ic: 'link' });
+    if (!st.game) L.push({ k: 'info', l: tt('Página do jogo'), ic: 'info' });
     return L;
   };
   const gameOpts = game ? options(game) : [];
@@ -125,22 +127,22 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
 
   const run = (k: string, x: HubGame) => {
     up({ menu: false });
-    if (k === 'play' || k === 'quit' || k === 'install') {
+    if (k === 'quit') { act.quit(x); sfx.play('back'); show(tt('Fechando {0}…', { 0: x.title })); return; }
+    if (k === 'play' || k === 'install') {
       const r = act.primary(x);
-      sfx.play(r === 'quit' ? 'back' : 'ok');
-      if (r === 'play') show(`${x.title} aberto · o tempo de jogo começou a contar`);
-      else if (r === 'install') show(`Baixando ${x.repo} do GitHub…`);
-      else if (r === 'quit') show(`Fechando ${x.title}…`);
+      sfx.play('ok');
+      if (r === 'play') show(tt('{0} aberto · o tempo de jogo começou a contar', { 0: x.title }));
+      else if (r === 'install') show(tt('Baixando {0} do GitHub…', { 0: x.repo }));
       else if (r === 'pick') chooseExe.mutate({ id: x.installed!.id });
-      else if (r === 'relink') show('Escolha onde o jogo está agora');
+      else if (r === 'relink') show(tt('Escolha onde o jogo está agora'));
       return;
     }
     sfx.play('ok');
-    if (k === 'add') { act.addFolder(x); return show('Escolha a pasta onde o jogo está instalado'); }
-    if (k === 'reinstall') { act.reinstall(x); return show(`Baixando ${x.repo} de novo… o tempo de jogo continua`); }
-    if (k === 'relink') { act.relink(x); return show('Escolha onde o jogo está agora'); }
-    if (k === 'remove') { act.remove(x); up({ game: null }); return show(`${x.title} saiu da biblioteca · nenhum arquivo foi apagado`); }
-    if (k === 'update') { act.update(x); return show(`Atualizando para ${x.update?.latest?.tag}… configurações e saves ficam`); }
+    if (k === 'add') { act.addFolder(x); return show(tt('Escolha a pasta onde o jogo está instalado')); }
+    if (k === 'reinstall') { act.reinstall(x); return show(tt('Baixando {0} de novo… o tempo de jogo continua', { 0: x.repo })); }
+    if (k === 'relink') { act.relink(x); return show(tt('Escolha onde o jogo está agora')); }
+    if (k === 'remove') { act.remove(x); up({ game: null }); return show(tt('{0} saiu da biblioteca · nenhum arquivo foi apagado', { 0: x.title })); }
+    if (k === 'update') { act.update(x); return show(tt('Atualizando para {0}… configurações e saves ficam', { 0: x.update?.latest?.tag })); }
     if (k === 'ach') return goSec(3, { zone: 'main', li: Math.max(0, lib.indexOf(x)) });
     if (k === 'folder') return openFolder.mutate({ id: x.installed!.id });
     if (k === 'exe') return chooseExe.mutate({ id: x.installed!.id });
@@ -159,7 +161,7 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
       if (row.id === 'dir') return pickDir.mutate();
       if (row.id === 'snd') return setSettings({ snd: !getSettings().snd });
       if (row.id === 'off') return onBack();
-      return show('O radar confere o catálogo do Recompendium toda vez que o Cartucho abre');
+      return show(tt('O radar confere o catálogo do Recompendium toda vez que o Cartucho abre'));
     }
     if (row.f) feed.done(row.f);
     if (row.g) { sfx.play('ok'); openGame(row.g); }
@@ -209,11 +211,11 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
     if (D && st.li < rows.length - 1) mv({ li: st.li + 1 }); else if (U) { if (st.li > 0) mv({ li: st.li - 1 }); else mv({ zone: 'tabs' }); }
   }, !((sec === 'cat' && !game && !st.menu && st.zone !== 'tabs') || game));
 
-  const hints: Hint[] = st.menu ? [['ok', 'Confirmar'], ['back', 'Fechar']]
-    : st.zone === 'tabs' ? [['lr', 'Seção'], ['ud', 'Entrar'], ['back', 'Sair']]
-    : (sec === 'lib' || sec === 'cat') ? [['ok', 'Ver jogo'], ['x', 'Opções'], ['y', 'Buscar'], ['rb', 'Seção'], ['back', 'Voltar']]
-    : sec === 'news' && rows.length ? [['ok', 'Ver jogo'], ['x', 'Dispensar'], ['y', 'Limpar tudo'], ['rb', 'Seção'], ['back', 'Voltar']]
-    : [['ok', sec === 'cfg' ? 'Confirmar' : 'Abrir'], ['rb', 'Seção'], ['back', 'Voltar']];
+  const hints: Hint[] = st.menu ? [['ok', tt('Confirmar')], ['back', tt('Fechar')]]
+    : st.zone === 'tabs' ? [['lr', tt('Seção')], ['ud', tt('Entrar')], ['back', tt('Sair')]]
+    : (sec === 'lib' || sec === 'cat') ? [['ok', tt('Ver jogo')], ['x', tt('Opções')], ['y', tt('Buscar')], ['rb', tt('Seção')], ['back', tt('Voltar')]]
+    : sec === 'news' && rows.length ? [['ok', tt('Ver jogo')], ['x', tt('Dispensar')], ['y', tt('Limpar tudo')], ['rb', tt('Seção')], ['back', tt('Voltar')]]
+    : [['ok', sec === 'cfg' ? tt('Confirmar') : tt('Abrir')], ['rb', tt('Seção')], ['back', tt('Voltar')]];
   const hero = sec === 'lib' ? cur ?? lib[0] ?? null : null;
 
   return (
@@ -235,8 +237,8 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
               </button>
             );
           })}</nav>
-          <div className="me"><Ic n="clock" /><span>{fmtPlay(data.playMs) || '0m'} jogados · {clock}</span></div>
-          <button className="out" onClick={() => { sfx.play('back'); onBack(); }}><Ic n="back" />Cartucho</button>
+          <div className="me"><Ic n="clock" /><span>{tt('{0} jogados · {1}', { 0: fmtPlay(data.playMs) || '0m', 1: clock })}</span></div>
+          <button className="out" onClick={() => { sfx.play('back'); onBack(); }}><Ic n="back" />{tt('Cartucho')}</button>
         </header>
         <main className="pc-main" ref={mainRef}>
           {game || sec === 'cat' ? null : (
@@ -246,20 +248,20 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
                   {sec === 'lib' && hero && <Hero g={hero} />}
                   <div className={`pc-bar ${st.zone === 'search' ? 'on' : ''}`}>
                     <Ic n="search" />
-                    <SearchBox ref={searchRef} value={query} onChange={v => { setQuery(v); up({ fi: 0 }); }} nav={false} className="pc-q" placeholder={sec === 'lib' ? 'Buscar na biblioteca' : 'Buscar no catálogo'}
+                    <SearchBox ref={searchRef} value={query} onChange={v => { setQuery(v); up({ fi: 0 }); }} nav={false} className="pc-q" placeholder={sec === 'lib' ? tt('Buscar na biblioteca') : tt('Buscar no catálogo')}
                       onDone={() => up({ zone: 'main', fi: 0 })} />
-                    <span className="cnt">{plural(grid.length, 'jogo', 'jogos')}{sec === 'lib' ? ` · ${fmtPlay(data.playMs) || '0m'} no total` : ''}</span>
+                    <span className="cnt">{plural(grid.length, tt('jogo'), tt('jogos'))}{sec === 'lib' ? tt(' · {0} no total', { 0: fmtPlay(data.playMs) || '0m' }) : ''}</span>
                   </div>
                   {grid.length ? (
                     <div className="pc-grid">{grid.map((x, j) => (
                       <button key={x.key} className={`pc-cap ${st.zone === 'main' && j === st.fi ? 'on' : ''} ${x.installed ? '' : 'ghost'} ${x.installed?.missing ? 'missing' : ''}`}
                         onClick={() => { if (st.zone === 'main' && st.fi === j) enter(); else { sfx.play('move'); up({ zone: 'main', fi: j }); } }}>
-                        <span className="cv-w"><Art g={x} v="cover" />{x.isNew && <span className="pc-tag new">NOVO</span>}{x.installed?.running && <span className="run"><Ic n="play" /></span>}</span>
+                        <span className="cv-w"><Art g={x} v="cover" />{x.isNew && <span className="pc-tag new">{tt('NOVO')}</span>}{x.installed?.running && <span className="run"><Ic n="play" /></span>}</span>
                         <span className="t">{x.title}</span>
-                        <span className="s">{x.installed ? (x.installed.missing ? 'pasta não encontrada' : fmtPlay(x.installed.playMs) || 'não jogado') : x.status ? STATUS_LABEL[x.status] : ''}</span>
+                        <span className="s">{x.installed ? (x.installed.missing ? tt('pasta não encontrada') : fmtPlay(x.installed.playMs) || tt('não jogado')) : x.status ? STATUS_LABEL[x.status] : ''}</span>
                       </button>
                     ))}</div>
-                  ) : <div className="pc-empty">{q ? `Nada encontrado para “${q}”.` : sec === 'lib' ? `Nenhum jogo instalado. ${plural(data.catalog.length, 'jogo', 'jogos')} em Descobrir.` : 'O catálogo ainda não tem nada aqui.'}</div>}
+                  ) : <div className="pc-empty">{q ? tt('Nada encontrado para “{0}”.', { 0: q }) : sec === 'lib' ? tt('Nenhum jogo instalado. {0} em Descobrir.', { 0: plural(data.catalog.length, tt('jogo'), tt('jogos')) }) : tt('O catálogo ainda não tem nada aqui.')}</div>}
                 </>
               )}
               {sec !== 'lib' && (
@@ -271,7 +273,7 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
                         {r.g ? <span className="th"><Art g={r.g} v="square" /></span> : r.ic ? <span className="th ic"><Ic n={r.ic} /></span> : null}
                         <span className="tx"><b>{r.t}</b>{r.s && <small>{r.s}</small>}</span>{r.v && <span className="v">{r.v}</span>}
                       </button>
-                    )) : <div className="pc-empty">{sec === 'news' ? 'Nada novo por aqui. O Cartucho confere o Recompendium toda vez que abre.' : 'Nenhum jogo instalado ainda.'}</div>}</div>
+                    )) : <div className="pc-empty">{sec === 'news' ? tt('Nada novo por aqui. O Cartucho confere o Recompendium toda vez que abre.') : tt('Nenhum jogo instalado ainda.')}</div>}</div>
                     {sec !== 'news' && <div className="pc-det"><Detail sec={sec} row={row} achList={ach.data?.list ?? []} achLoading={ach.isLoading} stats={row?.g ? stats.get(row.g.key) : undefined} statsAll={stats} lib={byPlay} playMs={data.playMs} sndOn={s.snd} /></div>}
                   </div>
                 </div>
@@ -305,11 +307,11 @@ function Hero({ g }: { g: HubGame }) {
     <div className="pc-hero">
       <div className="art">{bg && <img key={bg} src={bg} alt="" />}</div>
       <div className="in">
-        <small>{i?.lastPlayed ? 'Continuar jogando' : 'Na biblioteca'}</small>
+        <small>{i?.lastPlayed ? tt('Continuar jogando') : tt('Na biblioteca')}</small>
         {art.logo ? <img className="logo" src={art.logo} alt={g.title} /> : <h1>{g.title}</h1>}
         <div className="meta">
-          {i && <span>Jogado <b>{fmtPlay(i.playMs) || '0m'}</b></span>}
-          {i?.lastPlayed && <span>Última vez <b>{ago(i.lastPlayed)}</b></span>}
+          {i && <span>{tt('Jogado')}{' '}<b>{fmtPlay(i.playMs) || '0m'}</b></span>}
+          {i?.lastPlayed && <span>{tt('Última vez')}{' '}<b>{ago(i.lastPlayed)}</b></span>}
           {g.status && <span className={`pc-tag ${g.status}`}>{STATUS_LABEL[g.status]}</span>}
         </div>
       </div>
@@ -322,7 +324,7 @@ function Detail({ sec, row, achList, achLoading, stats, statsAll, lib, playMs, s
 }) {
   if (!row) return null;
   if (sec === 'ach' && row.g) {
-    if (!row.g.installed?.adapter) return <><h3>{row.g.title}</h3><p>O Cartucho ainda não sabe ler as conquistas deste port. Quando houver um leitor, elas aparecem aqui sozinhas.</p></>;
+    if (!row.g.installed?.adapter) return <><h3>{row.g.title}</h3><p>{tt('O Cartucho ainda não sabe ler as conquistas deste port. Quando houver um leitor, elas aparecem aqui sozinhas.')}</p></>;
     const L = [...achList].sort((x, y) => (y.unlockedAt ?? -1) - (x.unlockedAt ?? -1));
     const got = L.filter(x => x.unlockedAt != null).length;
     return (
@@ -330,10 +332,10 @@ function Detail({ sec, row, achList, achLoading, stats, statsAll, lib, playMs, s
         <h3>{row.g.title}</h3>
         <div className="big">{got}/{L.length}<small>{L.length ? Math.round((got / L.length) * 100) : 0}%</small></div>
         <div className="bar"><i style={{ width: `${L.length ? (got / L.length) * 100 : 0}%` }} /></div>
-        {achLoading && !L.length ? <p>Lendo…</p> : L.slice(0, 8).map(x => (
+        {achLoading && !L.length ? <p>{tt('Lendo…')}</p> : L.slice(0, 8).map(x => (
           <div key={x.id} className={`a ${x.unlockedAt != null ? '' : 'lock'}`}>
             <span className="md">{x.icon ? <img src={x.icon} alt="" /> : <Ic n={x.unlockedAt != null ? 'medal' : 'lock'} />}</span>
-            <span className="t"><b>{x.name}</b><small>{x.description}</small></span><span className="d">{x.unlockedAt != null ? fmtDate(x.unlockedAt) : 'Bloqueada'}</span>
+            <span className="t"><b>{x.name}</b><small>{x.description}</small></span><span className="d">{x.unlockedAt != null ? fmtDate(x.unlockedAt) : tt('Bloqueada')}</span>
           </div>
         ))}
       </>
@@ -345,7 +347,7 @@ function Detail({ sec, row, achList, achLoading, stats, statsAll, lib, playMs, s
       const mx = Math.max(1, ...lib.map(x => x.installed?.playMs ?? 0));
       return (
         <>
-          <h3>Neste console</h3><div className="big">{fmtPlay(playMs) || '0m'}<small>{plural(ses, 'sessão', 'sessões')}</small></div>
+          <h3>{tt('Neste console')}</h3><div className="big">{fmtPlay(playMs) || '0m'}<small>{plural(ses, tt('sessão'), tt('sessões'))}</small></div>
           {lib.slice(0, 8).map(x => <div key={x.key} className="rk"><span>{x.title}</span><span className="bar"><i style={{ width: `${((x.installed?.playMs ?? 0) / mx) * 100}%` }} /></span><span>{fmtPlay(x.installed?.playMs ?? 0) || '0m'}</span></div>)}
         </>
       );
@@ -354,17 +356,17 @@ function Detail({ sec, row, achList, achLoading, stats, statsAll, lib, playMs, s
     return (
       <>
         <h3>{row.g.title}</h3>
-        <div className="big">{fmtPlay(i.playMs) || '0m'}<small>{plural(stats?.sessions ?? 0, 'sessão', 'sessões')}{i.lastPlayed ? ` · ${ago(i.lastPlayed)}` : ''}</small></div>
+        <div className="big">{fmtPlay(i.playMs) || '0m'}<small>{plural(stats?.sessions ?? 0, tt('sessão'), tt('sessões'))}{i.lastPlayed ? ` · ${ago(i.lastPlayed)}` : ''}</small></div>
         <div className="bars">{d.map((v, j) => <i key={j} className={v ? '' : 'z'} style={{ height: `${v ? Math.max(4, (v / m) * 100) : 2}%` }} />)}</div>
-        <p className="mut">Últimos 14 dias</p>
+        <p className="mut">{tt('Últimos 14 dias')}</p>
       </>
     );
   }
   if (sec === 'cfg') {
-    if (row.id === 'dir') return <><h3>{row.t}</h3><p>Onde o Cartucho instala o que você baixa. Jogos adicionados com “Escolher pasta” continuam onde estão.</p><div className="path"><PortsDir /></div></>;
-    if (row.id === 'snd') return <><h3>{row.t}</h3><p>Sons da interface: {sndOn ? 'ligados' : 'desligados'}. Enter alterna.</p></>;
-    if (row.id === 'radar') return <><h3>{row.t}</h3><p>O radar confere o catálogo do Recompendium toda vez que o Cartucho abre.</p></>;
-    return <><h3>{row.t}</h3><p>Volta para o palco do Cartucho.</p></>;
+    if (row.id === 'dir') return <><h3>{row.t}</h3><p>{tt('Onde o Cartucho instala o que você baixa. Jogos adicionados com “Escolher pasta” continuam onde estão.')}</p><div className="path"><PortsDir /></div></>;
+    if (row.id === 'snd') return <><h3>{row.t}</h3><p>{tt('Sons da interface: {0}. Enter alterna.', { 0: sndOn ? tt('ligados') : tt('desligados') })}</p></>;
+    if (row.id === 'radar') return <><h3>{row.t}</h3><p>{tt('O radar confere o catálogo do Recompendium toda vez que o Cartucho abre.')}</p></>;
+    return <><h3>{row.t}</h3><p>{tt('Volta para o palco do Cartucho.')}</p></>;
   }
   return null;
 }

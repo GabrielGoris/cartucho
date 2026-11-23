@@ -10,6 +10,7 @@ import { type DB, kvGet, kvSet, tx } from '../db';
 import { absUrl } from '../catalog';
 import { type Adapter, type AdapterContext, adapterById, adapterForDir } from './adapters';
 import type { Unlock } from './saves';
+import { tt } from '@shared/i18n';
 
 const ADAPTER_CONSOLE: Record<string, ConsoleId> = { 'unleashed-recomp': 'x360', 'marathon-recomp': 'x360', sonic3air: 'other', rsdkv4: 'other' };
 
@@ -36,7 +37,7 @@ export class AchievementService {
 
   private row(id: string) {
     const r = this.db.prepare(`${GAME_SQL} WHERE g.id = ?`).get(id) as GameRow | undefined;
-    if (!r) throw new Error('jogo não encontrado');
+    if (!r) throw new Error(tt('jogo não encontrado'));
     return r;
   }
   private toGame(r: GameRow): InstalledGame {
@@ -92,7 +93,7 @@ export class AchievementService {
   relocate(id: string, dir: string, p: { exe?: string | null; release?: InstalledRelease | null; manifest?: Record<string, number> | null; managed?: boolean } = {}) {
     dir = resolve(dir);
     const other = this.db.prepare('SELECT id, title FROM installed_game WHERE install_dir = ? AND id != ?').get(dir, id) as { id: string; title: string } | undefined;
-    if (other) throw new Error(`Essa pasta já é de ${other.title}. Escolha outra pasta, ou troque a pasta de ${other.title} antes.`);
+    if (other) throw new Error(tt('Essa pasta já é de {0}. Escolha outra pasta, ou troque a pasta de {1} antes.', { 0: other.title, 1: other.title }));
     const r = this.row(id);
     let exe = p.exe ?? null;
     if (!exe) try { exe = findGameExe(dir) ?? guessProgram(dir, r.source_repo); } catch { exe = null; }
@@ -107,7 +108,7 @@ export class AchievementService {
   async addGame(dir: string, extra: AddExtra = {}): Promise<InstalledGame> {
     dir = resolve(dir);
     const dup = this.db.prepare('SELECT id, title, catalog_id FROM installed_game WHERE install_dir = ?').get(dir) as { id: string; title: string; catalog_id: string | null } | undefined;
-    if (dup && extra.catalogId && dup.catalog_id !== extra.catalogId) throw new Error(`Essa pasta já é de ${dup.title}. Escolha outra pasta, ou troque a pasta de ${dup.title} antes.`);
+    if (dup && extra.catalogId && dup.catalog_id !== extra.catalogId) throw new Error(tt('Essa pasta já é de {0}. Escolha outra pasta, ou troque a pasta de {1} antes.', { 0: dup.title, 1: dup.title }));
     if (dup) return this.toGame(this.row(dup.id));
     const lost = extra.catalogId ? (this.db.prepare('SELECT id, install_dir FROM installed_game WHERE catalog_id = ?').all(extra.catalogId) as { id: string; install_dir: string }[]).find(x => !existsSync(x.install_dir)) : undefined;
     if (lost) return this.relocate(lost.id, dir, { exe: extra.exe, release: extra.release, manifest: extra.manifest, managed: extra.managed });
@@ -154,7 +155,7 @@ export class AchievementService {
       kvSet(this.db, `ach.origin.${id}`, defs.origin);
       this.db.prepare('DELETE FROM kv WHERE key = ?').run(`ach.defError.${id}`);
     } catch (e) {
-      kvSet(this.db, `ach.defError.${id}`, `Não consegui ler a lista de conquistas: ${msg(e)}`);
+      kvSet(this.db, `ach.defError.${id}`, tt('Não consegui ler a lista de conquistas: {0}', { 0: msg(e) }));
     }
   }
 
@@ -176,7 +177,7 @@ export class AchievementService {
       try { unlocks = adapter.readUnlocks(new Uint8Array(await readFile(file))); }
       catch (e) { lastErr = e; await sleep(250 * (i + 1)); }
     }
-    if (!unlocks) { kvSet(this.db, `ach.unlockError.${id}`, `Não consegui ler os desbloqueios: ${msg(lastErr)}`); return []; }
+    if (!unlocks) { kvSet(this.db, `ach.unlockError.${id}`, tt('Não consegui ler os desbloqueios: {0}', { 0: msg(lastErr) })); return []; }
     this.db.prepare('DELETE FROM kv WHERE key = ?').run(`ach.unlockError.${id}`);
 
     const now = Date.now(), fresh: number[] = [];
@@ -195,7 +196,7 @@ export class AchievementService {
       if (!opts.silent) {
         const name = this.db.prepare('SELECT name FROM achievement_def WHERE game_id = ? AND ach_id = ?');
         for (const achId of fresh) {
-          const n = (name.get(id, achId) as { name: string } | undefined)?.name ?? `Conquista #${achId}`;
+          const n = (name.get(id, achId) as { name: string } | undefined)?.name ?? tt('Conquista #{0}', { 0: achId });
           this.events.emit('unlock', { gameId: id, gameTitle: r.title, achId, name: n, at: unlocks.find(u => u.id === achId)?.at ?? now });
         }
       }
@@ -257,7 +258,7 @@ export class AchievementService {
       icon: d.image ? `data:image/png;base64,${Buffer.from(d.image).toString('base64')}` : null,
     }));
     const known = new Set(defs.map(d => d.ach_id));
-    for (const [achId, at] of unlocks) if (!known.has(achId)) list.push({ id: achId, name: `Conquista #${achId}`, description: '', points: null, unlockedAt: at, icon: null });
+    for (const [achId, at] of unlocks) if (!known.has(achId)) list.push({ id: achId, name: tt('Conquista #{0}', { 0: achId }), description: '', points: null, unlockedAt: at, icon: null });
     const errors = [kvGet(this.db, `ach.defError.${id}`), kvGet(this.db, `ach.unlockError.${id}`)].filter((e): e is string => !!e);
     return { game: this.toGame(r), origin: kvGet(this.db, `ach.origin.${id}`), unlockFile: adapter ? adapter.unlockFile(this.ctx(r)) : null, errors, list };
   }

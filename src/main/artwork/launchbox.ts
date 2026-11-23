@@ -3,6 +3,7 @@ import * as fsp from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInflateRaw } from 'node:zlib';
 import type { Readable } from 'node:stream';
+import { tt } from '@shared/i18n';
 
 export const PLATFORMS: Record<string, string> = {
   snes: 'Super Nintendo Entertainment System', n64: 'Nintendo 64', gc: 'Nintendo GameCube', wii: 'Nintendo Wii',
@@ -52,7 +53,7 @@ export async function openZipEntry(zipFile: string, wanted: string): Promise<Rea
     const tail = Buffer.alloc(tailLength);
     await file.read(tail, 0, tailLength, size - tailLength);
     const end = tail.lastIndexOf(Buffer.from('PK\x05\x06', 'latin1'));
-    if (end < 0) throw new Error('O banco do LaunchBox baixado não é um zip.');
+    if (end < 0) throw new Error(tt('O banco do LaunchBox baixado não é um zip.'));
     const dirSize = tail.readUInt32LE(end + 12), dirStart = tail.readUInt32LE(end + 16);
     const dir = Buffer.alloc(dirSize);
     await file.read(dir, 0, dirSize, dirStart);
@@ -66,11 +67,11 @@ export async function openZipEntry(zipFile: string, wanted: string): Promise<Rea
         const raw = createReadStream(zipFile, { start: dataStart, end: dataStart + packed - 1 });
         if (method === 0) return raw;
         if (method === 8) return raw.pipe(createInflateRaw());
-        throw new Error('O banco do LaunchBox usa uma compressão que o Cartucho não lê.');
+        throw new Error(tt('O banco do LaunchBox usa uma compressão que o Cartucho não lê.'));
       }
       at += 46 + nameLength + dir.readUInt16LE(at + 30) + dir.readUInt16LE(at + 32);
     }
-    throw new Error(`O banco do LaunchBox não tem ${wanted}.`);
+    throw new Error(tt('O banco do LaunchBox não tem {0}.', { 0: wanted }));
   } finally {
     await file.close();
   }
@@ -135,7 +136,7 @@ export async function readDatabase(zipFile: string, key: (s: string) => string, 
     if (pending.length > 4e6) pending = pending.slice(-1e6);
   }
   await Promise.all([...buckets.values()].map(w => new Promise<void>((ok, fail) => w.end((e?: Error | null) => (e ? fail(e) : ok())))));
-  if (!platformOf.size) throw new Error('Nenhum jogo foi lido do banco do LaunchBox.');
+  if (!platformOf.size) throw new Error(tt('Nenhum jogo foi lido do banco do LaunchBox.'));
   const images = table<Table<Partial<Record<ArtKind, string[]>>>>();
   for (const [p, byGame] of Object.entries(raw))
     for (const [id, kinds] of Object.entries(byGame))
@@ -159,7 +160,7 @@ export function createLaunchBox({ folder, key, download, onStatus = () => {}, me
 
   const readIndex = async () => {
     const i = JSON.parse(await fsp.readFile(indexFile, 'utf8')) as LaunchBoxIndex;
-    if (i?.version !== INDEX_VERSION) throw new Error('índice de outra versão');
+    if (i?.version !== INDEX_VERSION) throw new Error(tt('índice de outra versão'));
     return i;
   };
   const age = () => { try { return Date.now() - statSync(indexFile).mtimeMs; } catch { return Infinity; } };
@@ -167,14 +168,14 @@ export function createLaunchBox({ folder, key, download, onStatus = () => {}, me
   async function rebuild() {
     await fsp.mkdir(folder, { recursive: true });
     const zip = join(folder, 'launchbox-metadata.zip');
-    onStatus('Baixando o banco de imagens do LaunchBox (uns 100 MB, uma vez por mês)…');
+    onStatus(tt('Baixando o banco de imagens do LaunchBox (uns 100 MB, uma vez por mês)…'));
     let last = 0;
     await download(metadataUrl, zip, (got, total) => {
       if (Date.now() - last < 500) return; last = Date.now();
       const mb = (n: number) => (n / 1048576).toFixed(0);
-      onStatus(`Baixando o banco de imagens do LaunchBox: ${mb(got)}${total ? ` de ${mb(total)}` : ''} MB…`);
+      onStatus(tt('Baixando o banco de imagens do LaunchBox: {0}{1} MB…', { 0: mb(got), 1: total ? ` de ${mb(total)}` : '' }));
     });
-    onStatus('Lendo o banco de imagens do LaunchBox…');
+    onStatus(tt('Lendo o banco de imagens do LaunchBox…'));
     const infoTmp = infoDir + '.tmp';
     await fsp.rm(infoTmp, { recursive: true, force: true });
     await fsp.mkdir(infoTmp, { recursive: true });
@@ -195,7 +196,7 @@ export function createLaunchBox({ folder, key, download, onStatus = () => {}, me
     if (building) return building;
     const job = (stale ? Promise.reject(new Error('velho')) : readIndex()).catch(() => rebuild());
     current = building = job;
-    job.catch(e => { onStatus(`Não deu para baixar o banco de imagens do LaunchBox: ${(e as Error).message}`); if (current === job) current = null; })
+    job.catch(e => { onStatus(tt('Não deu para baixar o banco de imagens do LaunchBox: {0}', { 0: (e as Error).message })); if (current === job) current = null; })
       .finally(() => { if (building === job) building = null; });
     return job;
   }

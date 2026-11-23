@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { isSelfInstall, SELF_INSTALL, toConsoleId, toStatus } from '@shared/consoles';
 import type { CatalogGame, RadarEvent } from '@shared/types';
 import { type DB, kvGet, kvSet, tx } from './db';
+import { tt } from '@shared/i18n';
 
 export const CATALOG_URL = process.env.CARTUCHO_CATALOG_URL || 'https://recompendium.com/unricopie/catalogo.json';
 export const absUrl = (u: string | null) => { if (!u) return null; try { return new URL(u, 'https://recompendium.com/unricopie/catalogo.json').href; } catch { return null; } };
@@ -39,10 +40,10 @@ export async function refreshCatalog(db: DB, opts: { force?: boolean } = {}): Pr
   kvSet(db, 'catalog.checkedAt', String(Date.now()));
   const total = (db.prepare('SELECT COUNT(*) n FROM catalog_game WHERE retired = 0').get() as { n: number }).n;
   if (res.status === 304) return { changed: false, total, added: 0, statusChanged: 0, updated: 0, generatedAt: kvGet(db, 'catalog.generatedAt') };
-  if (!res.ok) throw new Error(`o Recompendium respondeu ${res.status}`);
+  if (!res.ok) throw new Error(tt('o Recompendium respondeu {0}', { 0: res.status }));
 
   const parsed = Catalog.parse(await res.json());
-  if (parsed.formato !== 1) throw new Error(`formato de catálogo ${parsed.formato} ainda não suportado`);
+  if (parsed.formato !== 1) throw new Error(tt('formato de catálogo {0} ainda não suportado', { 0: parsed.formato }));
   const entries = parsed.entradas.flatMap(e => { const r = Entry.safeParse(e); return r.success ? [r.data] : []; });
 
   const now = Date.now();

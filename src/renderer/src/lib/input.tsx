@@ -3,6 +3,7 @@ import { getSettings, useSettings } from './settings';
 import { sfx } from './sfx';
 
 import { keyMapFor as mapFor, type Key, type PadMap } from '@shared/padmap';
+import { tt } from '@shared/i18n';
 export { padUsbId, type Key } from '@shared/padmap';
 type Handler = (k: Key) => void;
 
@@ -67,7 +68,7 @@ function detectKind(): PadKind {
   return 'xbox';
 }
 export const padKind = (): PadKind => { const f = getSettings().pad; return f === 'auto' ? detectKind() : f; };
-export const PAD_NAMES: Record<string, string> = { auto: 'Automático', kb: 'Teclado', xbox: 'Xbox', ps: 'PlayStation', nin: 'Nintendo' };
+export const PAD_NAMES: Record<string, string> = { auto: tt('Automático'), kb: tt('Teclado'), xbox: 'Xbox', ps: 'PlayStation', nin: 'Nintendo' };
 export function usePadKind(): PadKind {
   useSettings();
   return useSyncExternalStore(f => { padSubs.add(f); return () => padSubs.delete(f); }, padKind);
@@ -80,10 +81,10 @@ export const hasCustomMap = (id: string) => !!maps[id];
 export const resetPadMap = (id: string) => { const { [id]: _, ...rest } = maps; maps = rest; try { localStorage.setItem(MAP_KEY, JSON.stringify(maps)); } catch { } };
 
 export const SETUP_STEPS: [Key, string, string][] = [
-  ['Enter', 'Confirmar', 'A no Xbox · ✕ no PlayStation'], ['Escape', 'Voltar', 'B no Xbox · ○ no PlayStation'],
-  ['X', 'Opções', 'X no Xbox · □ no PlayStation'], ['Y', 'Buscar', 'Y no Xbox · △ no PlayStation'],
-  ['LB', 'Seção anterior', 'LB · L1'], ['RB', 'Próxima seção', 'RB · R1'], ['LT', 'Rolar para cima', 'LT · L2'], ['RT', 'Rolar para baixo', 'RT · R2'],
-  ['Select', 'Select', 'Back · Select · Create'], ['Start', 'Menu do Cartucho', 'Start · Options'],
+  ['Enter', tt('Confirmar'), tt('A no Xbox · ✕ no PlayStation')], ['Escape', tt('Voltar'), tt('B no Xbox · ○ no PlayStation')],
+  ['X', tt('Opções'), tt('X no Xbox · □ no PlayStation')], ['Y', tt('Buscar'), tt('Y no Xbox · △ no PlayStation')],
+  ['LB', tt('Seção anterior'), tt('LB · L1')], ['RB', tt('Próxima seção'), tt('RB · R1')], ['LT', tt('Rolar para cima'), tt('LT · L2')], ['RT', tt('Rolar para baixo'), tt('RT · R2')],
+  ['Select', tt('Select'), tt('Back · Select · Create')], ['Start', tt('Menu do Cartucho'), tt('Start · Options')],
 ];
 export interface PadSetup { id: string; step: number; map: PadMap }
 let setup: PadSetup | null = null;
@@ -160,7 +161,7 @@ function poll() {
 }
 if (typeof window !== 'undefined') setInterval(poll, 16);
 
-type Act = 'ok' | 'back' | 'x' | 'y' | 'lb' | 'rb' | 'lt' | 'rt' | 'menu' | 'sel' | 'ud' | 'lr';
+type Act = 'ok' | 'back' | 'x' | 'y' | 'lb' | 'rb' | 'lt' | 'rt' | 'menu' | 'sel' | 'ud' | 'lr' | 'home';
 const PS: Record<string, ReactNode> = {
   ok: <svg viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15" stroke="#8fb0ff" strokeWidth="2.6" strokeLinecap="round" /></svg>,
   back: <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="5.2" fill="none" stroke="#ff6f6f" strokeWidth="2.4" /></svg>,
@@ -168,10 +169,10 @@ const PS: Record<string, ReactNode> = {
   y: <svg viewBox="0 0 20 20"><path d="M10 4.5l5.8 10H4.2z" fill="none" stroke="#4fd6a8" strokeWidth="2.3" strokeLinejoin="round" /></svg>,
 };
 const GL: Record<PadKind, Record<Act, string | [string, string] | ReactNode>> = {
-  kb: { ok: 'Enter', back: 'Esc', x: 'X', y: 'Y', lb: 'Q', rb: 'E', lt: 'PgUp', rt: 'PgDn', menu: 'F1', sel: 'F2', ud: '↑↓', lr: '←→' },
-  xbox: { ok: ['A', '#6ad13a'], back: ['B', '#ff5a4f'], x: ['X', '#4a95ff'], y: ['Y', '#ffc928'], lb: 'LB', rb: 'RB', lt: 'LT', rt: 'RT', menu: '☰', sel: '⧉', ud: '✚', lr: '✚' },
-  ps: { ok: PS.ok, back: PS.back, x: PS.x, y: PS.y, lb: 'L1', rb: 'R1', lt: 'L2', rt: 'R2', menu: 'OPTIONS', sel: 'CREATE', ud: '✚', lr: '✚' },
-  nin: { ok: ['A', '#fff'], back: ['B', '#fff'], x: ['Y', '#fff'], y: ['X', '#fff'], lb: 'L', rb: 'R', lt: 'ZL', rt: 'ZR', menu: '+', sel: '−', ud: '✚', lr: '✚' },
+  kb: { ok: tt('Enter'), back: 'Esc', x: 'X', y: 'Y', lb: 'Q', rb: 'E', lt: 'PgUp', rt: 'PgDn', menu: 'F1', sel: 'F2', ud: '↑↓', lr: '←→', home: 'Home' },
+  xbox: { ok: ['A', '#6ad13a'], back: ['B', '#ff5a4f'], x: ['X', '#4a95ff'], y: ['Y', '#ffc928'], lb: 'LB', rb: 'RB', lt: 'LT', rt: 'RT', menu: '☰', sel: '⧉', ud: '✚', lr: '✚', home: 'Xbox' },
+  ps: { ok: PS.ok, back: PS.back, x: PS.x, y: PS.y, lb: 'L1', rb: 'R1', lt: 'L2', rt: 'R2', menu: 'OPTIONS', sel: 'CREATE', ud: '✚', lr: '✚', home: 'PS' },
+  nin: { ok: ['A', '#fff'], back: ['B', '#fff'], x: ['Y', '#fff'], y: ['X', '#fff'], lb: 'L', rb: 'R', lt: 'ZL', rt: 'ZR', menu: '+', sel: '−', ud: '✚', lr: '✚', home: '⌂' },
 };
 export function Glyph({ a, pad }: { a: Act; pad?: boolean }) {
   const kind = usePadKind(), k = pad && kind === 'kb' ? 'xbox' : kind, v = GL[k][a];

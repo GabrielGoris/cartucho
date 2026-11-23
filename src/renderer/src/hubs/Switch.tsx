@@ -17,6 +17,7 @@ import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
 import { useFeed, useGameProgress, useHubActions, useHubData, type HubGame } from './data';
+import { tt } from '@shared/i18n';
 
 type Page = 'home' | 'cat' | 'news' | 'time' | 'upd' | 'cfg' | 'game';
 type Zone = 'row' | 'dock' | 'side' | 'main';
@@ -24,11 +25,11 @@ interface St { page: Page; zone: Zone; idx: number; di: number; si: number; mi: 
 type Side = { k: string; l: string; ic?: IconName; n?: number; gap?: boolean; v?: string };
 
 const DOCK: [Page | 'off', string, IconName, string][] = [
-  ['news', 'Novidades', 'bell', '#2f7de1'], ['cat', 'Descobrir', 'compass', '#ef7d22'], ['time', 'Tempo', 'clock', '#2fa45a'],
-  ['upd', 'Atualizações', 'dl', '#8b5cf6'], ['cfg', 'Ajustes', 'gear', '#6b6b75'], ['off', 'Sair', 'power', '#6b6b75'],
+  ['news', tt('Novidades'), 'bell', '#2f7de1'], ['cat', tt('Descobrir'), 'compass', '#ef7d22'], ['time', tt('Tempo'), 'clock', '#2fa45a'],
+  ['upd', tt('Atualizações'), 'dl', '#8b5cf6'], ['cfg', tt('Ajustes'), 'gear', '#6b6b75'], ['off', tt('Sair'), 'power', '#6b6b75'],
 ];
-const PAGES: Record<Exclude<Page, 'home' | 'game'>, [string, IconName]> = { cat: ['Descobrir', 'compass'], news: ['Novidades', 'bell'], time: ['Tempo de jogo', 'clock'], upd: ['Atualizações', 'dl'], cfg: ['Configurações', 'gear'] };
-const TAGS = { new: 'NOVO', upd: 'VERSÃO', up: 'SUBIU' } as const;
+const PAGES: Record<Exclude<Page, 'home' | 'game'>, [string, IconName]> = { cat: [tt('Descobrir'), 'compass'], news: [tt('Novidades'), 'bell'], time: [tt('Tempo de jogo'), 'clock'], upd: [tt('Atualizações'), 'dl'], cfg: [tt('Configurações'), 'gear'] };
+const TAGS = { new: tt('NOVO'), upd: tt('VERSÃO'), up: tt('SUBIU') } as const;
 const Art = ({ g, v }: { g: HubGame; v: 'cover' | 'wide' | 'square' }) =>
   <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant={v} />;
 
@@ -53,7 +54,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     return () => removeEventListener('cartucho:search', go);
   }, []);
   const s = useSettings();
-  const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show('Pasta dos jogos alterada'); } }));
+  const pickDir = useMutation(trpc.settings.pickPortsDir.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.portsDir.queryKey(), d); show(tt('Pasta dos jogos alterada')); } }));
   const chooseExe = useMutation(trpc.games.chooseExe.mutationOptions({ onSuccess: () => void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }) }));
   const openFolder = useMutation(trpc.games.openFolder.mutationOptions());
 
@@ -70,14 +71,14 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     const p = st.page;
     if (p === 'cat') {
       const cnt = (f: (g: HubGame) => boolean) => String(data.catalog.filter(f).length);
-      return [{ k: 'search', l: 'Buscar', ic: 'search' }, { k: 'all', l: 'Todos', ic: 'grid', v: String(data.catalog.length) }, { k: 'new', l: 'Novos', ic: 'star', n: data.catalog.filter(g => g.isNew).length },
-        { k: 'full', l: 'Totalmente jogáveis', ic: 'play', v: cnt(g => g.status === 'full') }, { k: 'play', l: 'Jogáveis', ic: 'pad', v: cnt(g => g.status === 'play') },
-        { k: 'wip', l: 'Em progresso', ic: 'refresh', v: cnt(g => g.status === 'wip') }, { k: 'inst', l: 'Já instalados', ic: 'folder', gap: true, v: cnt(g => !!g.installed) }];
+      return [{ k: 'search', l: tt('Buscar'), ic: 'search' }, { k: 'all', l: tt('Todos'), ic: 'grid', v: String(data.catalog.length) }, { k: 'new', l: tt('Novos'), ic: 'star', n: data.catalog.filter(g => g.isNew).length },
+        { k: 'full', l: tt('Totalmente jogáveis'), ic: 'play', v: cnt(g => g.status === 'full') }, { k: 'play', l: tt('Jogáveis'), ic: 'pad', v: cnt(g => g.status === 'play') },
+        { k: 'wip', l: tt('Em progresso'), ic: 'refresh', v: cnt(g => g.status === 'wip') }, { k: 'inst', l: tt('Já instalados'), ic: 'folder', gap: true, v: cnt(g => !!g.installed) }];
     }
-    if (p === 'news') return [{ k: 'all', l: 'Tudo', n: data.feed.length }, { k: 'new', l: 'Novos no catálogo' }, { k: 'upd', l: 'Versões novas' }, { k: 'up', l: 'Mudou de status' }];
-    if (p === 'time') return [{ k: 'sum', l: 'Resumo', ic: 'chart' }, ...timeList.map((g, i) => ({ k: 'g:' + g.key, l: g.title, gap: i === 0, v: fmtPlay(g.installed!.playMs) }))];
-    if (p === 'upd') return self ? [{ k: 'all', l: 'Atualizações', ic: 'dl' }] : [{ k: 'all', l: 'Atualizações disponíveis', ic: 'dl', n: data.withUpdate.length }, { k: 'check', l: act.checking ? 'Verificando…' : 'Verificar agora', ic: 'refresh' }];
-    if (p === 'cfg') return [{ k: 'dir', l: 'Pasta dos jogos', ic: 'folder' }, { k: 'snd', l: 'Sons da interface', ic: 'sound', v: s.snd ? 'Ligados' : 'Desligados' }, { k: 'radar', l: 'Radar de novidades', ic: 'bell' }, { k: 'about', l: 'Sobre o Cartucho', ic: 'info', gap: true }];
+    if (p === 'news') return [{ k: 'all', l: tt('Tudo'), n: data.feed.length }, { k: 'new', l: tt('Novos no catálogo') }, { k: 'upd', l: tt('Versões novas') }, { k: 'up', l: tt('Mudou de status') }];
+    if (p === 'time') return [{ k: 'sum', l: tt('Resumo'), ic: 'chart' }, ...timeList.map((g, i) => ({ k: 'g:' + g.key, l: g.title, gap: i === 0, v: fmtPlay(g.installed!.playMs) }))];
+    if (p === 'upd') return self ? [{ k: 'all', l: tt('Atualizações'), ic: 'dl' }] : [{ k: 'all', l: tt('Atualizações disponíveis'), ic: 'dl', n: data.withUpdate.length }, { k: 'check', l: act.checking ? tt('Verificando…') : tt('Verificar agora'), ic: 'refresh' }];
+    if (p === 'cfg') return [{ k: 'dir', l: tt('Pasta dos jogos'), ic: 'folder' }, { k: 'snd', l: tt('Sons da interface'), ic: 'sound', v: s.snd ? tt('Ligados') : tt('Desligados') }, { k: 'radar', l: tt('Radar de novidades'), ic: 'bell' }, { k: 'about', l: tt('Sobre o Cartucho'), ic: 'info', gap: true }];
     return [];
   })();
   const sk = side[st.si]?.k;
@@ -100,14 +101,13 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
   const open = (page: Page, extra: Partial<St> = {}) => { sfx.play('ok'); up({ page, si: page === 'cat' ? 1 : 0, mi: 0, zone: page === 'cat' ? 'main' : 'side', ...extra }); };
   const doPrimary = (g: HubGame) => {
     const r = act.primary(g);
-    if (r === 'play') { sfx.play('ok'); setLaunch(g); setTimeout(() => setLaunch(null), 1600); show(`${g.title} aberto · o tempo de jogo começou a contar`); }
-    else if (r === 'install') { sfx.play('ok'); show(`Baixando ${g.repo} do GitHub…`); }
-    else if (r === 'add') { sfx.play('ok'); show('Escolha a pasta onde você instalou o jogo'); }
-    else if (r === 'quit') { sfx.play('back'); show(`Fechando ${g.title}…`); }
-    else if (r === 'pick') { show('Escolha qual programa abre o jogo'); chooseExe.mutate({ id: g.installed!.id }); }
-    else if (r === 'relink') show('A pasta do jogo sumiu: escolha onde ele está agora');
+    if (r === 'play') { sfx.play('ok'); setLaunch(g); setTimeout(() => setLaunch(null), 1600); show(tt('{0} aberto · o tempo de jogo começou a contar', { 0: g.title })); }
+    else if (r === 'install') { sfx.play('ok'); show(tt('Baixando {0} do GitHub…', { 0: g.repo })); }
+    else if (r === 'add') { sfx.play('ok'); show(tt('Escolha a pasta onde você instalou o jogo')); }
+    else if (r === 'pick') { show(tt('Escolha qual programa abre o jogo')); chooseExe.mutate({ id: g.installed!.id }); }
+    else if (r === 'relink') show(tt('A pasta do jogo sumiu: escolha onde ele está agora'));
   };
-  const doUpdate = (g: HubGame) => { sfx.play('ok'); act.update(g); show(`Atualizando ${g.title} para ${g.update?.latest?.tag}… configurações e saves ficam`); };
+  const doUpdate = (g: HubGame) => { sfx.play('ok'); act.update(g); show(tt('Atualizando {0} para {1}… configurações e saves ficam', { 0: g.title, 1: g.update?.latest?.tag })); };
   const enter = () => {
     const p = st.page;
     if (p === 'home') {
@@ -142,27 +142,28 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
   };
 
   const dOpts = (x: HubGame): DOpt[] => [
-    ...(x.installed ? [{ k: 'primary', l: x.installed.running ? 'Fechar o jogo' : 'Jogar' }] : x.repo && !self ? [{ k: 'primary', l: 'Instalar' }] : []),
-    ...(!x.installed ? [{ k: 'add', l: self ? 'Já instalei: adicionar pasta' : 'Escolher pasta' }] : []),
-    ...(x.repo ? [{ k: 'gh', l: 'Ver no GitHub' }] : []),
+    ...(x.installed ? [{ k: 'primary', l: x.installed.running ? tt('Voltar para o jogo') : tt('Jogar') }, ...(x.installed.running ? [{ k: 'quit', l: tt('Fechar o jogo') }] : [])] : x.repo && !self ? [{ k: 'primary', l: tt('Instalar') }] : []),
+    ...(!x.installed ? [{ k: 'add', l: self ? tt('Já instalei: adicionar pasta') : tt('Escolher pasta') }] : []),
+    ...(x.repo ? [{ k: 'gh', l: tt('Ver no GitHub') }] : []),
   ];
-  const dRun = (k: string, x: HubGame) => { if (k === 'add') { sfx.play('ok'); act.addFolder(x); show('Escolha a pasta onde você instalou o jogo'); } else if (k === 'gh') act.github(x); else doPrimary(x); };
+  const dRun = (k: string, x: HubGame) => { if (k === 'add') { sfx.play('ok'); act.addFolder(x); show(tt('Escolha a pasta onde você instalou o jogo')); } else if (k === 'gh') act.github(x); else if (k === 'quit') { act.quit(x); sfx.play('back'); show(tt('Fechando {0}…', { 0: x.title })); } else doPrimary(x); };
 
   const gOpts = (g: HubGame): DOpt[] => {
     const inst = g.installed;
-    if (inst?.missing) return [...(g.repo && !self ? [{ k: 'reinstall', l: 'Instalar de novo' }] : []), { k: 'relink', l: 'Procurar a pasta' }, { k: 'remove', l: 'Tirar da biblioteca' }];
-    if (!inst) return [self ? { k: 'add', l: 'Já instalei: adicionar pasta' } : { k: 'install', l: 'Instalar' }, ...(!self ? [{ k: 'add', l: 'Escolher pasta' }] : []), ...(g.repo ? [{ k: 'gh', l: 'Ver no GitHub' }] : [])];
-    return [inst.running ? { k: 'quit', l: 'Fechar o jogo' } : inst.exe ? { k: 'play', l: 'Jogar' } : { k: 'exe', l: 'Escolher o .exe' },
-      ...(g.update?.updateAvailable && !self ? [{ k: 'ver', l: `Atualizar para ${g.update.latest?.tag}` }] : []),
-      { k: 'folder', l: 'Abrir pasta' }, ...(inst.exe ? [{ k: 'exe', l: 'Trocar o .exe' }] : []), ...(g.repo ? [{ k: 'gh', l: 'Ver no GitHub' }] : [])];
+    if (inst?.missing) return [...(g.repo && !self ? [{ k: 'reinstall', l: tt('Instalar de novo') }] : []), { k: 'relink', l: tt('Procurar a pasta') }, { k: 'remove', l: tt('Tirar da biblioteca') }];
+    if (!inst) return [self ? { k: 'add', l: tt('Já instalei: adicionar pasta') } : { k: 'install', l: tt('Instalar') }, ...(!self ? [{ k: 'add', l: tt('Escolher pasta') }] : []), ...(g.repo ? [{ k: 'gh', l: tt('Ver no GitHub') }] : [])];
+    return [inst.running ? { k: 'play', l: tt('Voltar para o jogo') } : inst.exe ? { k: 'play', l: tt('Jogar') } : { k: 'exe', l: tt('Escolher o .exe') }, ...(inst.running ? [{ k: 'quit', l: tt('Fechar o jogo') }] : []),
+      ...(g.update?.updateAvailable && !self ? [{ k: 'ver', l: tt('Atualizar para {0}', { 0: g.update.latest?.tag }) }] : []),
+      { k: 'folder', l: tt('Abrir pasta') }, ...(inst.exe ? [{ k: 'exe', l: tt('Trocar o .exe') }] : []), ...(g.repo ? [{ k: 'gh', l: tt('Ver no GitHub') }] : [])];
   };
   const gRun = (k: string, g: HubGame) => {
-    if (k === 'play' || k === 'install' || k === 'quit') return doPrimary(g);
-    if (k === 'add') { sfx.play('ok'); act.addFolder(g); return show('Escolha a pasta onde você instalou o jogo'); }
+    if (k === 'quit') { act.quit(g); sfx.play('back'); return show(tt('Fechando {0}…', { 0: g.title })); }
+    if (k === 'play' || k === 'install') return doPrimary(g);
+    if (k === 'add') { sfx.play('ok'); act.addFolder(g); return show(tt('Escolha a pasta onde você instalou o jogo')); }
     if (k === 'exe') { sfx.play('ok'); return chooseExe.mutate({ id: g.installed!.id }); }
-    if (k === 'reinstall') { sfx.play('ok'); act.reinstall(g); return show(`Baixando ${g.repo} de novo… o tempo de jogo continua`); }
-    if (k === 'relink') { sfx.play('ok'); act.relink(g); return show('Escolha onde o jogo está agora'); }
-    if (k === 'remove') { sfx.play('back'); act.remove(g); show(`${g.title} saiu da biblioteca · nenhum arquivo foi apagado`); return up({ page: 'home', zone: 'row', game: null, from: null }); }
+    if (k === 'reinstall') { sfx.play('ok'); act.reinstall(g); return show(tt('Baixando {0} de novo… o tempo de jogo continua', { 0: g.repo })); }
+    if (k === 'relink') { sfx.play('ok'); act.relink(g); return show(tt('Escolha onde o jogo está agora')); }
+    if (k === 'remove') { sfx.play('back'); act.remove(g); show(tt('{0} saiu da biblioteca · nenhum arquivo foi apagado', { 0: g.title })); return up({ page: 'home', zone: 'row', game: null, from: null }); }
     if (k === 'folder') { sfx.play('ok'); return openFolder.mutate({ id: g.installed!.id }); }
     if (k === 'gh') { sfx.play('ok'); return act.github(g); }
     if (k === 'ver') return doUpdate(g);
@@ -216,13 +217,13 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     if (st.page === 'home') {
       if (st.zone === 'dock') return [['ok', 'OK']];
       const g = row[st.idx];
-      if (!g) return [['ok', 'Descobrir']];
-      return [['x', 'Detalhes'], ['ok', g.installed?.missing ? (g.repo && !self ? 'Instalar de novo' : 'Procurar a pasta') : g.installed?.running ? 'Fechar' : g.installed ? (v1 ? 'Iniciar' : 'Jogar') : 'Instalar']];
+      if (!g) return [['ok', tt('Descobrir')]];
+      return [['x', tt('Detalhes')], ['ok', g.installed?.missing ? (g.repo && !self ? tt('Instalar de novo') : tt('Procurar a pasta')) : g.installed?.running ? tt('Voltar ao jogo') : g.installed ? (v1 ? tt('Iniciar') : tt('Jogar')) : tt('Instalar')]];
     }
-    if (st.zone === 'main' && st.page === 'news') return [['back', 'Voltar'], ['y', 'Limpar tudo'], ['x', 'Dispensar'], ['ok', 'Ver']];
-    if (st.zone === 'main') return [['back', 'Voltar'], ['ok', st.page === 'cat' ? 'Ver' : 'Atualizar']];
-    if (st.page === 'cat' && sk === 'search') return [['back', 'Voltar'], ['ok', 'Digitar']];
-    return [['back', 'Voltar'], ['ok', 'OK']];
+    if (st.zone === 'main' && st.page === 'news') return [['back', tt('Voltar')], ['y', tt('Limpar tudo')], ['x', tt('Dispensar')], ['ok', tt('Ver')]];
+    if (st.zone === 'main') return [['back', tt('Voltar')], ['ok', st.page === 'cat' ? tt('Ver') : tt('Atualizar')]];
+    if (st.page === 'cat' && sk === 'search') return [['back', tt('Voltar')], ['ok', tt('Digitar')]];
+    return [['back', tt('Voltar')], ['ok', 'OK']];
   })();
   const Hints = () => <div className="s2h">{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>;
 
@@ -235,7 +236,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
                 options={dOpts} run={dRun} onOpen={x => open('game', { game: x.key, from: 'cat', fromSi: 0 })} onBack={() => { sfx.play('back'); up({ page: 'home', zone: 'row' }); }} />
             : st.page === 'game'
             ? game && <GameView theme="d-s2" g={game} self={self} opts={gOpts(game)} run={gRun} onBack={closeGame}
-                extra={game.installed && <>{game.installed.adapter && <><h3>Conquistas</h3><GameAch id={game.installed.id} /></>}<h3>Tempo de jogo</h3><GameTime g={game} /></>} />
+                extra={game.installed && <>{game.installed.adapter && <><h3>{tt('Conquistas')}</h3><GameAch id={game.installed.id} /></>}<h3>{tt('Tempo de jogo')}</h3><GameTime g={game} /></>} />
             : st.page === 'home'
             ? <Home v1={v1} row={row} st={st} feedCount={data.feed.length} updCount={data.withUpdate.length} newCount={data.catalog.filter(g => g.isNew).length}
                 onTile={i => { if (st.zone === 'row' && st.idx === i) enter(); else { sfx.play('move'); up({ zone: 'row', idx: i }); } }}
@@ -288,19 +289,19 @@ function Home({ v1, row, st, feedCount, updCount, newCount, onTile, onDock, hint
     <>
       <div className="top">
         <div className="av" title={me.name}>{me.initial}</div>
-        <span className="brand">Cartucho<small>{v1 ? 'Nintendo Switch' : 'Nintendo Switch 2'}</small></span>
+        <span className="brand">{tt('Cartucho')}<small>{v1 ? tt('Nintendo Switch') : tt('Nintendo Switch 2')}</small></span>
         <div className="sp" />
-        {feedCount > 0 && <span className="radar"><i />{plural(feedCount, 'novidade', 'novidades')}</span>}
+        {feedCount > 0 && <span className="radar"><i />{plural(feedCount, tt('novidade'), tt('novidades'))}</span>}
         <span className="clock">{clock}</span>
       </div>
-      {!inDock && n > 0 && <div className="tname" style={{ left: x }}>{g ? g.title : 'Descobrir mais'}</div>}
+      {!inDock && n > 0 && <div className="tname" style={{ left: x }}>{g ? g.title : tt('Descobrir mais')}</div>}
       <div className="row" style={{ transform: `translateX(-${shift}px)` }}>
         {row.map((t, k) => <Tile key={t.key} g={t} on={!inDock && k === i} first={k === 0} onClick={() => onTile(k)} />)}
         {n === 0
           ? <button className={`tile all empty ${!inDock ? 'on' : ''}`} onClick={() => onTile(0)}>
-              <Ic n="compass" /><b>Nenhum jogo por aqui ainda</b><span>Descubra recomps para instalar em Descobrir</span>
+              <Ic n="compass" /><b>{tt('Nenhum jogo por aqui ainda')}</b><span>{tt('Descubra recomps para instalar em Descobrir')}</span>
             </button>
-          : <button className={`tile all ${!inDock && i === n ? 'on' : ''}`} onClick={() => onTile(n)}><Ic n="compass" />Descobrir mais</button>}
+          : <button className={`tile all ${!inDock && i === n ? 'on' : ''}`} onClick={() => onTile(n)}><Ic n="compass" />{tt('Descobrir mais')}</button>}
       </div>
       {!inDock && g && <Meta g={g} x={x} />}
       <nav className="dock">
@@ -325,8 +326,8 @@ function Tile({ g, on, first, onClick }: { g: HubGame; on: boolean; first: boole
     <button className={`tile ${g.installed && !g.installed.missing ? '' : 'off'} ${on ? 'on' : ''}`} onClick={onClick} aria-label={g.title}>
       <Art g={g} v="square" />
       {!g.installed && !p && <span className="dlb"><Ic n="dl" /></span>}
-      {first && g.installed?.lastPlayed && !g.installed.running && <span className="cont"><b>{initial}</b>Continuar</span>}
-      {g.installed?.running && <span className="cont run"><b>▶</b>Jogando</span>}
+      {first && g.installed?.lastPlayed && !g.installed.running && <span className="cont"><b>{initial}</b>{tt('Continuar')}</span>}
+      {g.installed?.running && <span className="cont run"><b>▶</b>{tt('Jogando')}</span>}
       {p && !p.error && <span className="tprog"><i style={{ width: `${Math.max(4, p.pct * 100)}%` }} /></span>}
     </button>
   );
@@ -337,9 +338,9 @@ function Meta({ g, x }: { g: HubGame; x: number }) {
   return (
     <div className="meta" style={{ left: x }}>
       {p ? <span>{p.error ?? `${p.stage}${p.pct > 0 && p.pct < 1 ? ` · ${Math.round(p.pct * 100)}%` : ''}`}</span>
-        : inst?.missing ? <span>Pasta do jogo não encontrada</span>
-        : inst ? (inst.playMs ? <><span>Jogado <strong>{fmtPlay(inst.playMs)}</strong></span><span>{inst.lastPlayed ? ago(inst.lastPlayed) : ''}</span></> : <span>Ainda não jogado</span>)
-        : <span>{g.isNew ? <span className="pill new">NOVO</span> : 'Não instalado'}</span>}
+        : inst?.missing ? <span>{tt('Pasta do jogo não encontrada')}</span>
+        : inst ? (inst.playMs ? <><span>{tt('Jogado')}{' '}<strong>{fmtPlay(inst.playMs)}</strong></span><span>{inst.lastPlayed ? ago(inst.lastPlayed) : ''}</span></> : <span>{tt('Ainda não jogado')}</span>)
+        : <span>{g.isNew ? <span className="pill new">{tt('NOVO')}</span> : tt('Não instalado')}</span>}
       {g.status && <Chip s={g.status} />}
       {g.update?.updateAvailable && <span className="pill upd">UPDATE {g.update.latest?.tag}</span>}
     </div>
@@ -347,7 +348,7 @@ function Meta({ g, x }: { g: HubGame; x: number }) {
 }
 
 const Chip = ({ s }: { s: NonNullable<HubGame['status']> }) => <span className={`chip ${s}`}>{STATUS_LABEL[s]}</span>;
-const Pill = ({ g }: { g: HubGame }) => g.isNew ? <span className="pill new">NOVO</span> : g.update?.updateAvailable ? <span className="pill upd">UPDATE</span> : g.installed ? <span className="pill inst">INSTALADO</span> : null;
+const Pill = ({ g }: { g: HubGame }) => g.isNew ? <span className="pill new">{tt('NOVO')}</span> : g.update?.updateAvailable ? <span className="pill upd">UPDATE</span> : g.installed ? <span className="pill inst">{tt('INSTALADO')}</span> : null;
 const Empty = ({ children }: { children: ReactNode }) => <div className="empty2">{children}</div>;
 
 function Main({ page, k, st, cols, self, query, setQuery, searchRef, onSearchDone, data, catList, timeList, game, c, onCard }: {
@@ -362,9 +363,9 @@ function Main({ page, k, st, cols, self, query, setQuery, searchRef, onSearchDon
     const r = Math.floor(st.mi / cols), pitch = cols > 2 ? 266 : 410;
     return (
       <div className="main-in" style={{ transform: `translateY(-${st.zone === 'main' ? Math.max(0, r - 1) * pitch : 0}px)` }}>
-        <SearchBox ref={searchRef} value={query} onChange={setQuery} nav={false} className="sbox" placeholder="Nome do jogo…" onDone={onSearchDone} />
-        {!query.trim() ? <Empty>Digite o nome de um jogo de {c}: aparecem os seus e os do catálogo.</Empty>
-          : !catList.length ? <Empty>Nada encontrado para “{query.trim()}”.</Empty>
+        <SearchBox ref={searchRef} value={query} onChange={setQuery} nav={false} className="sbox" placeholder={tt('Nome do jogo…')} onDone={onSearchDone} />
+        {!query.trim() ? <Empty>{tt('Digite o nome de um jogo de {0}: aparecem os seus e os do catálogo.', { 0: c })}</Empty>
+          : !catList.length ? <Empty>{tt('Nada encontrado para “{0}”.', { 0: query.trim() })}</Empty>
           : <div className="cards">{catList.map((g, i) => (
               <button key={g.key} className={`card ${st.zone === 'main' && i === st.mi ? 'on' : ''}`} onClick={() => onCard(i)}>
                 <Art g={g} v="wide" /><div className="ttl"><span>{g.title}</span><Pill g={g} /></div>
@@ -374,7 +375,7 @@ function Main({ page, k, st, cols, self, query, setQuery, searchRef, onSearchDon
     );
   }
   if (page === 'cat') {
-    if (!catList.length) return <Empty>{data.catalog.length ? 'Nada nessa categoria.' : `O catálogo ainda não tem recomps para ${c}. O radar avisa quando aparecer o primeiro.`}</Empty>;
+    if (!catList.length) return <Empty>{data.catalog.length ? tt('Nada nessa categoria.') : tt('O catálogo ainda não tem recomps para {0}. O radar avisa quando aparecer o primeiro.', { 0: c })}</Empty>;
     const r = Math.floor(st.mi / cols), pitch = cols > 2 ? 266 : 410;
     return (
       <div className="main-in" style={{ transform: `translateY(-${st.zone === 'main' ? Math.max(0, r - 1) * pitch : 0}px)` }}>
@@ -388,7 +389,7 @@ function Main({ page, k, st, cols, self, query, setQuery, searchRef, onSearchDon
   }
   if (page === 'news') {
     const L = data.feed.filter(f => k === 'all' || f.kind === k);
-    if (!L.length) return <Empty>Nada novo por aqui. O Cartucho confere o Recompendium toda vez que abre.</Empty>;
+    if (!L.length) return <Empty>{tt('Nada novo por aqui. O Cartucho confere o Recompendium toda vez que abre.')}</Empty>;
     const byId = new Map(data.catalog.map(g => [g.catalog!.id, g]));
     return <div className="main-in" style={{ transform: `translateY(-${st.zone === 'main' ? Math.max(0, st.mi - 3) * 156 : 0}px)` }}>{L.map((f, i) => { const g = byId.get(f.gameId); return (
       <div key={f.id} className={`nr ${st.zone === 'main' && i === st.mi ? 'on' : ''}`} onClick={() => onCard(i)}>{g ? <Art g={g} v="cover" /> : <div />}
@@ -396,7 +397,7 @@ function Main({ page, k, st, cols, self, query, setQuery, searchRef, onSearchDon
         <div className="r"><span className={`pill ${f.kind}`}>{TAGS[f.kind]}</span>{ago(f.at)}</div></div>); })}</div>;
   }
   if (page === 'time') {
-    if (!timeList.length) return <Empty>Nenhuma sessão ainda. O tempo começa a contar quando você abre um jogo por aqui.</Empty>;
+    if (!timeList.length) return <Empty>{tt('Nenhuma sessão ainda. O tempo começa a contar quando você abre um jogo por aqui.')}</Empty>;
     if (k === 'sum') {
       const max = Math.max(...timeList.map(g => g.installed!.playMs));
       return (
@@ -410,22 +411,22 @@ function Main({ page, k, st, cols, self, query, setQuery, searchRef, onSearchDon
     return g ? <GameTime g={g} /> : null;
   }
   if (page === 'upd') {
-    if (k === 'check') return <div className="desc"><Ic n="refresh" /><div>Confere no GitHub se saiu versão nova dos seus jogos de {c}. O Cartucho já confere sozinho a cada 3 horas; aqui é para forçar agora.</div></div>;
-    if (self) return <Empty>Neste console as atualizações são por sua conta: instale a versão nova do recomp por cima da pasta do jogo e o Cartucho continua contando o tempo e as conquistas.</Empty>;
-    if (!data.withUpdate.length) return <Empty>Tudo em dia.{data.lib.some(g => g.installed?.sourceRepo) ? '' : ' (Nenhum jogo deste console tem projeto do GitHub ligado.)'}</Empty>;
+    if (k === 'check') return <div className="desc"><Ic n="refresh" /><div>{tt('Confere no GitHub se saiu versão nova dos seus jogos de {0}. O Cartucho já confere sozinho a cada 3 horas; aqui é para forçar agora.', { 0: c })}</div></div>;
+    if (self) return <Empty>{tt('Neste console as atualizações são por sua conta: instale a versão nova do recomp por cima da pasta do jogo e o Cartucho continua contando o tempo e as conquistas.')}</Empty>;
+    if (!data.withUpdate.length) return <Empty>{tt('Tudo em dia.{0}', { 0: data.lib.some(g => g.installed?.sourceRepo) ? '' : tt(' (Nenhum jogo deste console tem projeto do GitHub ligado.)') })}</Empty>;
     return <>{data.withUpdate.map((g, i) => (
       <button key={g.key} className={`nr nrb ${st.zone === 'main' && i === st.mi ? 'on' : ''}`} onClick={() => onCard(i)}>
         <Art g={g} v="cover" />
         <div>{g.title}<small>{g.repo} · {g.update?.installed ?? '?'} → {g.update?.latest?.tag}</small></div>
-        <div className="r"><span className="pill upd">{g.update?.latest?.tag}</span><span><Glyph a="ok" />atualizar</span></div>
+        <div className="r"><span className="pill upd">{g.update?.latest?.tag}</span><span><Glyph a="ok" />{tt('atualizar')}</span></div>
       </button>
     ))}</>;
   }
   if (page === 'cfg') {
-    if (k === 'dir') return <><div className="desc"><Ic n="folder" /><div>Onde o Cartucho instala os jogos que você baixa. Os já instalados ficam onde estão. <Glyph a="ok" /> para escolher outra pasta.</div></div><dl className="kv2"><dt>Pasta</dt><dd>{portsDir.data ?? '…'}</dd></dl></>;
-    if (k === 'snd') return <><div className="desc"><Ic n="sound" /><div>Os sons de navegação de cada console. <Glyph a="ok" /> liga ou desliga.</div></div><dl className="kv2"><dt>Sons</dt><dd>{s.snd ? 'Ligados' : 'Desligados'}</dd><dt>Volume</dt><dd>{s.vol}%</dd></dl></>;
-    if (k === 'radar') return <><div className="desc"><Ic n="bell" /><div>O radar compara o catálogo do Recompendium com a última olhada e avisa jogos novos, mudanças de status e versões novas dos seus jogos.</div></div><dl className="kv2"><dt>Catálogo de</dt><dd>{info.data?.generatedAt ? fmtDate(Date.parse(info.data.generatedAt)) : '—'}</dd><dt>Conferido</dt><dd>{info.data?.checkedAt ? ago(info.data.checkedAt) : '—'}</dd></dl></>;
-    return <div className="desc"><Ic n="info" /><div>Cartucho: hub de recomps, ports e emuladores. Catálogo do Recompendium; instalação adaptada do Harbour. Esta tela é inspirada no visual do {c}, sem nada copiado dele.</div></div>;
+    if (k === 'dir') return <><div className="desc"><Ic n="folder" /><div>{tt('Onde o Cartucho instala os jogos que você baixa. Os já instalados ficam onde estão.')}{' '}<Glyph a="ok" />{' '}{tt('para escolher outra pasta.')}</div></div><dl className="kv2"><dt>{tt('Pasta')}</dt><dd>{portsDir.data ?? '…'}</dd></dl></>;
+    if (k === 'snd') return <><div className="desc"><Ic n="sound" /><div>{tt('Os sons de navegação de cada console.')}{' '}<Glyph a="ok" />{' '}{tt('liga ou desliga.')}</div></div><dl className="kv2"><dt>{tt('Sons')}</dt><dd>{s.snd ? tt('Ligados') : tt('Desligados')}</dd><dt>{tt('Volume')}</dt><dd>{s.vol}%</dd></dl></>;
+    if (k === 'radar') return <><div className="desc"><Ic n="bell" /><div>{tt('O radar compara o catálogo do Recompendium com a última olhada e avisa jogos novos, mudanças de status e versões novas dos seus jogos.')}</div></div><dl className="kv2"><dt>{tt('Catálogo de')}</dt><dd>{info.data?.generatedAt ? fmtDate(Date.parse(info.data.generatedAt)) : '—'}</dd><dt>{tt('Conferido')}</dt><dd>{info.data?.checkedAt ? ago(info.data.checkedAt) : '—'}</dd></dl></>;
+    return <div className="desc"><Ic n="info" /><div>{tt('Cartucho: hub de recomps, ports e emuladores. Catálogo do Recompendium; instalação adaptada do Harbour. Esta tela é inspirada no visual do {0}, sem nada copiado dele.', { 0: c })}</div></div>;
   }
   return null;
 }
@@ -436,10 +437,10 @@ function ConsoleBigs({ data }: { data: ReturnType<typeof useHubData> }) {
   const last = Math.max(0, ...data.lib.map(g => g.installed!.lastPlayed ?? 0));
   return (
     <div className="bigs">
-      <div className="big"><b>{fmtPlay(data.playMs)}</b><span>neste console</span></div>
-      <div className="big"><b>{played.length}/{data.lib.length}</b><span>jogos jogados</span></div>
-      <div className="big"><b>{last ? ago(last) : '—'}</b><span>última vez</span></div>
-      <div className="big"><b className="ell">{top ? top.title : '—'}</b><span>mais jogado</span></div>
+      <div className="big"><b>{fmtPlay(data.playMs)}</b><span>{tt('neste console')}</span></div>
+      <div className="big"><b>{played.length}/{data.lib.length}</b><span>{tt('jogos jogados')}</span></div>
+      <div className="big"><b>{last ? ago(last) : '—'}</b><span>{tt('última vez')}</span></div>
+      <div className="big"><b className="ell">{top ? top.title : '—'}</b><span>{tt('mais jogado')}</span></div>
     </div>
   );
 }
@@ -453,15 +454,15 @@ function GameTime({ g }: { g: HubGame }) {
   return (
     <>
       <div className="bigs">
-        <div className="big"><b>{fmtPlay(d.totalMs)}</b><span>tempo total</span></div>
-        <div className="big"><b>{d.lastPlayed ? ago(d.lastPlayed) : '—'}</b><span>última vez</span></div>
-        <div className="big"><b>{d.sessions}</b><span>sessões</span></div>
-        <div className="big"><b>{d.sessions ? fmtPlay(d.totalMs / d.sessions) : '—'}</b><span>por sessão</span></div>
+        <div className="big"><b>{fmtPlay(d.totalMs)}</b><span>{tt('tempo total')}</span></div>
+        <div className="big"><b>{d.lastPlayed ? ago(d.lastPlayed) : '—'}</b><span>{tt('última vez')}</span></div>
+        <div className="big"><b>{d.sessions}</b><span>{tt('sessões')}</span></div>
+        <div className="big"><b>{d.avgMs ? fmtPlay(d.avgMs) : '—'}</b><span>{tt('por sessão')}</span></div>
       </div>
       <div className="ch2">
-        <h4>{g.title}<span>{fmtPlay(wk)} nesta semana</span></h4>
+        <h4>{g.title}<span>{tt('{0} nesta semana', { 0: fmtPlay(wk) })}</span></h4>
         <div className="b14">{d.days.map((v, i) => <i key={i} className={v ? '' : 'z'} style={{ height: `${v ? Math.max(3, (v / max) * 100) : 1}%` }} />)}</div>
-        <div className="ax"><span>14 dias atrás</span><span>hoje</span></div>
+        <div className="ax"><span>{tt('14 dias atrás')}</span><span>{tt('hoje')}</span></div>
       </div>
     </>
   );
@@ -476,14 +477,14 @@ function GameAch({ id }: { id: string }) {
   const list = [...d.list].sort((x, y) => (y.unlockedAt ?? -1) - (x.unlockedAt ?? -1));
   return (
     <>
-      <div className="bigs"><div className="big"><b>{got}/{d.list.length}</b><span>conquistas</span></div>
-        {d.list.some(a => a.points) && <div className="big"><b>{list.filter(a => a.unlockedAt != null).reduce((s, a) => s + (a.points ?? 0), 0)}</b><span>pontos</span></div>}</div>
+      <div className="bigs"><div className="big"><b>{got}/{d.list.length}</b><span>{tt('conquistas')}</span></div>
+        {d.list.some(a => a.points) && <div className="big"><b>{list.filter(a => a.unlockedAt != null).reduce((s, a) => s + (a.points ?? 0), 0)}</b><span>{tt('pontos')}</span></div>}</div>
       {d.errors.map(e => <div key={e} className="desc"><Ic n="info" /><div>{e}</div></div>)}
       {list.map(a => (
         <div key={a.id} className={`nr ach ${a.unlockedAt == null ? 'locked' : ''}`}>
           <div className="aico">{a.icon ? <img src={a.icon} alt="" /> : <Ic n="medal" />}</div>
           <div>{a.name}<small>{a.description}</small></div>
-          <div className="r">{a.points != null && <span className="pill inst">{a.points} G</span>}{a.unlockedAt != null ? fmtDate(a.unlockedAt) : 'Bloqueada'}</div>
+          <div className="r">{a.points != null && <span className="pill inst">{a.points} G</span>}{a.unlockedAt != null ? fmtDate(a.unlockedAt) : tt('Bloqueada')}</div>
         </div>
       ))}
     </>
@@ -498,7 +499,7 @@ function PadIndicator({ label = false }: { v1?: boolean; label?: boolean }) {
       {[0, 1, 2, 3, 4, 5, 6].map(i => <rect key={i} x={9 + i * 7} y="12" width="5" height="5" rx="1.2" fill="#ececef" />)}
       {[0, 1, 2, 3, 4, 5].map(i => <rect key={i} x={12 + i * 7} y="19" width="5" height="5" rx="1.2" fill="#ececef" />)}
       <rect x="16" y="26" width="32" height="4.5" rx="1.5" fill="#ececef" />
-    </svg>{label && <small>Teclado</small>}</span>
+    </svg>{label && <small>{tt('Teclado')}</small>}</span>
   );
-  return <span className="pad"><Ic n="pad" />{label && <small>Controle {PAD_NAMES[kind]}</small>}</span>;
+  return <span className="pad"><Ic n="pad" />{label && <small>{tt('Controle {0}', { 0: PAD_NAMES[kind] })}</small>}</span>;
 }

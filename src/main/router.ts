@@ -25,6 +25,7 @@ import type { WinCtl, WinState } from './window';
 import type { Background } from './background';
 import { logFile } from './log';
 import type { Updater, UpdState } from './updater';
+import { setLang, tt } from '@shared/i18n';
 
 export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; info?: GameInfoService; ingame?: InGame; web?: WebPane; tr: Translator; defaultPortsDir: string; win?: () => WinCtl | null; bg?: () => Background | null; upd?: () => Updater | null }
 export const portsDirOf = (d: Pick<RouterDeps, 'db' | 'defaultPortsDir'>) => kvGet(d.db, 'portsDir') || d.defaultPortsDir;
@@ -52,7 +53,7 @@ function listDir(path: string, kind: 'dir' | 'exe') {
 function places() {
   const home = homedir();
   const L: { name: string; path: string }[] = [{ name: 'Pasta pessoal', path: home }];
-  for (const [n, d] of [['Área de Trabalho', 'Desktop'], ['Downloads', 'Downloads'], ['Documentos', 'Documents'], ['Jogos', 'Games']] as const) {
+  for (const [n, d] of [[tt('Área de Trabalho'), 'Desktop'], [tt('Downloads'), 'Downloads'], [tt('Documentos'), 'Documents'], [tt('Jogos'), 'Games']] as const) {
     const p = join(home, d); if (existsSync(p)) L.push({ name: n, path: p });
   }
   if (process.platform === 'win32') for (const c of 'CDEFGHIJKLMNOPQRSTUVWXYZ') { const p = `${c}:\\`; if (existsSync(p)) L.push({ name: `Disco ${c}:`, path: p }); }
@@ -132,6 +133,7 @@ export function createRouter(deps: RouterDeps) {
     system: t.router({
       user: t.procedure.query(() => { try { return userInfo().username; } catch { return ''; } }),
       openLog: t.procedure.mutation(() => { const f = logFile(); if (f) shell.showItemInFolder(f); }),
+      setLang: t.procedure.input(z.object({ lang: z.enum(['pt', 'en']) })).mutation(({ input }) => { setLang(input.lang); kvSet(deps.db, 'lang', input.lang); }),
       quit: t.procedure.mutation(() => { const b = deps.bg?.(); if (b) b.quitting = true; setTimeout(() => app.quit(), 120); }),
       clipboard: t.procedure.mutation(() => clipboard.readText()),
     }),
@@ -142,7 +144,8 @@ export function createRouter(deps: RouterDeps) {
       onShot: t.procedure.subscription(async function* ({ signal }) { if (!deps.ingame) return; for await (const [s] of on(deps.ingame.events, 'shot', { signal })) yield s as { title: string; file: string }; }),
       shots: t.procedure.input(z.object({ title: z.string() })).query(({ input }) => deps.ingame?.list(input.title) ?? []),
       openShots: t.procedure.input(z.object({ title: z.string() })).mutation(async ({ input }) => { const d = deps.ingame?.folder(input.title); if (d && existsSync(d)) await shell.openPath(d); }),
-      back: t.procedure.mutation(() => deps.win?.()?.minimize()),
+      back: t.procedure.mutation(async () => { if (deps.ingame) await deps.ingame.back(); else deps.win?.()?.minimize(); }),
+      removeShot: t.procedure.input(z.object({ url: z.string() })).mutation(({ input }) => deps.ingame?.remove(input.url) ?? false),
     }),
 
     web: t.router({
@@ -157,13 +160,13 @@ export function createRouter(deps: RouterDeps) {
     }),
 
     background: t.router({
-      get: t.procedure.query(() => deps.bg?.()?.prefs() ?? { tray: false, track: false, autostart: false }),
-      set: t.procedure.input(z.object({ tray: z.boolean().optional(), track: z.boolean().optional(), autostart: z.boolean().optional() })).mutation(({ input }) => {
-        const b = deps.bg?.(); if (!b) throw new Error('Indisponível.');
+      get: t.procedure.query(() => deps.bg?.()?.prefs() ?? { tray: false, track: false, autostart: false, screen: false }),
+      set: t.procedure.input(z.object({ tray: z.boolean().optional(), track: z.boolean().optional(), autostart: z.boolean().optional(), screen: z.boolean().optional() })).mutation(({ input }) => {
+        const b = deps.bg?.(); if (!b) throw new Error(tt('Indisponível.'));
         return b.set(input);
       }),
       shortcut: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
-        const b = deps.bg?.(); if (!b) throw new Error('Indisponível.');
+        const b = deps.bg?.(); if (!b) throw new Error(tt('Indisponível.'));
         return b.shortcut(input.id);
       }),
     }),
@@ -193,7 +196,7 @@ export function createRouter(deps: RouterDeps) {
     settings: t.router({
       portsDir: t.procedure.query(() => portsDirOf(deps)),
       pickPortsDir: t.procedure.mutation(async () => {
-        const dir = await pick('Onde o Cartucho deve instalar os jogos?', ['openDirectory', 'createDirectory'], { defaultPath: portsDirOf(deps) });
+        const dir = await pick(tt('Onde o Cartucho deve instalar os jogos?'), ['openDirectory', 'createDirectory'], { defaultPath: portsDirOf(deps) });
         if (dir) kvSet(db, 'portsDir', dir);
         return portsDirOf(deps);
       }),
@@ -261,12 +264,12 @@ export function createRouter(deps: RouterDeps) {
       get: t.procedure.input(z.object({ id: z.string() })).query(({ input }) => ach.getGame(input.id)),
       chooseExe: t.procedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
         const g = ach.getGame(input.id);
-        const file = await pick(`Qual programa abre ${g.title}?`, ['openFile'], { defaultPath: g.installDir, filters: process.platform === 'win32' ? [{ name: 'Programas', extensions: ['exe', 'bat', 'lnk'] }] : [] });
+        const file = await pick(tt('Qual programa abre {0}?', { 0: g.title }), ['openFile'], { defaultPath: g.installDir, filters: process.platform === 'win32' ? [{ name: 'Programas', extensions: ['exe', 'bat', 'lnk'] }] : [] });
         if (file) ach.patchGame(input.id, { exe: file });
         return ach.getGame(input.id);
       }),
       addFromDialog: t.procedure.input(z.object({ catalogId: z.string().optional() }).optional()).mutation(async ({ input }) => {
-        const dir = await pick(input?.catalogId ? 'Escolha a pasta onde você instalou o jogo' : 'Escolha a pasta do jogo', ['openDirectory']);
+        const dir = await pick(input?.catalogId ? tt('Escolha a pasta onde você instalou o jogo') : tt('Escolha a pasta do jogo'), ['openDirectory']);
         if (!dir) return null;
         const g = await ach.addGame(dir, { catalogId: input?.catalogId ?? null });
         if (g.catalogId || g.adapter || g.console !== 'other') return g;
@@ -285,7 +288,7 @@ export function createRouter(deps: RouterDeps) {
         const f = platPending.get(input.id); platPending.delete(input.id); f?.(input.console);
       }),
       relink: t.procedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
-        const dir = await pick(`Onde está ${ach.getGame(input.id).title} agora?`, ['openDirectory']);
+        const dir = await pick(tt('Onde está {0} agora?', { 0: ach.getGame(input.id).title }), ['openDirectory']);
         return dir ? ach.relocate(input.id, dir) : null;
       }),
       remove: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => ach.removeGame(input.id)),

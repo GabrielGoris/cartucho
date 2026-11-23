@@ -1,18 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { Combos, padKeys, safeName } from '../src/main/ingame';
+import { Combos, HOLD, padKeys, safeName } from '../src/main/ingame';
+import { moveTo, ownedBy } from '../src/main/win32';
+import { mergeSessions } from '../src/main/play';
 
 const xbox = (pressed: number[]) => ({ index: 0, id: 'Xbox Wireless Controller', mapping: 'standard', b: Array.from({ length: 17 }, (_, i) => (pressed.includes(i) ? '1' : '0')).join('') });
 const ps2 = (pressed: number[]) => ({ index: 1, id: 'Twin USB Joystick (Vendor: 0810 Product: 0001)', mapping: '', b: Array.from({ length: 12 }, (_, i) => (pressed.includes(i) ? '1' : '0')).join('') });
 
 describe('atalhos do controle durante o jogo', () => {
-  it('só o botão Home chama o Cartucho', () => {
+  it('o Cartucho só aparece com o Home segurado por 1,5 s', () => {
     const c = new Combos();
-    expect(c.feed(0, padKeys(xbox([])))).toEqual([]);
-    expect(c.feed(0, padKeys(xbox([16])))).toEqual(['summon']);
-    expect(c.feed(0, padKeys(xbox([16])))).toEqual([]);
+    expect(c.feed(0, padKeys(xbox([])), 0)).toEqual([]);
+    expect(c.feed(0, padKeys(xbox([16])), 100)).toEqual([]);
+    expect(c.next(100)).toBe(HOLD);
+    expect(c.tick(1000)).toEqual([]);
+    expect(c.tick(100 + HOLD)).toEqual(['summon']);
+    expect(c.tick(5000)).toEqual([]);
+    expect(c.feed(0, padKeys(xbox([])), 5100)).toEqual([]);
+    expect(c.feed(0, padKeys(xbox([16])), 6000)).toEqual([]);
+    expect(c.feed(0, padKeys(xbox([])), 6400)).toEqual([]);
+    expect(c.tick(9000)).toEqual([]);
+    expect(c.next(9000)).toBeNull();
     const p = new Combos();
-    p.feed(1, padKeys(ps2([])));
-    expect([...p.feed(1, padKeys(ps2([8, 9]))), ...p.feed(1, padKeys(ps2([])))]).not.toContain('summon');
+    p.feed(1, padKeys(ps2([])), 0);
+    expect([...p.feed(1, padKeys(ps2([8, 9])), 10), ...p.tick(5000)]).not.toContain('summon');
   });
 
   it('Select+Start tira a captura uma vez, também no adaptador de PS2', () => {
@@ -29,5 +39,26 @@ describe('atalhos do controle durante o jogo', () => {
   it('nome da pasta das capturas sem caracteres proibidos no Windows', () => {
     expect(safeName('Zelda: Majora\'s Mask?')).toBe("Zelda Majora's Mask");
     expect(safeName('...')).toBe('Jogo');
+  });
+
+  it('leva a janela do jogo para o monitor do Cartucho', () => {
+    const target = { m: [1920, 0, 4480, 1440] as [number, number, number, number], w: [1920, 0, 4480, 1400] as [number, number, number, number] };
+    expect(moveTo({ r: [0, 0, 1920, 1080], m: [0, 0, 1920, 1080] }, target)).toEqual([1920, 0, 4480, 1440]);
+    expect(moveTo({ r: [100, 100, 1380, 820], m: [0, 0, 1920, 1080] }, target)).toEqual([2560, 340, 3840, 1060]);
+    expect(moveTo({ r: [2000, 10, 2400, 300], m: [1920, 0, 4480, 1440] }, target)).toBeNull();
+    expect(ownedBy({ pid: 9, path: 'C:\\Games\\Zelda\\bin\\zelda.exe' }, new Set(), ['C:\\Games\\Zelda'])).toBe(true);
+    expect(ownedBy({ pid: 9, path: 'C:\\Games\\Zelda2\\z.exe' }, new Set(), ['C:\\Games\\Zelda'])).toBe(false);
+    expect(ownedBy({ pid: 9, path: '' }, new Set([9]), [])).toBe(true);
+  });
+});
+
+describe('sessões de jogo', () => {
+  const m = 60_000;
+  it('junta sessões com menos de 10 minutos de intervalo', () => {
+    const g = mergeSessions([
+      { g: 'a', s: 0, e: 30 * m }, { g: 'a', s: 35 * m, e: 60 * m }, { g: 'a', s: 80 * m, e: 81 * m },
+      { g: 'b', s: 31 * m, e: 40 * m },
+    ]);
+    expect(g.map(x => [x.g, x.ms / m])).toEqual([['a', 55], ['a', 1], ['b', 9]]);
   });
 });

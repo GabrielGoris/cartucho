@@ -1,4 +1,5 @@
 import type { ConsoleId } from '@shared/types';
+import { tt } from '@shared/i18n';
 
 export type Maker = 'Nintendo' | 'Sony' | 'Microsoft' | 'Sega' | 'Vários' | 'Outros';
 export interface StageConsole {
@@ -29,11 +30,11 @@ export const CONSOLES: StageConsole[] = [
   { id: 'xbox', name: 'Xbox', short: 'XBOX', year: 2001, maker: 'Microsoft', color: '#2fd36b', cm: 32, model: ['xbox.glb', 0, 0] },
   { id: 'x360', name: 'Xbox 360', short: '360', year: 2005, maker: 'Microsoft', color: '#7fd13b', cm: 30.9, model: ['xbox_360_black.glb', 0, 0] },
   { id: 'megadrive', name: 'Mega Drive', short: 'MD', year: 1988, maker: 'Sega', color: '#3d7bff', cm: 28, model: ['sega_mega_drive.glb', 0, 0] },
-  { id: 'pc', name: 'PC', short: 'PC', year: 'source ports', maker: 'Vários', color: '#4fe3d2', cm: 42, model: ['retro_crt_computer_1990s_desktop_pc.glb', -PI / 2, 0] },
-  { id: 'other', name: 'Outros', short: '+', year: 'várias plataformas', maker: 'Outros', color: '#ffb43d', cm: 34, model: ['pacman_arcade.glb', 0, 0] },
+  { id: 'pc', name: 'PC', short: 'PC', year: tt('source ports'), maker: 'Vários', color: '#4fe3d2', cm: 42, model: ['retro_crt_computer_1990s_desktop_pc.glb', -PI / 2, 0] },
+  { id: 'other', name: 'Outros', short: '+', year: tt('várias plataformas'), maker: 'Outros', color: '#ffb43d', cm: 34, model: ['pacman_arcade.glb', 0, 0] },
 ];
 export const MAKERS: Maker[] = ['Nintendo', 'Sony', 'Microsoft', 'Sega', 'Vários', 'Outros'];
-export const MAKER_LABEL: Record<Maker, string> = { Nintendo: 'NINTENDO', Sony: 'SONY', Microsoft: 'MICROSOFT', Sega: 'SEGA', 'Vários': 'PC', Outros: 'OUTROS' };
+export const MAKER_LABEL: Record<Maker, string> = { Nintendo: 'NINTENDO', Sony: 'SONY', Microsoft: 'MICROSOFT', Sega: 'SEGA', 'Vários': 'PC', Outros: tt('OUTROS') };
 export const consoleIndex = (id: string) => Math.max(0, CONSOLES.findIndex(c => c.id === id));
 
 export const visibleConsoles = (hidden: readonly string[]) => CONSOLES.filter(c => c.id === 'other' || !hidden.includes(c.id));

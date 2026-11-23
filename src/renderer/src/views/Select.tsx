@@ -11,6 +11,7 @@ import { initAudio, sfx } from '../lib/sfx';
 import { MAKERS, MAKER_LABEL, otherConsoles, type StageConsole } from '../stage/consoles';
 import { Home, setCaption } from './Home';
 import { MeOverlay, RadarOverlay } from './Overlays';
+import { tt } from '@shared/i18n';
 
 export type Page = 'act' | 'stage';
 interface Props {
@@ -88,19 +89,19 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
   const unseen = summary.data?.radar.unseen ?? 0;
 
   return (
-    <section className="view select" ref={root} aria-label="Cartucho">
+    <section className="view select" ref={root} aria-label={tt('Cartucho')}>
       <header className="topbar">
-        <div className="logo glow"><i />CARTUCHO</div>
+        <div className="logo glow"><i />{tt('CARTUCHO')}</div>
         <div className="seg" role="tablist">
-          <button role="tab" data-hf className={page === 'act' ? 'on' : ''} aria-selected={page === 'act'} onClick={() => go('act')}>INÍCIO</button>
-          <button role="tab" data-hf className={page === 'stage' ? 'on' : ''} aria-selected={page === 'stage'} onClick={() => { go('stage'); setZone('car'); }}>CONSOLES</button>
-          <button role="tab" data-hf onClick={() => { sfx.play('ok'); onAll(); }}>TODOS OS JOGOS</button>
+          <button role="tab" data-hf className={page === 'act' ? 'on' : ''} aria-selected={page === 'act'} onClick={() => go('act')}>{tt('INÍCIO')}</button>
+          <button role="tab" data-hf className={page === 'stage' ? 'on' : ''} aria-selected={page === 'stage'} onClick={() => { go('stage'); setZone('car'); }}>{tt('CONSOLES')}</button>
+          <button role="tab" data-hf onClick={() => { sfx.play('ok'); onAll(); }}>{tt('TODOS OS JOGOS')}</button>
         </div>
         <div className="top-right">
-          <button className={`hm-pill ${unseen ? 'has' : ''}`} data-hf data-cap="Radar" onClick={() => { sfx.play('ok'); setOv('radar'); }}><i />{unseen ? plural(unseen, 'novidade', 'novidades') : 'radar'}</button>
-          <button className="hm-set" data-hf aria-label="Configurações" title="Configurações (S)" onClick={onSettings}>⚙</button>
-          <button className="hm-set hm-menu" data-hf aria-label="Menu do Cartucho" title="Menu do Cartucho (Start no controle, F1 no teclado)" onClick={onMenu}>☰</button>
-          <button className="hm-me" data-hf aria-label={`Perfil de ${me.name}`} title={me.name} style={{ background: me.color }} onClick={() => { sfx.play('ok'); setOv('me'); }}>{me.initial}</button>
+          <button className={`hm-pill ${unseen ? 'has' : ''}`} data-hf data-cap={tt('Radar')} onClick={() => { sfx.play('ok'); setOv('radar'); }}><i />{unseen ? plural(unseen, tt('novidade'), tt('novidades')) : 'radar'}</button>
+          <button className="hm-set" data-hf aria-label={tt('Configurações')} title={tt('Configurações (S)')} onClick={onSettings}>⚙</button>
+          <button className="hm-set hm-menu" data-hf aria-label={tt('Menu do Cartucho')} title={tt('Menu do Cartucho (Start no controle, F1 no teclado)')} onClick={onMenu}>☰</button>
+          <button className="hm-me" data-hf aria-label={tt('Perfil de {0}', { 0: me.name })} title={me.name} style={{ background: me.color }} onClick={() => { sfx.play('ok'); setOv('me'); }}>{me.initial}</button>
           <Clock />
         </div>
       </header>
@@ -111,16 +112,16 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
         <div className="stage-ui">
           <div className="cname glow" style={{ color: c.color }}>{c.name.toUpperCase()}</div>
           <div className="cmeta">
-            {c.id === 'other' ? plural(pc.platforms, 'plataforma', 'plataformas') : `${c.maker} · ${c.year}`}
-            {' · '}{pc?.recomps ? plural(pc.recomps, 'recomp', 'recomps') : 'nenhum recomp ainda'}
-            {pc?.installed ? ` · ${plural(pc.installed, 'instalado', 'instalados')}` : ''}
+            {c.id === 'other' ? plural(pc.platforms, tt('plataforma'), tt('plataformas')) : `${c.maker} · ${c.year}`}
+            {' · '}{pc?.recomps ? plural(pc.recomps, tt('recomp'), tt('recomps')) : tt('nenhum recomp ainda')}
+            {pc?.installed ? ` · ${plural(pc.installed, tt('instalado'), tt('instalados'))}` : ''}
             {(() => { const ms = (games.data ?? []).filter(g => group.includes(g.console)).reduce((s, g) => s + g.playMs, 0); return ms ? ` · ${fmtPlay(ms)}` : ''; })()}
-            {pc?.fresh ? <> · <b>{plural(pc.fresh, 'novo', 'novos')}</b></> : null}
+            {pc?.fresh ? <> · <b>{plural(pc.fresh, tt('novo'), tt('novos'))}</b></> : null}
           </div>
           <div className="nav">
-            <button className="arrow" aria-label="Console anterior" onClick={() => move(-1)}>◀</button>
-            <button className="enter" onClick={() => { initAudio(); onEnterConsole(c.id); }}>LIGAR</button>
-            <button className="arrow" aria-label="Próximo console" onClick={() => move(1)}>▶</button>
+            <button className="arrow" aria-label={tt('Console anterior')} onClick={() => move(-1)}>◀</button>
+            <button className="enter" onClick={() => { initAudio(); onEnterConsole(c.id); }}>{tt('LIGAR')}</button>
+            <button className="arrow" aria-label={tt('Próximo console')} onClick={() => move(1)}>▶</button>
           </div>
           <div className="groups">
             {MAKERS.filter(m => list.some(x => x.maker === m)).map(m => (
@@ -133,13 +134,13 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
         </div>
       )}
 
-      {add.error && <div className="toasts"><div className="toast"><div className="toast-k">NÃO DEU PARA ADICIONAR</div><div className="toast-g">{add.error.message}</div></div></div>}
+      {add.error && <div className="toasts"><div className="toast"><div className="toast-k">{tt('NÃO DEU PARA ADICIONAR')}</div><div className="toast-g">{add.error.message}</div></div></div>}
 
-      <Hints items={page === 'act' ? [['ok', 'Abrir'], ['sel', 'Consoles'], ['lb', 'Todos os jogos'], ['menu', 'Menu']] : zone === 'top' ? [['lr', 'Mover'], ['ok', 'Abrir'], ['ud', 'Voltar ao palco']] : zone === 'grp' ? [['lr', 'Fabricante'], ['ok', 'Ligar'], ['ud', 'Palco']] : [['lr', 'Console'], ['ok', 'Ligar'], ['ud', 'Menu e fabricantes'], ['menu', 'Menu']]} />
+      <Hints items={page === 'act' ? [['ok', tt('Abrir')], ['sel', tt('Consoles')], ['lb', tt('Todos os jogos')], ['menu', tt('Menu')]] : zone === 'top' ? [['lr', tt('Mover')], ['ok', tt('Abrir')], ['ud', tt('Voltar ao palco')]] : zone === 'grp' ? [['lr', tt('Fabricante')], ['ok', tt('Ligar')], ['ud', tt('Palco')]] : [['lr', tt('Console')], ['ok', tt('Ligar')], ['ud', tt('Menu e fabricantes')], ['menu', tt('Menu')]]} />
       <div className="sel-tools">
-        <button className="icon-btn" data-hf title="Trocar botões mostrados (C)" onClick={() => {
+        <button className="icon-btn" data-hf title={tt('Trocar botões mostrados (C)')} onClick={() => {
           const o = ['auto', 'kb', 'xbox', 'ps', 'nin'] as const; setSettings({ pad: o[(o.indexOf(s.pad) + 1) % o.length]! });
-        }}>🎮 {s.pad === 'auto' ? `Auto: ${PAD_NAMES[pad]}` : PAD_NAMES[s.pad]}</button>
+        }}>🎮 {s.pad === 'auto' ? tt('Auto: {0}', { 0: PAD_NAMES[pad] }) : PAD_NAMES[s.pad]}</button>
       </div>
 
       {ov === 'radar' && <RadarOverlay onClose={() => setOv(null)} onOpenConsole={id => { setOv(null); onEnterConsole(id, { tab: 'cat' }); }} />}

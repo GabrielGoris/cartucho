@@ -1,9 +1,9 @@
 import { existsSync } from 'node:fs';
-import { join, normalize, sep } from 'node:path';
+import { dirname, join, normalize, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, net, protocol, shell } from 'electron';
 import { createIPCHandler } from 'electron-trpc/main';
-import { openDb } from './db';
+import { kvGet, openDb } from './db';
 import { createRouter } from './router';
 import { AchievementService } from './achievements/service';
 import { refreshCatalog } from './catalog';
@@ -16,11 +16,13 @@ import { GameInfoService } from './artwork/info';
 import { createEmulatorResolver } from './emulators';
 import { WebPane } from './web';
 import { InGame } from './ingame';
+import { Win32 } from './win32';
 import { Translator } from './translate';
 import { WinCtl } from './window';
 import { Background, playArg, startHidden } from './background';
 import { Updater } from './updater';
 import { initLog, log } from './log';
+import { pickLang, setLang, tt } from '@shared/i18n';
 
 if (process.env.CARTUCHO_USER_DATA) app.setPath('userData', process.env.CARTUCHO_USER_DATA);
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -50,7 +52,7 @@ function createWindow(show = true) {
   ctl ??= new WinCtl(app.getPath('userData'));
   win = new BrowserWindow({
     ...ctl.options(), minWidth: 1024, minHeight: 640,
-    backgroundColor: '#07020f', show: false, autoHideMenuBar: true, title: 'Cartucho',
+    backgroundColor: '#07020f', show: false, autoHideMenuBar: true, title: tt('Cartucho'),
     icon: appIcon(),
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true, backgroundThrottling: false },
   });
@@ -85,6 +87,8 @@ void app.whenReady().then(async () => {
   });
 
   const db = openDb(join(app.getPath('userData'), 'cartucho.db'));
+  const savedLang = kvGet(db, 'lang');
+  setLang(savedLang === 'pt' || savedLang === 'en' ? savedLang : pickLang('auto', app.getLocale()));
   const ach = new AchievementService(db, app.getPath('appData'));
   const player = new Player(db, ach, p => shell.openPath(p), () => { if (win && !win.isDestroyed() && win.isVisible()) { if (win.isMinimized()) win.restore(); win.focus(); } else bg?.gameClosed(); });
   ach.isRunning = player.isRunning;
@@ -99,8 +103,19 @@ void app.whenReady().then(async () => {
   const info = new GameInfoService(db, ((url, init) => net.fetch(url, init as RequestInit)) as Fetch, art);
   void info.startNotas();
   setTimeout(() => info.warm(ach.listGames().filter(g => !g.missing).map(g => ({ console: g.console, platformName: g.platformName, title: g.title, installDir: g.installDir, exe: g.exe, catalogId: g.catalogId }))), 20_000);
-  const ingame = new InGame(join(app.getPath('pictures'), 'Cartucho'), () => player.current(), () => ctl?.summon(), appIcon());
+  const w32 = new Win32(app.getPath('userData'));
+  const ingame = new InGame({
+    root: join(app.getPath('pictures'), 'Cartucho'), w32,
+    current: () => player.current(),
+    reveal: () => ctl?.summon(),
+    minimize: () => ctl?.minimize(),
+    own: () => hwndOf(win),
+    visible: () => !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized(),
+    sameScreen: () => bg?.prefs().screen ?? true,
+    dirsOf: id => { try { const g = ach.getGame(id); return [g.installDir, g.exe ? dirname(g.exe) : ''].filter(Boolean); } catch { return []; } },
+  });
   player.events.on('play', () => ingame.setActive(!!player.current()));
+  player.events.on('launch', e => void ingame.place(e.dirs, e.pid));
   protocol.handle('media', req => {
     const u = new URL(req.url);
     const file = u.hostname === 'art' ? art.resolve(decodeURIComponent(u.pathname)) : u.hostname === 'shots' ? ingame.resolve(u.pathname) : null;
@@ -126,7 +141,13 @@ void app.whenReady().then(async () => {
   refreshCatalog(db).catch(e => console.warn('[catálogo]', e instanceof Error ? e.message : e));
 
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); else bg?.show(); });
-  app.on('before-quit', () => { player.stop(); ach.stop(); db.close(); });
+  app.on('before-quit', () => { player.stop(); ach.stop(); w32.stop(); db.close(); });
 });
+
+function hwndOf(w: BrowserWindow | null) {
+  if (!w || w.isDestroyed()) return null;
+  const b = w.getNativeWindowHandle();
+  return b.length >= 8 ? Number(b.readBigUInt64LE(0)) : b.readUInt32LE(0);
+}
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

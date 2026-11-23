@@ -1,13 +1,5 @@
-/**
- * XDBF: banco de dados de título do Xbox 360 (conquistas, textos e ícones), embutido no executável do jogo.
- * Estruturas conforme o Xenia (src/xenia/kernel/util/xdbf_utils.h, licença BSD). Tudo big-endian.
- *
- *   cabeçalho (24): magic 'XDBF', version, entry_count, entry_used, free_count, free_used
- *   entradas (18 cada): section u16, id u64, offset u32, size u32   (offset relativo ao início do conteúdo)
- *   livres (8 cada): offset u32, size u32
- *   seções: 1 = metadados ('XACH' conquistas, 'XSTC' idioma padrão), 2 = imagens (PNG), 3 = textos (id = idioma)
- */
 import { Reader, fourcc } from './binary';
+import { tt } from '@shared/i18n';
 
 export const XLanguage = { English: 1, Japanese: 2, German: 3, French: 4, Spanish: 5, Italian: 6, Korean: 7, TChinese: 8, Portuguese: 9, SChinese: 10, Polish: 11, Russian: 12 } as const;
 
@@ -28,8 +20,8 @@ export class Xdbf {
 
   constructor(private data: Uint8Array) {
     const r = new Reader(data);
-    if (r.u32() !== fourcc('XDBF')) throw new Error('não é um XDBF');
-    r.u32(); // version
+    if (r.u32() !== fourcc('XDBF')) throw new Error(tt('não é um XDBF'));
+    r.u32();
     const entryCount = r.u32(), entryUsed = r.u32(), freeCount = r.u32(); r.u32();
     for (let i = 0; i < entryCount; i++) {
       const e = { section: r.u16(), id: r.u64(), offset: r.u32(), size: r.u32() };
@@ -88,13 +80,12 @@ export class Xdbf {
   image(id: number): Uint8Array | null { return this.block(SECTION_IMAGE, BigInt(id)); }
   titleIcon() { return this.block(SECTION_IMAGE, ID_TITLE); }
 
-  /** Conquistas já com nome e descrição, no primeiro idioma disponível da lista de preferência. */
   achievementTexts(prefer: number[] = [XLanguage.Portuguese, XLanguage.English]): XdbfAchievementText[] {
     const lang = [...prefer, this.defaultLanguage()].find(l => this.hasLanguage(l)) ?? this.defaultLanguage();
     const s = this.strings(lang);
     return this.achievements().map(a => ({
       id: a.id, gamerscore: a.gamerscore, imageId: a.imageId,
-      name: fixText(s.get(a.labelId) ?? `Conquista ${a.id}`),
+      name: fixText(s.get(a.labelId) ?? tt('Conquista {0}', { 0: a.id })),
       description: fixText(s.get(a.descriptionId) ?? ''),
       lockedDescription: fixText(s.get(a.unachievedId) ?? ''),
     }));

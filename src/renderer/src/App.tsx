@@ -7,7 +7,8 @@ import { fmtPlay } from './lib/format';
 import { useTRPC } from './trpc';
 import { getSettings, reduceMotion, setSettings, useSettings } from './lib/settings';
 import { applyPalette, paletteById, PALETTES } from './lib/palettes';
-import { setGameRunning, setGlobalKeys, setShortcutHandler } from './lib/input';
+import { Glyph, setGameRunning, setGlobalKeys, setShortcutHandler } from './lib/input';
+import { getLang, tt } from '@shared/i18n';
 import { useConfirmReq } from './lib/dialogs';
 import { CartuchoMenu, ConfirmHost, PadSetupHost, PickerHost, PlatformHost } from './views/GlobalUI';
 import { MeOverlay, RadarOverlay, SupportOverlay } from './views/Overlays';
@@ -25,7 +26,6 @@ import { ConsolePicker } from './views/ConsolePicker';
 import { HUBS } from './hubs';
 import { TitleBar } from './components/TitleBar';
 import { AllGames } from './views/AllGames';
-import { InGameHost } from './components/InGame';
 import { WebHost } from './components/WebHost';
 
 type Inside = { id: ConsoleId; game?: string; tab?: 'lib' | 'cat'; key: number };
@@ -60,6 +60,10 @@ export function App() {
   const toast = (t: { k: string; n: string; g: string }) => { setToasts(x => [...x, t]); setTimeout(() => setToasts(x => x.filter(y => y !== t)), 6000); };
 
   const trpc = useTRPC(), qc = useQueryClient();
+  const resume = useMutation(trpc.ingame.back.mutationOptions());
+  const syncLang = useMutation(trpc.system.setLang.mutationOptions());
+  useEffect(() => { syncLang.mutate({ lang: getLang() }); }, []);
+  useSubscription(trpc.ingame.onSummon.subscriptionOptions(undefined, { onData: () => sfx.play('ok') }));
   const overlay = useMutation(trpc.win.overlay.mutationOptions());
   const installUpd = useMutation(trpc.updates.install.mutationOptions());
   const asked = useRef<string | null>(null);
@@ -90,12 +94,13 @@ export function App() {
   const openAll = () => transition(() => setAll(true));
   const closeAll = () => transition(() => { setAll(false); setPage('act'); });
 
-  const gk = useRef({ booting, picker, confirmReq, inside, leaveConsole, all, closeAll });
-  gk.current = { booting, picker, confirmReq, inside, leaveConsole, all, closeAll };
+  const gk = useRef({ booting, picker, confirmReq, inside, leaveConsole, all, closeAll, gameOpen: false });
+  gk.current = { booting, picker, confirmReq, inside, leaveConsole, all, closeAll, gameOpen: Object.keys(playing).length > 0 };
   useEffect(() => setGlobalKeys(k => {
     const g = gk.current;
-    if (g.booting || g.picker || g.confirmReq || document.querySelector('.osk-ov, .gl-pick, .gl-plat, .gl-padset, .ig-ov, .web-ov')) return false;
+    if (g.booting || g.picker || g.confirmReq || document.querySelector('.osk-ov, .gl-pick, .gl-plat, .gl-padset, .web-ov')) return false;
     if (k === 'Start') { sfx.play(menu ? 'back' : 'ok'); setMenu(m => !m); return true; }
+    if (k === 'Home' && g.gameOpen) { sfx.play('ok'); resume.mutate(); return true; }
     if (k === 'Home') { setMenu(false); setGov(null); setSettingsOpen(false); if (g.inside) g.leaveConsole(); else if (g.all) g.closeAll(); else setPage('stage'); sfx.play('back'); return true; }
     return false;
   }), [menu]);
@@ -111,7 +116,7 @@ export function App() {
   }), [booting, picker]);
 
   useSubscription(trpc.achievements.onUnlock.subscriptionOptions(undefined, {
-    onData: (e: UnlockEvent) => toast({ k: 'CONQUISTA DESBLOQUEADA', n: e.name, g: e.gameTitle }),
+    onData: (e: UnlockEvent) => toast({ k: tt('CONQUISTA DESBLOQUEADA'), n: e.name, g: e.gameTitle }),
   }));
   useSubscription(trpc.ports.onProgress.subscriptionOptions(undefined, {
     onData: p => { pushProgress(p); if (p.done) { void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }); void qc.invalidateQueries({ queryKey: trpc.library.summary.queryKey() }); } },
@@ -120,7 +125,7 @@ export function App() {
   useSubscription(trpc.play.onEvent.subscriptionOptions(undefined, {
     onData: (e: PlayEvent) => {
       setPlaying(p => { const { [e.gameId]: _, ...rest } = p; return e.running ? { ...rest, [e.gameId]: e.title } : rest; });
-      if (!e.running && e.sessionMs) toast({ k: 'SESSÃO ENCERRADA', n: fmtPlay(e.sessionMs), g: e.title });
+      if (!e.running && e.sessionMs) toast({ k: tt('SESSÃO ENCERRADA'), n: fmtPlay(e.sessionMs), g: e.title });
       void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }); void qc.invalidateQueries({ queryKey: trpc.play.pathKey() }); void qc.invalidateQueries({ queryKey: trpc.library.summary.queryKey() });
     },
   }));
@@ -138,7 +143,7 @@ export function App() {
   useEffect(() => {
     if (!updReady || gameOpen || booting || asked.current === updReady) return;
     asked.current = updReady;
-    void askConfirm({ title: `Cartucho ${updReady} pronto`, text: 'A atualização já foi baixada. Reiniciar agora? O Cartucho fecha, instala e abre de novo sozinho em alguns segundos. Se preferir deixar para depois, ela entra quando você fechar o Cartucho.', ok: 'Reiniciar agora', cancel: 'Depois' })
+    void askConfirm({ title: tt('Cartucho {0} pronto', { 0: updReady }), text: tt('A atualização já foi baixada. Reiniciar agora? O Cartucho fecha, instala e abre de novo sozinho em alguns segundos. Se preferir deixar para depois, ela entra quando você fechar o Cartucho.'), ok: tt('Reiniciar agora'), cancel: tt('Depois') })
       .then(y => { if (y) installUpd.mutate(); });
   }, [updReady, gameOpen, booting]);
   const stageMode = inside || all || gameOpen ? 'hidden' : booting || page === 'act' ? 'behind' : 'stage';
@@ -146,7 +151,7 @@ export function App() {
 
   return (
     <>
-    <TitleBar ctx={inside ? CONSOLES.find(c => c.id === inside.id)?.name ?? null : all ? 'Todos os jogos' : null} onMenu={() => { sfx.play('ok'); setMenu(true); }} />
+    <TitleBar ctx={inside ? CONSOLES.find(c => c.id === inside.id)?.name ?? null : all ? tt('Todos os jogos') : null} onMenu={() => { sfx.play('ok'); setMenu(true); }} />
     <div id="tv" className={tvClass} style={{ ['--crt' as string]: s.crtLvl / 100 }}>
       <Stage list={list} sel={sel} mode={stageMode} zoom={zoom} palette={palette} pixel={s.pixel} onSelect={i => { sfx.play('move'); setSel(i); }} onEnter={i => enterConsole(list[i]!.id)} />
       {all && !inside && <AllGames onBack={closeAll} />}
@@ -159,7 +164,7 @@ export function App() {
         if (H) return <H.component key={inside.key} id={inside.id} game={inside.game} tab={inside.tab} onBack={leaveConsole} />;
         return <ConsoleView key={inside.key} id={inside.id} game={inside.game} tab={inside.tab} active={!settingsOpen} onBack={leaveConsole} />;
       })()}
-      {menu && <CartuchoMenu inside={inside ? CONSOLES.find(c => c.id === inside.id)?.name ?? null : all ? 'Todos os jogos' : null} onClose={() => setMenu(false)}
+      {menu && <CartuchoMenu inside={inside ? CONSOLES.find(c => c.id === inside.id)?.name ?? null : all ? tt('Todos os jogos') : null} onClose={() => setMenu(false)}
         onSettings={() => setSettingsOpen(true)} onRadar={() => setGov('radar')} onProfile={() => setGov('me')} onPickConsoles={() => setPicker(true)} onLeave={all ? closeAll : leaveConsole} onAll={openAll} onSupport={() => setGov('support')} />}
       {gov === 'radar' && <RadarOverlay onClose={() => setGov(null)} onOpenConsole={id => { setGov(null); enterConsole(id, { tab: 'cat' }); }} />}
       {gov === 'me' && <MeOverlay onClose={() => setGov(null)} />}
@@ -168,13 +173,12 @@ export function App() {
       <PickerHost />
       <PlatformHost />
       <PadSetupHost />
-      <InGameHost />
       <WebHost />
       {settingsOpen && <Settings onSupport={() => { setSettingsOpen(false); setGov('support'); }} onClose={() => setSettingsOpen(false)} onPickConsoles={() => { setSettingsOpen(false); setPicker(true); }} />}
       {askPicker && <ConsolePicker first={!s.picked} onClose={() => setPicker(false)} />}
       {booting && <Boot summary={summary.data} onDone={() => setBooting(false)} />}
 
-      {gameOpen && <div className="playing">▶ JOGANDO {Object.values(playing).join(', ').toUpperCase()}</div>}
+      {gameOpen && <button className="playing" onClick={() => { sfx.play('ok'); resume.mutate(); }}>▶ {tt('JOGANDO {g}', { g: Object.values(playing).join(', ').toUpperCase() })}<span className="pl-k"><Glyph a="home" pad />{tt('voltar para o jogo')}</span></button>}
       <div className="toasts">
         {toasts.map((t, i) => (
           <div key={i} className="toast">

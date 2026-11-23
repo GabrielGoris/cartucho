@@ -14,6 +14,7 @@ import { useSettings } from '../lib/settings';
 import { matchesQuery } from '../lib/search';
 import { SearchBox } from '../components/SearchBox';
 import { CatalogPage, GamePage } from './GamePages';
+import { tt } from '@shared/i18n';
 
 type Tab = 'lib' | 'cat';
 interface Props { id: ConsoleId; game?: string; tab?: Tab; active: boolean; onBack: () => void }
@@ -69,52 +70,52 @@ export function ConsoleView({ id, game, tab: tab0, active, onBack }: Props) {
         : (
         <div ref={root} style={{ display: 'contents' }}>
           <header className="chub-top">
-            <button className="back" data-hf onClick={() => { sfx.play('back'); onBack(); }}>◀ CARTUCHO</button>
+            <button className="back" data-hf onClick={() => { sfx.play('back'); onBack(); }}>{tt('◀ CARTUCHO')}</button>
             <h1 className="glow">{c.name.toUpperCase()}</h1>
             <nav className="seg">
-              <button className={tab === 'lib' ? 'on' : ''} data-hf onClick={() => setTab('lib')}>MEUS JOGOS {mine.length > 0 && <span className="n">{mine.length}</span>}</button>
-              <button className={tab === 'cat' ? 'on' : ''} data-hf onClick={() => setTab('cat')}>DESCOBRIR</button>
+              <button className={tab === 'lib' ? 'on' : ''} data-hf onClick={() => setTab('lib')}>{tt('MEUS JOGOS')}{' '}{mine.length > 0 && <span className="n">{mine.length}</span>}</button>
+              <button className={tab === 'cat' ? 'on' : ''} data-hf onClick={() => setTab('cat')}>{tt('DESCOBRIR')}</button>
             </nav>
-            <SearchBox value={q} onChange={setQ} className="search chub-search" placeholder={tab === 'lib' ? 'Buscar nos seus jogos…  ( / )' : `Buscar entre ${plural(cat.data?.length ?? 0, 'recomp', 'recomps')}…  ( / )`}
+            <SearchBox value={q} onChange={setQ} className="search chub-search" placeholder={tab === 'lib' ? tt('Buscar nos seus jogos…  ( / )') : tt('Buscar entre {0}…  ( / )', { 0: plural(cat.data?.length ?? 0, tt('recomp'), tt('recomps')) })}
               onDone={() => { const first = root.current?.querySelector<HTMLElement>('.grid [data-hf], .rows [data-hf]'); if (first) nav.focusEl(first); }} />
             <span className="grow" />
-            <button className="btn acc" data-hf disabled={add.isPending} onClick={() => add.mutate()}>{add.isPending ? 'Lendo a pasta…' : '+ Adicionar jogo'}</button>
+            <button className="btn acc" data-hf disabled={add.isPending} onClick={() => add.mutate()}>{add.isPending ? tt('Lendo a pasta…') : tt('+ Adicionar jogo')}</button>
           </header>
-          {!isOther && <p className="chub-note">Versão provisória do hub. A interface no estilo do {c.name} chega numa próxima etapa.</p>}
+          {!isOther && <p className="chub-note">{tt('Versão provisória do hub. A interface no estilo do {0} chega numa próxima etapa.', { 0: c.name })}</p>}
           {add.error && <p className="err">{add.error.message}</p>}
-          {add.data && !add.data.adapter && <p className="warn">Adicionei <b>{add.data.title}</b>, mas ainda não sei ler as conquistas dele.</p>}
+          {add.data && !add.data.adapter && <p className="warn">{tt('Adicionei')}{' '}<b>{add.data.title}</b>{tt(', mas ainda não sei ler as conquistas dele.')}</p>}
 
           {isOther ? (
             <div className={`chub-body oth ${wide ? 'wide' : ''}`}>
               {tab === 'lib'
-                ? <OtherBrowser items={mineShown} only={only} setOnly={setOnly} cls="rows" empty={q ? <p className="pad24 dim">Nada encontrado.</p> : <EmptyLib />}
+                ? <OtherBrowser items={mineShown} only={only} setOnly={setOnly} cls="rows" empty={q ? <p className="pad24 dim">{tt('Nada encontrado.')}</p> : <EmptyLib />}
                     render={g => <GameRow key={g.id} g={g} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'game', id: g.id }); }} />} />
                 : <OtherBrowser items={catShown} only={only} setOnly={setOnly} cls="grid"
-                    empty={<p className="pad24 dim">{q ? 'Nada encontrado.' : 'Nenhum recomp por aqui ainda.'}</p>}
+                    empty={<p className="pad24 dim">{q ? tt('Nada encontrado.') : tt('Nenhum recomp por aqui ainda.')}</p>}
                     render={g => <GameCard key={g.id} g={g} installed={installedBy.has(g.id)} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'cat', game: g }); }} />} />}
             </div>
           ) : (
             <div className="chub-body">
               {tab === 'lib' ? (
-                mine.length ? mineShown.length ? <div className="rows">{mineShown.map(g => <GameRow key={g.id} g={g} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'game', id: g.id }); }} />)}</div> : <p className="pad24 dim">Nada encontrado.</p>
+                mine.length ? mineShown.length ? <div className="rows">{mineShown.map(g => <GameRow key={g.id} g={g} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'game', id: g.id }); }} />)}</div> : <p className="pad24 dim">{tt('Nada encontrado.')}</p>
                   : <EmptyLib />
               ) : (
                 <>
-                  {catShown.length === 0 && <p className="pad24 dim">{q ? 'Nada encontrado.' : 'Ainda não há recomps deste console no catálogo.'}</p>}
+                  {catShown.length === 0 && <p className="pad24 dim">{q ? tt('Nada encontrado.') : tt('Ainda não há recomps deste console no catálogo.')}</p>}
                   <div className="grid">{catShown.map(g => <GameCard key={g.id} g={g} installed={installedBy.has(g.id)} onOpen={() => { sfx.play('ok'); setOpen({ kind: 'cat', game: g }); }} />)}</div>
-                  <p className="credit">Catálogo: <a href="https://recompendium.com/" target="_blank" rel="noreferrer">Recompendium</a></p>
+                  <p className="credit">{tt('Catálogo:')}{' '}<a href="https://recompendium.com/" target="_blank" rel="noreferrer">{tt('Recompendium')}</a></p>
                 </>
               )}
             </div>
           )}
-          <Hints items={[['ud', 'Navegar'], ['ok', 'Abrir'], ['lb', 'Aba'], ['back', 'Cartucho']]} />
+          <Hints items={[['ud', tt('Navegar')], ['ok', tt('Abrir')], ['lb', tt('Aba')], ['back', tt('Cartucho')]]} />
         </div>
       )}
     </section>
   );
 }
 
-const sourceOf = (g: { console: ConsoleId; platformName: string | null }) => g.platformName ?? (g.console === 'other' ? 'Outros' : CONSOLE_NAME[g.console]);
+const sourceOf = (g: { console: ConsoleId; platformName: string | null }) => g.platformName ?? (g.console === 'other' ? tt('Outros') : CONSOLE_NAME[g.console]);
 
 const SHORT: [RegExp, string][] = [
   [/super famicom|snes/i, 'SNES'], [/gamecube/i, 'GC'], [/game ?boy advance/i, 'GBA'], [/game ?boy color/i, 'GBC'], [/game ?boy/i, 'GB'],
@@ -141,9 +142,9 @@ function OtherBrowser<T extends { console: ConsoleId; platformName: string | nul
   const shown = sel ? list.filter(([k]) => k === sel) : list;
   return (
     <>
-      <nav className="oth-side" aria-label="Console de origem">
+      <nav className="oth-side" aria-label={tt('Console de origem')}>
         <button data-hf data-src="" className={!sel ? 'on' : ''} onClick={() => setOnly(null)}>
-          <span className="sh">TUDO</span><span className="nm">Todos</span><span className="ct">{items.length}</span>
+          <span className="sh">{tt('TUDO')}</span><span className="nm">{tt('Todos')}</span><span className="ct">{items.length}</span>
         </button>
         {list.map(([k, gs]) => (
           <button key={k} data-hf data-src={k} title={k} className={sel === k ? 'on' : ''} style={{ ['--sc' as string]: color(gs[0]) }} onClick={() => setOnly(k)}>
@@ -154,11 +155,11 @@ function OtherBrowser<T extends { console: ConsoleId; platformName: string | nul
       <div className="oth-main">
         {!items.length ? empty : shown.map(([k, gs]) => (
           <section key={k} style={{ ['--sc' as string]: color(gs[0]) }}>
-            <h2 className="oth-head">{k}<small>{plural(gs.length, 'jogo', 'jogos')}</small></h2>
+            <h2 className="oth-head">{k}<small>{plural(gs.length, tt('jogo'), tt('jogos'))}</small></h2>
             <div className={cls}>{gs.map(render)}</div>
           </section>
         ))}
-        {cls === 'grid' && <p className="credit">Catálogo: <a href="https://recompendium.com/" target="_blank" rel="noreferrer">Recompendium</a></p>}
+        {cls === 'grid' && <p className="credit">{tt('Catálogo:')}{' '}<a href="https://recompendium.com/" target="_blank" rel="noreferrer">{tt('Recompendium')}</a></p>}
       </div>
     </>
   );
@@ -169,8 +170,8 @@ function EmptyLib() {
   const supported = useQuery(trpc.achievements.supported.queryOptions());
   return (
     <div className="empty-box">
-      <p>Nenhum jogo deste console na sua biblioteca. Use “Adicionar jogo” e aponte a pasta onde o recomp está instalado.</p>
-      <p style={{ marginTop: 10 }}>Conquistas já funcionam com:</p>
+      <p>{tt('Nenhum jogo deste console na sua biblioteca. Use “Adicionar jogo” e aponte a pasta onde o recomp está instalado.')}</p>
+      <p style={{ marginTop: 10 }}>{tt('Conquistas já funcionam com:')}</p>
       <ul>{supported.data?.map(s => <li key={s.id}>{s.label}</li>)}</ul>
     </div>
   );
@@ -182,8 +183,8 @@ function GameCard({ g, installed, onOpen }: { g: CatalogGame; installed: boolean
       <div style={{ position: 'relative' }}>
         <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} />
         <span className={`st st-${g.status}`}>{STATUS_LABEL[g.status]}</span>
-        {installed && <span className="inlib">NA BIBLIOTECA</span>}
-        {g.noLink && !isSelfInstall(g.console) && <span className="nolink" title="O Recompendium lista este projeto, mas prefere não pôr link para ele">SEM LINK</span>}
+        {installed && <span className="inlib">{tt('NA BIBLIOTECA')}</span>}
+        {g.noLink && !isSelfInstall(g.console) && <span className="nolink" title={tt('O Recompendium lista este projeto, mas prefere não pôr link para ele')}>{tt('SEM LINK')}</span>}
       </div>
       <div className="lmeta">
         <div className="title">{g.title}</div>
@@ -202,7 +203,7 @@ function GameRow({ g, onOpen }: { g: InstalledGame; onOpen: () => void }) {
       <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} className="thumb" />
       <div className="row-main">
         <div className="title">{g.title}</div>
-        <div className="dim">{g.running ? 'jogando agora · ' : ''}{g.playMs ? `${fmtPlay(g.playMs)} jogadas` : 'ainda não jogado'}{g.lastPlayed ? ` · ${ago(g.lastPlayed)}` : ''}{g.version ? ` · ${g.version}` : ''} · {g.installDir}</div>
+        <div className="dim">{g.running ? tt('jogando agora · ') : ''}{g.playMs ? tt('{0} jogadas', { 0: fmtPlay(g.playMs) }) : tt('ainda não jogado')}{g.lastPlayed ? ` · ${ago(g.lastPlayed)}` : ''}{g.version ? ` · ${g.version}` : ''} · {g.installDir}</div>
       </div>
       {a && a.total > 0 && (
         <div className="prog">
@@ -226,7 +227,7 @@ function Achievements({ id, active, onBack }: { id: string; active: boolean; onB
   const root = useRef<HTMLDivElement>(null);
   useSpatialNav(root, { active, onKey: k => { if (k === 'Escape') { onBack(); return true; } } });
 
-  if (!data.data) return <p className="dim pad24">{data.error ? data.error.message : 'Carregando…'}</p>;
+  if (!data.data) return <p className="dim pad24">{data.error ? data.error.message : tt('Carregando…')}</p>;
   const d = data.data;
   const got = d.list.filter(a => a.unlockedAt != null);
   const pts = d.list.reduce((s, a) => s + (a.points ?? 0), 0), gotPts = got.reduce((s, a) => s + (a.points ?? 0), 0);
@@ -235,12 +236,12 @@ function Achievements({ id, active, onBack }: { id: string; active: boolean; onB
   return (
     <div ref={root} style={{ display: 'contents' }}>
       <header className="chub-top">
-        <button className="back" data-hf onClick={onBack}>◀ VOLTAR</button>
+        <button className="back" data-hf onClick={onBack}>{tt('◀ VOLTAR')}</button>
         <h1 className="glow" style={{ fontSize: 18 }}>{d.game.title}</h1>
         <span className="grow" />
-        <button className="btn" data-hf disabled={resync.isPending} onClick={() => resync.mutate({ id })}>{resync.isPending ? 'Lendo…' : 'Ler de novo'}</button>
-        <button className="btn ghost" data-hf onClick={() => openFolder.mutate({ id })}>Abrir pasta</button>
-        <button className="btn ghost danger" data-hf onClick={() => { void askConfirm({ title: `Remover ${d.game.title} do Cartucho? Os arquivos do jogo não são apagados.`, ok: 'Remover', danger: true }).then(y => { if (y) remove.mutate({ id }); }); }}>Remover</button>
+        <button className="btn" data-hf disabled={resync.isPending} onClick={() => resync.mutate({ id })}>{resync.isPending ? tt('Lendo…') : tt('Ler de novo')}</button>
+        <button className="btn ghost" data-hf onClick={() => openFolder.mutate({ id })}>{tt('Abrir pasta')}</button>
+        <button className="btn ghost danger" data-hf onClick={() => { void askConfirm({ title: tt('Remover {0} do Cartucho? Os arquivos do jogo não são apagados.', { 0: d.game.title }), ok: tt('Remover'), danger: true }).then(y => { if (y) remove.mutate({ id }); }); }}>{tt('Remover')}</button>
       </header>
       <div className="chub-body">
         <div className="ach-head">
@@ -248,11 +249,11 @@ function Achievements({ id, active, onBack }: { id: string; active: boolean; onB
           <div className="pbar wide"><i style={{ width: `${d.list.length ? (got.length / d.list.length) * 100 : 0}%` }} /></div>
           {pts > 0 && <div className="dim">{gotPts}/{pts} G</div>}
           <div className="seg small">
-            {(['all', 'on', 'off'] as const).map(f => <button key={f} data-hf className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? 'Todas' : f === 'on' ? 'Desbloqueadas' : 'Bloqueadas'}</button>)}
+            {(['all', 'on', 'off'] as const).map(f => <button key={f} data-hf className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? tt('Todas') : f === 'on' ? tt('Desbloqueadas') : tt('Bloqueadas')}</button>)}
           </div>
         </div>
         {d.errors.map(e => <p key={e} className="err">{e}</p>)}
-        {!d.game.adapter && <p className="warn" style={{ margin: '0 28px' }}>O Cartucho ainda não sabe ler as conquistas deste jogo.</p>}
+        {!d.game.adapter && <p className="warn" style={{ margin: '0 28px' }}>{tt('O Cartucho ainda não sabe ler as conquistas deste jogo.')}</p>}
         <div className="ach-list">
           {shown.map(a => (
             <div key={a.id} className={`ach-item ${a.unlockedAt != null ? 'got' : 'locked'}`}>
@@ -260,14 +261,14 @@ function Achievements({ id, active, onBack }: { id: string; active: boolean; onB
               <div className="ach-main"><div className="title">{a.name}</div><div className="dim">{a.description}</div></div>
               <div className="ach-side">
                 {a.points != null && <div className="pts">{a.points} G</div>}
-                <div className="dim">{a.unlockedAt != null ? fmtDate(a.unlockedAt) : 'Bloqueada'}</div>
+                <div className="dim">{a.unlockedAt != null ? fmtDate(a.unlockedAt) : tt('Bloqueada')}</div>
               </div>
             </div>
           ))}
         </div>
-        <p className="credit">Lista: {d.origin ?? '—'}<br />Desbloqueios lidos de: {d.unlockFile ?? '—'}</p>
+        <p className="credit">{tt('Lista: {0}', { 0: d.origin ?? '—' })}<br />{tt('Desbloqueios lidos de: {0}', { 0: d.unlockFile ?? '—' })}</p>
       </div>
-      <Hints items={[['ok', 'Escolher'], ['back', 'Voltar']]} />
+      <Hints items={[['ok', tt('Escolher')], ['back', tt('Voltar')]]} />
     </div>
   );
 }

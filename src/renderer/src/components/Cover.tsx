@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { hueOf, initials } from '../lib/format';
+import { tt } from '@shared/i18n';
 
-/** Capa do jogo: a arte do Recompendium quando existe; senão, uma capa gerada (cor e padrão estáveis pelo título). */
 export function Cover({ title, url, className = '' }: { title: string; url?: string | null; className?: string }) {
   const [broken, setBroken] = useState(false);
   const img = url && !broken;

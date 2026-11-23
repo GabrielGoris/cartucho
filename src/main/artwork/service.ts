@@ -6,6 +6,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { Fetch } from '../ports/github';
 import { type ArtKind, KINDS, type LaunchBoxInfo, PLATFORMS, createLaunchBox } from './launchbox';
+import { tt } from '@shared/i18n';
 
 export type ArtSet = Partial<Record<ArtKind, string>>;
 
@@ -52,9 +53,9 @@ export class Artwork {
 
   private async download(url: string, file: string, onBytes: (g: number, t: number) => void) {
     const r = await this.fetch(url, { headers: { 'User-Agent': 'Cartucho' }, signal: AbortSignal.timeout(20 * 60_000) });
-    if (!r.ok || !r.body) throw new Error(`erro ${r.status}`);
+    if (!r.ok || !r.body) throw new Error(tt('erro {0}', { 0: r.status }));
     const total = Number(r.headers.get('content-length')) || 0;
-    if (total > 600 * 1048576) throw new Error('arquivo grande demais');
+    if (total > 600 * 1048576) throw new Error(tt('arquivo grande demais'));
     let got = 0;
     const part = file + '.part';
     try {
@@ -176,7 +177,7 @@ export class Artwork {
     const keys = new Set(names.map(looseKey).filter(Boolean));
     const get = async <T>(url: string) => {
       const r = await this.fetch(url, { headers: { 'User-Agent': 'Cartucho' }, signal: AbortSignal.timeout(20_000) });
-      if (!r.ok) throw new Error(`erro ${r.status}`);
+      if (!r.ok) throw new Error(tt('erro {0}', { 0: r.status }));
       return (await r.json()) as T;
     };
     const found = await get<{ items?: { type?: string; id?: number; name?: string }[] }>(`${this.steam.store}/api/storesearch/?term=${encodeURIComponent(cleanTitle(names[0] ?? ''))}&l=english&cc=US`);

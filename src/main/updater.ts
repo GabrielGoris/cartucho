@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { app } from 'electron';
 import electronUpdater from 'electron-updater';
+import { tt } from '@shared/i18n';
 
 export type UpdStatus = 'dev' | 'idle' | 'checking' | 'none' | 'downloading' | 'ready' | 'error';
 export interface UpdState { status: UpdStatus; current: string; version: string | null; pct: number; error: string | null; checkedAt: number | null }
@@ -8,9 +9,9 @@ export interface UpdState { status: UpdStatus; current: string; version: string 
 const SIX_HOURS = 6 * 3600_000, SOON = 10 * 60_000;
 
 export function friendlyUpdError(m: string) {
-  if (/latest\.yml|\b404\b/i.test(m)) return { text: 'A versão nova ainda está sendo publicada no GitHub. O Cartucho tenta de novo em alguns minutos.', soon: true };
-  if (/ENOTFOUND|ECONNRE|ETIMEDOUT|EAI_AGAIN|net::ERR|socket hang up/i.test(m)) return { text: 'Sem conexão com o GitHub agora. O Cartucho tenta de novo mais tarde.', soon: true };
-  return { text: `Não deu para verificar: ${(m.split('\n')[0] ?? m).slice(0, 160)}`, soon: false };
+  if (/latest\.yml|\b404\b/i.test(m)) return { text: tt('A versão nova ainda está sendo publicada no GitHub. O Cartucho tenta de novo em alguns minutos.'), soon: true };
+  if (/ENOTFOUND|ECONNRE|ETIMEDOUT|EAI_AGAIN|net::ERR|socket hang up/i.test(m)) return { text: tt('Sem conexão com o GitHub agora. O Cartucho tenta de novo mais tarde.'), soon: true };
+  return { text: tt('Não deu para verificar: {0}', { 0: (m.split('\n')[0] ?? m).slice(0, 160) }), soon: false };
 }
 
 export class Updater {

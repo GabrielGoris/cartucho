@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Glyph, useKeys } from '../lib/input';
 import { sfx } from '../lib/sfx';
 import { useTRPC } from '../trpc';
+import { tt } from '@shared/i18n';
 
 type Layer = 'abc' | 'sym' | 'acc';
 const LAYERS: Record<Layer, string[]> = {
@@ -12,7 +13,7 @@ const LAYERS: Record<Layer, string[]> = {
   acc: ['áàâãäéèêë', 'íìîóòôõöú', 'ùûüçñªº°¨'],
 };
 const SHIFT_NUM: Record<string, string> = { 1: '!', 2: '@', 3: '#', 4: '$', 5: '%', 6: '¨', 7: '&', 8: '*', 9: '(', 0: ')', ',': ';', '.': ':', '-': '_' };
-const SPECIAL = [['shift', '⇧'], ['caps', 'CAPS'], ['layer', '?123'], ['acc', 'ÁÉ'], ['space', 'ESPAÇO'], ['left', '←'], ['right', '→'], ['del', '⌫'], ['clear', 'LIMPAR'], ['paste', 'COLAR'], ['ok', 'OK']] as const;
+const SPECIAL = [['shift', '⇧'], ['caps', 'CAPS'], ['layer', '?123'], ['acc', 'ÁÉ'], ['space', tt('ESPAÇO')], ['left', '←'], ['right', '→'], ['del', '⌫'], ['clear', tt('LIMPAR')], ['paste', tt('COLAR')], ['ok', 'OK']] as const;
 type Special = typeof SPECIAL[number][0];
 
 export function Osk({ value, onChange, onDone, onCancel, label }: { value: string; onChange: (v: string) => void; onDone: () => void; onCancel: () => void; label: string }) {
@@ -91,9 +92,9 @@ export function Osk({ value, onChange, onDone, onCancel, label }: { value: strin
           <button key={k} className={`${k} ${r === rows.length && ci === c ? 'on' : ''} ${lit(k) ? 'lit' : ''}`} onClick={() => { setR(rows.length); setC(ci); special(k); }}>{labelOf(k, l)}</button>
         ))}</div>
         <div className="osk-h">
-          <span><Glyph a="ok" />Tecla</span><span><Glyph a="x" />Apagar</span><span><Glyph a="y" />Espaço</span>
-          <span><Glyph a="lb" /><Glyph a="rb" />Cursor</span><span><Glyph a="lt" />Caps</span><span><Glyph a="sel" />Símbolos</span>
-          <span><Glyph a="menu" />OK</span><span><Glyph a="back" />Fechar</span>
+          <span><Glyph a="ok" />{tt('Tecla')}</span><span><Glyph a="x" />{tt('Apagar')}</span><span><Glyph a="y" />{tt('Espaço')}</span>
+          <span><Glyph a="lb" /><Glyph a="rb" />{tt('Cursor')}</span><span><Glyph a="lt" />{tt('Caps')}</span><span><Glyph a="sel" />{tt('Símbolos')}</span>
+          <span><Glyph a="menu" />{tt('OK')}</span><span><Glyph a="back" />{tt('Fechar')}</span>
         </div>
       </div>
     </div>,

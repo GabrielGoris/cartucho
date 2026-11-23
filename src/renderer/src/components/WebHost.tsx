@@ -5,6 +5,7 @@ import { useTRPC } from '../trpc';
 import { Glyph, useKeys, type Key } from '../lib/input';
 import { closeWeb, useWebReq } from '../lib/web';
 import { sfx } from '../lib/sfx';
+import { tt } from '@shared/i18n';
 
 export function WebHost() {
   const req = useWebReq();
@@ -48,12 +49,12 @@ export function WebHost() {
     <div className="web-ov">
       <div className="web-bar">
         <b>{req.title}</b>
-        <span className="web-url">{state?.loading ? 'Carregando…' : state?.title ?? ''}</span>
+        <span className="web-url">{state?.loading ? tt('Carregando…') : state?.title ?? ''}</span>
         <span className="web-hints">
-          <span><Glyph a="ud" />Rolar</span>
-          <span><Glyph a="lb" />Voltar página</span>
-          <span><Glyph a="y" />Abrir no navegador</span>
-          <button onClick={quit}><Glyph a="back" />Fechar</button>
+          <span><Glyph a="ud" />{tt('Rolar')}</span>
+          <span><Glyph a="lb" />{tt('Voltar página')}</span>
+          <span><Glyph a="y" />{tt('Abrir no navegador')}</span>
+          <button onClick={quit}><Glyph a="back" />{tt('Fechar')}</button>
         </span>
       </div>
       <div className="web-frame" ref={frame} />

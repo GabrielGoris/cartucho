@@ -3,6 +3,7 @@ import { CONSOLE_NAME } from '@shared/consoles';
 import { GameArt } from '../components/GameArt';
 import { ago, fmtPlay, plural } from '../lib/format';
 import { CONSOLES } from '../stage/consoles';
+import { tt } from '@shared/i18n';
 
 interface Props {
   games: InstalledGame[] | undefined;
@@ -29,12 +30,12 @@ export function Home({ games, summary, onOpenGame, onPlay, playError, onStage, o
     <div className="home">
       <div className="hm2-hero">
         <div className="hm2-txt">
-          <span className="k" style={{ color: 'var(--pink)' }}>BEM-VINDO</span>
-          <h1>Sua biblioteca está vazia</h1>
-          <p>{summary?.catalogTotal ? `${summary.catalogTotal} recomps, ports e emuladores no catálogo. ` : ''}Escolha um console para ver o que existe, ou aponte a pasta de um jogo que você já tem.</p>
+          <span className="k" style={{ color: 'var(--pink)' }}>{tt('BEM-VINDO')}</span>
+          <h1>{tt('Sua biblioteca está vazia')}</h1>
+          <p>{tt('{0}Escolha um console para ver o que existe, ou aponte a pasta de um jogo que você já tem.', { 0: summary?.catalogTotal ? tt('{0} recomps, ports e emuladores no catálogo. ', { 0: summary.catalogTotal }) : '' })}</p>
           <div className="hm-btns">
-            <button className="hm-go" data-hf data-main onClick={onStage}>ESCOLHER UM CONSOLE</button>
-            <button className="hm-go ghost" data-hf onClick={onAddGame} disabled={adding}>{adding ? 'LENDO A PASTA…' : '+ ADICIONAR JOGO'}</button>
+            <button className="hm-go" data-hf data-main onClick={onStage}>{tt('ESCOLHER UM CONSOLE')}</button>
+            <button className="hm-go ghost" data-hf onClick={onAddGame} disabled={adding}>{adding ? tt('LENDO A PASTA…') : tt('+ ADICIONAR JOGO')}</button>
           </div>
         </div>
       </div>
@@ -47,16 +48,16 @@ export function Home({ games, summary, onOpenGame, onPlay, playError, onStage, o
       <div className="hm2-hero">
         <GameArt title={top.title} console={top.console} fallback={top.coverUrl} />
         <div className="hm2-txt">
-          <span className="k" style={{ color: color(top.console) }}>{live ? 'JOGANDO AGORA' : top.lastPlayed ? 'CONTINUAR' : 'NA SUA BIBLIOTECA'} · {CONSOLE_NAME[top.console].toUpperCase()}</span>
+          <span className="k" style={{ color: color(top.console) }}>{live ? tt('JOGANDO AGORA') : top.lastPlayed ? tt('CONTINUAR') : tt('NA SUA BIBLIOTECA')} · {CONSOLE_NAME[top.console].toUpperCase()}</span>
           <h1>{top.title}</h1>
-          <p>{top.lastPlayed ? `${fmtPlay(top.playMs)} jogadas · ${ago(top.lastPlayed)}` : `adicionado ${ago(top.addedAt)}`}{a && a.total ? ` · ${a.unlocked}/${a.total} conquistas` : ''}</p>
+          <p>{top.lastPlayed ? tt('{0} jogadas · {1}', { 0: fmtPlay(top.playMs), 1: ago(top.lastPlayed) }) : tt('adicionado {0}', { 0: ago(top.addedAt) })}{a && a.total ? tt(' · {0}/{1} conquistas', { 0: a.unlocked, 1: a.total }) : ''}</p>
           <div className="hm-btns">
             {live
-              ? <button className="hm-go live" data-hf data-main onClick={() => onOpenGame(top)}>● JOGANDO</button>
+              ? <button className="hm-go live" data-hf data-main onClick={() => onOpenGame(top)}>{tt('● JOGANDO')}</button>
               : top.exe
-                ? <button className="hm-go" data-hf data-main onClick={() => onPlay(top)}>▶ {top.lastPlayed ? 'CONTINUAR' : 'JOGAR'}</button>
-                : <button className="hm-go" data-hf data-main onClick={() => onOpenGame(top)}>▶ ABRIR</button>}
-            {top.exe && !live && <button className="hm-go ghost" data-hf onClick={() => onOpenGame(top)}>DETALHES</button>}
+                ? <button className="hm-go" data-hf data-main onClick={() => onPlay(top)}>▶ {top.lastPlayed ? tt('CONTINUAR') : tt('JOGAR')}</button>
+                : <button className="hm-go" data-hf data-main onClick={() => onOpenGame(top)}>{tt('▶ ABRIR')}</button>}
+            {top.exe && !live && <button className="hm-go ghost" data-hf onClick={() => onOpenGame(top)}>{tt('DETALHES')}</button>}
           </div>
           {playError && <p className="err" style={{ margin: 0 }}>{playError}</p>}
         </div>
@@ -69,12 +70,12 @@ export function Home({ games, summary, onOpenGame, onPlay, playError, onStage, o
               <GameArt title={g.title} console={g.console} fallback={g.coverUrl} />
             </button>
           ))}
-          <button className="more" data-hf data-cap="Adicionar jogo" aria-label="Adicionar jogo" onClick={onAddGame} onMouseEnter={showCap}>+</button>
-          <button className="more" data-hf data-cap="Todos os consoles" aria-label="Todos os consoles" onClick={onStage} onMouseEnter={showCap}>▶</button>
+          <button className="more" data-hf data-cap={tt('Adicionar jogo')} aria-label={tt('Adicionar jogo')} onClick={onAddGame} onMouseEnter={showCap}>+</button>
+          <button className="more" data-hf data-cap={tt('Todos os consoles')} aria-label={tt('Todos os consoles')} onClick={onStage} onMouseEnter={showCap}>▶</button>
         </div>
         <div className="hm2-cap" id="hmCap" />
       </div>
-      {summary && summary.installed > 7 && <span className="dim">{plural(summary.installed, 'jogo', 'jogos')} na biblioteca</span>}
+      {summary && summary.installed > 7 && <span className="dim">{tt('{0} na biblioteca', { 0: plural(summary.installed, tt('jogo'), tt('jogos')) })}</span>}
     </div>
   );
 }

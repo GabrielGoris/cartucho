@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTRPC } from '../trpc';
 import { useSettings } from './settings';
+import { tt } from '@shared/i18n';
 
-export const AVATARS: [string, string][] = [['acc', 'Cor da paleta'], ['#ff3ea5', 'Rosa'], ['#34e3ff', 'Ciano'], ['#ffb43d', 'Âmbar'], ['#b6ff5c', 'Lima'], ['#8f7bff', 'Lilás'], ['#ff6a4d', 'Coral'], ['#e8e8f0', 'Prata']];
+export const AVATARS: [string, string][] = [['acc', tt('Cor da paleta')], ['#ff3ea5', tt('Rosa')], ['#34e3ff', tt('Ciano')], ['#ffb43d', tt('Âmbar')], ['#b6ff5c', tt('Lima')], ['#8f7bff', tt('Lilás')], ['#ff6a4d', tt('Coral')], ['#e8e8f0', tt('Prata')]];
 
 const nice = (u: string | undefined) => (u ? u.charAt(0).toUpperCase() + u.slice(1) : '');
 

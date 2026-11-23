@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { type DB, kvGet, kvSet } from '../db';
 import type { Fetch } from '../ports/github';
 import { type Artwork, artPlatform, cleanTitle, looseKey } from './service';
+import { tt } from '@shared/i18n';
 
 export interface Score { value: number; by: 'Metacritic' | 'OpenCritic' | 'IGDB'; url: string | null; platform: string | null; via: 'Wikidata' | 'Steam' | 'IGDB' }
 export interface GameInfo { overview: string | null; lang: 'pt' | 'en' | null; developer: string | null; year: number | null; score: Score | null; ttb?: Ttb | null; lbPending?: boolean }
@@ -293,7 +294,7 @@ export class GameInfoService {
 
   private async json<T>(url: string): Promise<T> {
     const r = await this.fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
-    if (!r.ok) throw new Error(`erro ${r.status}`);
+    if (!r.ok) throw new Error(tt('erro {0}', { 0: r.status }));
     return r.json() as Promise<T>;
   }
 

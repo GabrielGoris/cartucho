@@ -1,3 +1,4 @@
+import { tt } from '@shared/i18n';
 export interface Palette {
   id: string; n: string; d: string; light?: boolean;
   bg0: string; bg: string; bg2: string; panel: string; line: string; ink: string; dim: string;
@@ -5,20 +6,19 @@ export interface Palette {
 }
 
 export const PALETTES: Palette[] = [
-  { id: 'neon', n: 'Neon de shopping', d: 'Roxo profundo, magenta e ciano. A padrão.', bg0: '#07020f', bg: '#120624', bg2: '#170a2c', panel: '#1f0f3a', line: '#3b2266', ink: '#f6eaff', dim: '#a58cc8', acc: '#ff3ea5', acc2: '#ff7cc4', onAcc: '#2a0016', pink: '#34e3ff', onPink: '#00222a', cyan: '#b6ff5c', onCyan: '#142a00' },
-  { id: 'fliperama', n: 'Fliperama', d: 'Âmbar de fósforo sobre roxo-noite. A original.', bg0: '#050409', bg: '#0d0b16', bg2: '#0f0c1c', panel: '#17132a', line: '#2e2748', ink: '#f2e9d8', dim: '#8d84ab', acc: '#ffb43d', acc2: '#ffd07a', onAcc: '#2a1700', pink: '#ff4f8b', onPink: '#22000d', cyan: '#4fe3d2', onCyan: '#00211d' },
-  { id: 'vhs', n: 'Fita VHS', d: 'Etiqueta de fita: azul-marinho, coral e amarelo.', bg0: '#04070f', bg: '#0a1226', bg2: '#0d1730', panel: '#13203f', line: '#26365e', ink: '#f4ead8', dim: '#8b9ac0', acc: '#ff6a4d', acc2: '#ff9a83', onAcc: '#2a0700', pink: '#ffd23f', onPink: '#2a2000', cyan: '#3fd0c9', onCyan: '#002220' },
-  { id: 'lava', n: 'Brasa', d: 'Marrom quase preto, laranja e dourado.', bg0: '#080403', bg: '#150b08', bg2: '#1b0f0b', panel: '#251510', line: '#48291d', ink: '#f6e3cf', dim: '#b08e78', acc: '#ff7a2f', acc2: '#ffa36b', onAcc: '#2a0e00', pink: '#ffd23f', onPink: '#2a2000', cyan: '#ff5b6b', onCyan: '#2a0006' },
-  { id: 'gelo', n: 'Madrugada', d: 'Azul de madrugada, gelo e rosa.', bg0: '#050b12', bg: '#0b1622', bg2: '#0e1b2a', panel: '#142538', line: '#27405c', ink: '#e8f1f8', dim: '#8aa3bd', acc: '#8fd3ff', acc2: '#bfe6ff', onAcc: '#04202e', pink: '#ff8fb1', onPink: '#2a0010', cyan: '#9effc9', onCyan: '#00220f' },
-  { id: 'bolso', n: 'Tela de bolso', d: 'Verde-oliva de portátil antigo com laranja.', bg0: '#0b1008', bg: '#151d10', bg2: '#19220f', panel: '#222d18', line: '#3a4a28', ink: '#e4eecb', dim: '#93a37a', acc: '#c2d84f', acc2: '#d8e98a', onAcc: '#1a2400', pink: '#f0a83a', onPink: '#2a1600', cyan: '#7fd0b0', onCyan: '#082018' },
-  { id: 'plastico', n: 'Plástico cinza', d: 'Console claro dos anos 90: cinza, vermelho e azul.', light: true, bg0: '#a9a59c', bg: '#d8d4cb', bg2: '#ebe8e1', panel: '#f3f0ea', line: '#bdb8ad', ink: '#26232b', dim: '#6d6876', acc: '#d6403a', acc2: '#e86a64', onAcc: '#ffffff', pink: '#2f4fa8', onPink: '#ffffff', cyan: '#2f8a5a', onCyan: '#ffffff' },
+  { id: 'neon', n: tt('Neon de shopping'), d: tt('Roxo profundo, magenta e ciano. A padrão.'), bg0: '#07020f', bg: '#120624', bg2: '#170a2c', panel: '#1f0f3a', line: '#3b2266', ink: '#f6eaff', dim: '#a58cc8', acc: '#ff3ea5', acc2: '#ff7cc4', onAcc: '#2a0016', pink: '#34e3ff', onPink: '#00222a', cyan: '#b6ff5c', onCyan: '#142a00' },
+  { id: 'fliperama', n: tt('Fliperama'), d: tt('Âmbar de fósforo sobre roxo-noite. A original.'), bg0: '#050409', bg: '#0d0b16', bg2: '#0f0c1c', panel: '#17132a', line: '#2e2748', ink: '#f2e9d8', dim: '#8d84ab', acc: '#ffb43d', acc2: '#ffd07a', onAcc: '#2a1700', pink: '#ff4f8b', onPink: '#22000d', cyan: '#4fe3d2', onCyan: '#00211d' },
+  { id: 'vhs', n: tt('Fita VHS'), d: tt('Etiqueta de fita: azul-marinho, coral e amarelo.'), bg0: '#04070f', bg: '#0a1226', bg2: '#0d1730', panel: '#13203f', line: '#26365e', ink: '#f4ead8', dim: '#8b9ac0', acc: '#ff6a4d', acc2: '#ff9a83', onAcc: '#2a0700', pink: '#ffd23f', onPink: '#2a2000', cyan: '#3fd0c9', onCyan: '#002220' },
+  { id: 'lava', n: tt('Brasa'), d: tt('Marrom quase preto, laranja e dourado.'), bg0: '#080403', bg: '#150b08', bg2: '#1b0f0b', panel: '#251510', line: '#48291d', ink: '#f6e3cf', dim: '#b08e78', acc: '#ff7a2f', acc2: '#ffa36b', onAcc: '#2a0e00', pink: '#ffd23f', onPink: '#2a2000', cyan: '#ff5b6b', onCyan: '#2a0006' },
+  { id: 'gelo', n: tt('Madrugada'), d: tt('Azul de madrugada, gelo e rosa.'), bg0: '#050b12', bg: '#0b1622', bg2: '#0e1b2a', panel: '#142538', line: '#27405c', ink: '#e8f1f8', dim: '#8aa3bd', acc: '#8fd3ff', acc2: '#bfe6ff', onAcc: '#04202e', pink: '#ff8fb1', onPink: '#2a0010', cyan: '#9effc9', onCyan: '#00220f' },
+  { id: 'bolso', n: tt('Tela de bolso'), d: tt('Verde-oliva de portátil antigo com laranja.'), bg0: '#0b1008', bg: '#151d10', bg2: '#19220f', panel: '#222d18', line: '#3a4a28', ink: '#e4eecb', dim: '#93a37a', acc: '#c2d84f', acc2: '#d8e98a', onAcc: '#1a2400', pink: '#f0a83a', onPink: '#2a1600', cyan: '#7fd0b0', onCyan: '#082018' },
+  { id: 'plastico', n: tt('Plástico cinza'), d: tt('Console claro dos anos 90: cinza, vermelho e azul.'), light: true, bg0: '#a9a59c', bg: '#d8d4cb', bg2: '#ebe8e1', panel: '#f3f0ea', line: '#bdb8ad', ink: '#26232b', dim: '#6d6876', acc: '#d6403a', acc2: '#e86a64', onAcc: '#ffffff', pink: '#2f4fa8', onPink: '#ffffff', cyan: '#2f8a5a', onCyan: '#ffffff' },
 ];
 
 export const paletteById = (id: string) => PALETTES.find(p => p.id === id) ?? PALETTES[0]!;
 
 const rgb = (h: string) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)).join(' ');
 
-/** Aplica a paleta como variáveis CSS no documento. O palco 3D lê a mesma paleta. */
 export function applyPalette(p: Palette) {
   const r = document.documentElement.style;
   const map: Record<string, string> = {

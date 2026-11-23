@@ -6,9 +6,10 @@ import type { PlayEvent, PlayStats } from '@shared/types';
 import type { DB } from './db';
 import type { AchievementService } from './achievements/service';
 import { emulatorFor } from './emulators';
+import { tt } from '@shared/i18n';
 
 export class Player {
-  readonly events = new EventEmitter<{ play: [PlayEvent] }>();
+  readonly events = new EventEmitter<{ play: [PlayEvent]; launch: [{ gameId: string; dirs: string[]; pid?: number }] }>();
   private running = new Map<string, Run>();
   private external = new Map<string, { pid: number; session: number; start: number }>();
   private scanTimer: NodeJS.Timeout | null = null;
@@ -40,17 +41,18 @@ export class Player {
 
   async play(gameId: string) {
     const g = this.games.getGame(gameId);
-    if (this.running.has(gameId)) throw new Error(`${g.title} já está aberto.`);
-    if (!g.exe) throw new Error('Ainda não sei qual programa abre este jogo. Use "Escolher o .exe".');
-    if (!existsSync(g.exe)) throw new Error(`${basename(g.exe)} não está mais lá. O jogo foi movido ou apagado?`);
+    if (this.running.has(gameId)) throw new Error(tt('{0} já está aberto.', { 0: g.title }));
+    if (!g.exe) throw new Error(tt('Ainda não sei qual programa abre este jogo. Use "Escolher o .exe".'));
+    if (!existsSync(g.exe)) throw new Error(tt('{0} não está mais lá. O jogo foi movido ou apagado?', { 0: basename(g.exe) }));
 
     const isProgram = process.platform === 'win32' ? /\.exe$/i.test(g.exe) : true;
     if (!isProgram) {
       const err = await this.openPath(g.exe);
-      if (err) throw new Error(`Não consegui abrir ${basename(g.exe)}: ${err}`);
+      if (err) throw new Error(tt('Não consegui abrir {0}: {1}', { 0: basename(g.exe), 1: err }));
       const now = Date.now();
       this.db.prepare('INSERT INTO play_session (game_id, started_at, ended_at) VALUES (?, ?, ?)').run(gameId, now, now);
       this.events.emit('play', { gameId, title: g.title, running: false, sessionMs: 0 });
+      this.events.emit('launch', { gameId, dirs: [g.installDir].filter(Boolean) });
       return;
     }
 
@@ -59,7 +61,7 @@ export class Player {
       const child = spawn(g.exe!, [], { cwd: dirname(g.exe!), env, detached: true, stdio: 'ignore' });
       child.once('error', e => {
         if ((e as NodeJS.ErrnoException).code === 'EACCES' && process.platform === 'win32') ok(true);
-        else fail(new Error(`Não consegui abrir o jogo: ${e.message}`));
+        else fail(new Error(tt('Não consegui abrir o jogo: {0}', { 0: e.message })));
       });
       child.once('spawn', () => {
         const start = Date.now();
@@ -67,6 +69,7 @@ export class Player {
         this.running.set(gameId, { child, session, start });
         child.unref();
         this.events.emit('play', { gameId, title: g.title, running: true });
+        this.events.emit('launch', { gameId, dirs: [...new Set([g.installDir, dirname(g.exe!)])].filter(Boolean), ...(child.pid ? { pid: child.pid } : {}) });
         child.once('exit', () => this.finish(gameId, child));
         ok(false);
       });
@@ -79,7 +82,7 @@ export class Player {
     try {
       await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Start-Process -FilePath ${q(exe)} -WorkingDirectory ${q(dirname(exe))}`], 180_000);
     } catch {
-      throw new Error(`O Windows não deixou abrir ${basename(exe)}. Se o jogo pede permissão de administrador, aceite o aviso do Windows; se o aviso não apareceu, veja se o antivírus bloqueou o arquivo.`);
+      throw new Error(tt('O Windows não deixou abrir {0}. Se o jogo pede permissão de administrador, aceite o aviso do Windows; se o aviso não apareceu, veja se o antivírus bloqueou o arquivo.', { 0: basename(exe) }));
     }
     const start = Date.now();
     const session = Number(this.db.prepare('INSERT INTO play_session (game_id, started_at) VALUES (?, ?)').run(gameId, start).lastInsertRowid);
@@ -87,6 +90,7 @@ export class Player {
     r.follow = { pids: new Set(), dirs: [...new Set([installDir, dirname(exe)])], names: [basename(exe)], exitAt: start, seenAt: 0, misses: 0, timer: null, tries: 8 };
     this.running.set(gameId, r);
     this.events.emit('play', { gameId, title, running: true });
+    this.events.emit('launch', { gameId, dirs: r.follow.dirs.filter(Boolean) });
     this.followTick(gameId, r);
   }
 
@@ -243,21 +247,40 @@ export class Player {
 
   stats(gameId?: string): PlayStats {
     const where = gameId ? 'WHERE game_id = ?' : '', args = gameId ? [gameId] : [];
-    const sum = this.db.prepare(`SELECT COALESCE(SUM(COALESCE(ended_at, ?) - started_at), 0) ms, COUNT(*) n, MAX(started_at) last FROM play_session ${where}`)
-      .get(Date.now(), ...args) as { ms: number; n: number; last: number | null };
+    const now = Date.now();
+    const all = this.db.prepare(`SELECT game_id g, started_at s, COALESCE(ended_at, ?) e FROM play_session ${where} ORDER BY game_id, started_at`)
+      .all(now, ...args) as { g: string; s: number; e: number }[];
+    const groups = mergeSessions(all);
+    const totalMs = all.reduce((a, r) => a + Math.max(0, r.e - r.s), 0);
+    const real = groups.filter(x => x.ms >= MIN_SESSION);
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const from = today.getTime() - 13 * 86400_000;
     const days = Array(14).fill(0) as number[];
-    const rows = this.db.prepare(`SELECT started_at s, COALESCE(ended_at, ?) e FROM play_session ${where ? where + ' AND' : 'WHERE'} COALESCE(ended_at, ?) > ?`)
-      .all(Date.now(), ...args, Date.now(), from) as { s: number; e: number }[];
-    for (const { s, e } of rows) {
+    for (const { s, e } of all) {
+      if (e <= from) continue;
       for (let d = 0; d < 14; d++) {
         const a = from + d * 86400_000, b = a + 86400_000, ov = Math.min(e, b) - Math.max(s, a);
         if (ov > 0) days[d]! += ov / 3600_000;
       }
     }
-    return { totalMs: sum.ms, sessions: sum.n, lastPlayed: sum.last, days };
+    return {
+      totalMs, sessions: groups.length, avgMs: real.length ? real.reduce((a, x) => a + x.ms, 0) / real.length : 0,
+      lastPlayed: all.length ? all.reduce((a, r) => Math.max(a, r.s), 0) : null, days,
+    };
   }
+}
+
+export const SESSION_GAP = 10 * 60_000, MIN_SESSION = 2 * 60_000;
+
+export function mergeSessions(rows: { g: string; s: number; e: number }[]) {
+  const out: { g: string; s: number; e: number; ms: number }[] = [];
+  const sorted = [...rows].sort((a, b) => (a.g < b.g ? -1 : a.g > b.g ? 1 : a.s - b.s));
+  for (const r of sorted) {
+    const last = out[out.length - 1], ms = Math.max(0, r.e - r.s);
+    if (last && last.g === r.g && r.s - last.e < SESSION_GAP) { last.e = Math.max(last.e, r.e); last.ms += ms; }
+    else out.push({ g: r.g, s: r.s, e: r.e, ms });
+  }
+  return out;
 }
 
 interface Run {

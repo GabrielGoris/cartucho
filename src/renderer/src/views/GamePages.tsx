@@ -13,6 +13,7 @@ import { GameArt } from '../components/GameArt';
 import { Bars } from '../components/Bars';
 import { ProgressBar } from '../components/ProgressBar';
 import { Translated } from '../components/Translated';
+import { tt } from '@shared/i18n';
 
 const gh = (repo: string) => window.open(`https://github.com/${repo}`, '_blank');
 
@@ -24,6 +25,7 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
   const refresh = () => { void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }); void qc.invalidateQueries({ queryKey: trpc.library.summary.queryKey() }); };
   const play = useMutation(trpc.play.start.mutationOptions({ onSuccess: refresh }));
   const quit = useMutation(trpc.play.quit.mutationOptions());
+  const resume = useMutation(trpc.ingame.back.mutationOptions());
   const update = useMutation(trpc.ports.update.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.ports.checkUpdate.queryKey({ id }), d); refresh(); } }));
   const recheck = useMutation({ mutationFn: () => qc.fetchQuery(trpc.ports.checkUpdate.queryOptions({ id, force: true }, { staleTime: 0 })), onSuccess: d => qc.setQueryData(trpc.ports.checkUpdate.queryKey({ id }), d) });
   const chooseExe = useMutation(trpc.games.chooseExe.mutationOptions({ onSuccess: refresh }));
@@ -39,7 +41,7 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
   useSpatialNav(root, { active, initial: '[data-main]', onKey: k => { if (k === 'Escape') { sfx.play('back'); onBack(); return true; } } });
 
   const g = game.data;
-  if (!g) return <p className="dim pad24">{game.error ? game.error.message : 'Carregando…'}</p>;
+  if (!g) return <p className="dim pad24">{game.error ? game.error.message : tt('Carregando…')}</p>;
   const u = upd.data, a = g.achievements, st = stats.data;
   const err = play.error ?? update.error ?? uninstall.error ?? chooseExe.error ?? quit.error ?? relink.error ?? reinstall.error;
   const canReinstall = !!g.catalogId && !!g.sourceRepo && !isSelfInstall(g.console);
@@ -47,44 +49,44 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
   return (
     <div ref={root} className="gp-page">
       <header className="chub-top">
-        <button className="back" data-hf onClick={() => { sfx.play('back'); onBack(); }}>◀ VOLTAR</button>
+        <button className="back" data-hf onClick={() => { sfx.play('back'); onBack(); }}>{tt('◀ VOLTAR')}</button>
         <span className="grow" />
       </header>
       <div className="gp-body">
         <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} className="gp-cover" />
         <div className="gp-main">
-          <span className="k">{CONSOLE_NAME[g.console].toUpperCase()}{g.version ? ` · ${g.version}` : ''}{g.running ? ' · JOGANDO AGORA' : ''}</span>
+          <span className="k">{CONSOLE_NAME[g.console].toUpperCase()}{g.version ? ` · ${g.version}` : ''}{g.running ? tt(' · JOGANDO AGORA') : ''}</span>
           <h1>{g.title}</h1>
-          <p className="dim">{g.playMs ? `${fmtPlay(g.playMs)} jogadas` : 'Ainda não jogado pelo Cartucho'}{g.lastPlayed ? ` · ${ago(g.lastPlayed)}` : ''}{a && a.total ? ` · ${a.unlocked}/${a.total} conquistas` : ''}</p>
+          <p className="dim">{g.playMs ? tt('{0} jogadas', { 0: fmtPlay(g.playMs) }) : tt('Ainda não jogado pelo Cartucho')}{g.lastPlayed ? ` · ${ago(g.lastPlayed)}` : ''}{a && a.total ? tt(' · {0}/{1} conquistas', { 0: a.unlocked, 1: a.total }) : ''}</p>
 
-          {g.missing && <p className="warn">A pasta do jogo não foi encontrada em {g.installDir}. {canReinstall ? 'Instale de novo ou mostre onde ele está agora.' : 'Mostre onde ele está agora.'} O tempo de jogo e as conquistas ficam guardados.</p>}
+          {g.missing && <p className="warn">{tt('A pasta do jogo não foi encontrada em {0}. {1} O tempo de jogo e as conquistas ficam guardados.', { 0: g.installDir, 1: canReinstall ? tt('Instale de novo ou mostre onde ele está agora.') : tt('Mostre onde ele está agora.') })}</p>}
           {g.missing ? (
             <div className="hm-btns">
-              {canReinstall && <button className="hm-go" data-hf data-main disabled={reinstall.isPending || !!progress} onClick={() => { sfx.play('ok'); reinstall.mutate({ catalogId: g.catalogId! }); }}>⬇ INSTALAR DE NOVO</button>}
-              <button className={`hm-go ${canReinstall ? 'ghost' : ''}`} data-hf data-main={canReinstall ? undefined : true} disabled={relink.isPending} onClick={() => relink.mutate({ id })}>PROCURAR A PASTA</button>
-              <button className="hm-go ghost" data-hf onClick={() => { void askConfirm({ title: `Tirar ${g.title} da biblioteca? Nenhum arquivo é apagado.`, ok: 'Remover', danger: true }).then(y => { if (y) remove.mutate({ id }); }); }}>TIRAR DA BIBLIOTECA</button>
+              {canReinstall && <button className="hm-go" data-hf data-main disabled={reinstall.isPending || !!progress} onClick={() => { sfx.play('ok'); reinstall.mutate({ catalogId: g.catalogId! }); }}>{tt('⬇ INSTALAR DE NOVO')}</button>}
+              <button className={`hm-go ${canReinstall ? 'ghost' : ''}`} data-hf data-main={canReinstall ? undefined : true} disabled={relink.isPending} onClick={() => relink.mutate({ id })}>{tt('PROCURAR A PASTA')}</button>
+              <button className="hm-go ghost" data-hf onClick={() => { void askConfirm({ title: tt('Tirar {0} da biblioteca? Nenhum arquivo é apagado.', { 0: g.title }), ok: tt('Remover'), danger: true }).then(y => { if (y) remove.mutate({ id }); }); }}>{tt('TIRAR DA BIBLIOTECA')}</button>
             </div>
           ) : (
           <div className="hm-btns">
             {g.running
-              ? <button className="hm-go" data-hf data-main onClick={() => quit.mutate({ id })}>■ FECHAR O JOGO</button>
+              ? <><button className="hm-go" data-hf data-main onClick={() => { sfx.play('ok'); resume.mutate(); }}>{tt('▶ VOLTAR PARA O JOGO')}</button><button className="hm-go ghost" data-hf onClick={() => { sfx.play('back'); quit.mutate({ id }); }}>{tt('■ FECHAR O JOGO')}</button></>
               : g.exe
-                ? <button className="hm-go" data-hf data-main disabled={play.isPending || !!progress} onClick={() => { sfx.play('ok'); play.mutate({ id }); }}>▶ JOGAR</button>
-                : <button className="hm-go" data-hf data-main onClick={() => chooseExe.mutate({ id })}>ESCOLHER O .EXE</button>}
-            {g.adapter && <button className="hm-go ghost" data-hf onClick={() => { sfx.play('ok'); onAchievements(); }}>★ CONQUISTAS{a?.total ? ` ${a.unlocked}/${a.total}` : ''}</button>}
-            {u?.updateAvailable && !progress && <button className="hm-go ghost upd" data-hf disabled={update.isPending || g.running} onClick={() => update.mutate({ id })}>⬇ ATUALIZAR PARA {u.latest?.tag}</button>}
+                ? <button className="hm-go" data-hf data-main disabled={play.isPending || !!progress} onClick={() => { sfx.play('ok'); play.mutate({ id }); }}>{tt('▶ JOGAR')}</button>
+                : <button className="hm-go" data-hf data-main onClick={() => chooseExe.mutate({ id })}>{tt('ESCOLHER O .EXE')}</button>}
+            {g.adapter && <button className="hm-go ghost" data-hf onClick={() => { sfx.play('ok'); onAchievements(); }}>{tt('★ CONQUISTAS{0}', { 0: a?.total ? ` ${a.unlocked}/${a.total}` : '' })}</button>}
+            {u?.updateAvailable && !progress && <button className="hm-go ghost upd" data-hf disabled={update.isPending || g.running} onClick={() => update.mutate({ id })}>{tt('⬇ ATUALIZAR PARA {0}', { 0: u.latest?.tag })}</button>}
             <button className="hm-go ghost" data-hf onClick={() => setMore(m => !m)}>⋯</button>
           </div>
           )}
 
           {more && (
             <div className="gp-more">
-              <button className="btn" data-hf onClick={() => chooseExe.mutate({ id })}>Escolher o .exe</button>
-              <button className="btn" data-hf onClick={() => openFolder.mutate({ id })}>Abrir pasta</button>
-              {g.sourceRepo && <button className="btn" data-hf onClick={() => gh(g.sourceRepo!)}>Projeto no GitHub</button>}
+              <button className="btn" data-hf onClick={() => chooseExe.mutate({ id })}>{tt('Escolher o .exe')}</button>
+              <button className="btn" data-hf onClick={() => openFolder.mutate({ id })}>{tt('Abrir pasta')}</button>
+              {g.sourceRepo && <button className="btn" data-hf onClick={() => gh(g.sourceRepo!)}>{tt('Projeto no GitHub')}</button>}
               {g.managed
-                ? <button className="btn danger" data-hf onClick={() => { void askConfirm({ title: `Desinstalar ${g.title}? Os arquivos que vieram no download serão apagados; saves e configurações que você mudou ficam na pasta.`, ok: 'Desinstalar', danger: true }).then(y => { if (y) uninstall.mutate({ id }); }); }}>Desinstalar</button>
-                : <button className="btn danger" data-hf onClick={() => { void askConfirm({ title: `Tirar ${g.title} da biblioteca? Nenhum arquivo é apagado.`, ok: 'Remover', danger: true }).then(y => { if (y) remove.mutate({ id }); }); }}>Remover da biblioteca</button>}
+                ? <button className="btn danger" data-hf onClick={() => { void askConfirm({ title: tt('Desinstalar {0}? Os arquivos que vieram no download serão apagados; saves e configurações que você mudou ficam na pasta.', { 0: g.title }), ok: tt('Desinstalar'), danger: true }).then(y => { if (y) uninstall.mutate({ id }); }); }}>{tt('Desinstalar')}</button>
+                : <button className="btn danger" data-hf onClick={() => { void askConfirm({ title: tt('Tirar {0} da biblioteca? Nenhum arquivo é apagado.', { 0: g.title }), ok: tt('Remover'), danger: true }).then(y => { if (y) remove.mutate({ id }); }); }}>{tt('Remover da biblioteca')}</button>}
             </div>
           )}
 
@@ -93,21 +95,21 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
 
           <div className="gp-cards">
             <section className="gp-card">
-              <h3>TEMPO DE JOGO</h3>
-              <div className="hm-big glow">{fmtPlay(st?.totalMs ?? 0)}<small>{st?.sessions ? `${plural(st.sessions, 'sessão', 'sessões')} · última ${ago(st.lastPlayed!)}` : 'conta a partir da primeira vez que você jogar pelo Cartucho'}</small></div>
+              <h3>{tt('TEMPO DE JOGO')}</h3>
+              <div className="hm-big glow">{fmtPlay(st?.totalMs ?? 0)}<small>{st?.sessions ? tt('{0} · última {1}', { 0: plural(st.sessions, tt('sessão'), tt('sessões')), 1: ago(st.lastPlayed!) }) : tt('conta a partir da primeira vez que você jogar pelo Cartucho')}</small></div>
               {st && <Bars days={st.days} />}
             </section>
             <section className="gp-card">
-              <h3>VERSÃO</h3>
-              {isSelfInstall(g.console) ? <p className="dim">Neste console as atualizações são por sua conta: instale a versão nova por cima da pasta do jogo.</p> : !g.sourceRepo ? <p className="dim">Sem projeto do GitHub ligado, então o Cartucho não procura atualizações.</p> : (
+              <h3>{tt('VERSÃO')}</h3>
+              {isSelfInstall(g.console) ? <p className="dim">{tt('Neste console as atualizações são por sua conta: instale a versão nova por cima da pasta do jogo.')}</p> : !g.sourceRepo ? <p className="dim">{tt('Sem projeto do GitHub ligado, então o Cartucho não procura atualizações.')}</p> : (
                 <>
-                  <p>{u?.installed ? <>Instalada: <b>{u.installed}</b></> : 'Versão instalada desconhecida'}{u?.latest ? <> · mais nova: <b>{u.latest.tag}</b>{u.latest.date ? ` (${fmtDate(Date.parse(u.latest.date))})` : ''}</> : null}</p>
+                  <p>{u?.installed ? <>{tt('Instalada:')}{' '}<b>{u.installed}</b></> : tt('Versão instalada desconhecida')}{u?.latest ? <>{' '}{tt('· mais nova:')}{' '}<b>{u.latest.tag}</b>{u.latest.date ? ` (${fmtDate(Date.parse(u.latest.date))})` : ''}</> : null}</p>
                   <p className="dim">
-                    {u?.updateAvailable === false ? 'Você está na versão mais nova.' : u?.updateAvailable ? `Atualização de ${fmtSize(u.latest!.size)}.` : u?.installed === null && u?.latest ? 'Atualizar baixa a versão mais nova e passa a acompanhar.' : ''}
+                    {u?.updateAvailable === false ? tt('Você está na versão mais nova.') : u?.updateAvailable ? tt('Atualização de {0}.', { 0: fmtSize(u.latest!.size) }) : u?.installed === null && u?.latest ? tt('Atualizar baixa a versão mais nova e passa a acompanhar.') : ''}
                     {u?.error ? ` ${u.error}` : ''}
                   </p>
-                  {u?.updateAvailable === null && u.latest && !progress && <button className="btn" data-hf onClick={() => update.mutate({ id })}>Baixar {u.latest.tag} por cima</button>}
-                  <p className="dim small">{u?.checkedAt ? `Conferido ${ago(u.checkedAt)} · ` : ''}<button className="link" data-hf disabled={recheck.isPending} onClick={() => recheck.mutate()}>{recheck.isPending ? 'conferindo…' : 'conferir agora'}</button></p>
+                  {u?.updateAvailable === null && u.latest && !progress && <button className="btn" data-hf onClick={() => update.mutate({ id })}>{tt('Baixar {0} por cima', { 0: u.latest.tag })}</button>}
+                  <p className="dim small">{u?.checkedAt ? tt('Conferido {0} · ', { 0: ago(u.checkedAt) }) : ''}<button className="link" data-hf disabled={recheck.isPending} onClick={() => recheck.mutate()}>{recheck.isPending ? 'conferindo…' : tt('conferir agora')}</button></p>
                   {u?.latest?.notes && u.updateAvailable && <pre className="notes">{u.latest.notes}</pre>}
                 </>
               )}
@@ -116,7 +118,7 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
           <p className="credit" style={{ padding: 0 }}>{g.installDir}{g.exe ? ` · ${g.exe.split(/[\\/]/).pop()}` : ''}</p>
         </div>
       </div>
-      <Hints items={[['ok', 'Escolher'], ['back', 'Voltar']]} />
+      <Hints items={[['ok', tt('Escolher')], ['back', tt('Voltar')]]} />
     </div>
   );
 }
@@ -134,7 +136,7 @@ export function CatalogPage({ game: c, installedId, active, onBack, onOpenInstal
   return (
     <div ref={root} className="gp-page">
       <header className="chub-top">
-        <button className="back" data-hf onClick={() => { sfx.play('back'); onBack(); }}>◀ VOLTAR</button>
+        <button className="back" data-hf onClick={() => { sfx.play('back'); onBack(); }}>{tt('◀ VOLTAR')}</button>
         <span className="grow" />
       </header>
       <div className="gp-body">
@@ -142,32 +144,30 @@ export function CatalogPage({ game: c, installedId, active, onBack, onOpenInstal
         <div className="gp-main">
           <span className="k">{(c.platformName || CONSOLE_NAME[c.console]).toUpperCase()}{c.year ? ` · ${c.year}` : ''}{c.developer ? ` · ${c.developer}` : ''}</span>
           <h1>{c.title}</h1>
-          <p><span className={`st-${c.status}`}>■ {STATUS_LABEL[c.status]}</span>{c.version ? ` · ${c.version}` : ''}{c.stars ? ` · ★ ${c.stars}` : ''}{c.noLink && !self ? ' · sem link no Recompendium' : ''}</p>
+          <p><span className={`st-${c.status}`}>■ {STATUS_LABEL[c.status]}</span>{c.version ? ` · ${c.version}` : ''}{c.stars ? ` · ★ ${c.stars}` : ''}{c.noLink && !self ? tt(' · sem link no Recompendium') : ''}</p>
           <div className="hm-btns">
             {installedId
-              ? <button className="hm-go" data-hf data-main onClick={() => onOpenInstalled(installedId)}>NA BIBLIOTECA ▶</button>
+              ? <button className="hm-go" data-hf data-main onClick={() => onOpenInstalled(installedId)}>{tt('NA BIBLIOTECA ▶')}</button>
               : <>
-                  {c.repo && !self && <button className="hm-go" data-hf data-main disabled={install.isPending || !!progress} onClick={() => { sfx.play('ok'); install.mutate({ catalogId: c.id }); }}>⬇ INSTALAR</button>}
+                  {c.repo && !self && <button className="hm-go" data-hf data-main disabled={install.isPending || !!progress} onClick={() => { sfx.play('ok'); install.mutate({ catalogId: c.id }); }}>{tt('⬇ INSTALAR')}</button>}
                   <button className={`hm-go ${c.repo && !self ? 'ghost' : ''}`} data-hf data-main={c.repo && !self ? undefined : true} disabled={add.isPending || !!progress}
-                    onClick={() => add.mutate({ catalogId: c.id })}>{self ? 'JÁ INSTALEI: ADICIONAR PASTA' : 'ESCOLHER PASTA'}</button>
+                    onClick={() => add.mutate({ catalogId: c.id })}>{self ? tt('JÁ INSTALEI: ADICIONAR PASTA') : tt('ESCOLHER PASTA')}</button>
                 </>}
-            {c.repo && <button className="hm-go ghost" data-hf onClick={() => gh(c.repo!)}>VER NO GITHUB</button>}
+            {c.repo && <button className="hm-go ghost" data-hf onClick={() => gh(c.repo!)}>{tt('VER NO GITHUB')}</button>}
           </div>
           {progress && <ProgressBar p={progress} />}
           {(install.error ?? add.error) && !progress && <p className="err" style={{ margin: 0 }}>{(install.error ?? add.error)!.message}</p>}
           {!installedId && self && <p className="dim small">{SELF_INSTALL_NOTE}</p>}
           {!installedId && !self && <p className="dim small">
-            {c.repo ? <>Instalar baixa para {portsDir.data ?? '…'} (dá para mudar nas configurações); o download é conferido pelo hash do GitHub e pelo Windows Defender antes de ser aberto. </> : null}
-            Já tem o jogo instalado em outro lugar? Escolher pasta coloca ele na biblioteca ligado a este jogo, sem copiar nada.
-          </p>}
+            {c.repo ? <>{tt('Instalar baixa para {0} (dá para mudar nas configurações); o download é conferido pelo hash do GitHub e pelo Windows Defender antes de ser aberto.', { 0: portsDir.data ?? '…' })}{' '}</> : null}{tt('Já tem o jogo instalado em outro lugar? Escolher pasta coloca ele na biblioteca ligado a este jogo, sem copiar nada.')}</p>}
           <div className="gp-cards">
-            {c.needs && <section className="gp-card"><h3>O QUE VOCÊ PRECISA</h3><p className="txt"><Translated text={c.needs} /></p></section>}
-            {c.description && <section className="gp-card wide"><h3>SOBRE</h3><p className="txt"><Translated text={c.description} /></p></section>}
+            {c.needs && <section className="gp-card"><h3>{tt('O QUE VOCÊ PRECISA')}</h3><p className="txt"><Translated text={c.needs} /></p></section>}
+            {c.description && <section className="gp-card wide"><h3>{tt('SOBRE')}</h3><p className="txt"><Translated text={c.description} /></p></section>}
           </div>
-          <p className="credit" style={{ padding: 0 }}>Dados: Recompendium{c.repo ? ` · ${c.repo}` : ''}</p>
+          <p className="credit" style={{ padding: 0 }}>{tt('Dados: Recompendium{0}', { 0: c.repo ? ` · ${c.repo}` : '' })}</p>
         </div>
       </div>
-      <Hints items={[['ok', 'Escolher'], ['back', 'Voltar']]} />
+      <Hints items={[['ok', tt('Escolher')], ['back', tt('Voltar')]]} />
     </div>
   );
 }
