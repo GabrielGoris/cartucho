@@ -2,14 +2,13 @@ import { EventEmitter } from 'node:events';
 import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { BrowserWindow, desktopCapturer, type Display, ipcMain, nativeImage, type NativeImage, screen, shell } from 'electron';
-import { type Key, keyMapFor } from '@shared/padmap';
+import { type Binds, DEFAULT_BINDS, HOLD, padTokens } from '@shared/binds';
 import { moveTo, ownedBy, type Rect, type Win, type Win32 } from './win32';
 import { tt } from '@shared/i18n';
 import { log } from './log';
 
 export interface PadState { index: number; id: string; mapping: string; b: string }
 export type Action = 'summon' | 'shot';
-export const HOLD = 1000;
 
 const PAD_PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:transparent"><script>
 const { ipcRenderer } = require('electron');
@@ -21,23 +20,23 @@ setInterval(() => {
 }, 40);
 </script>`;
 
-export function padKeys(p: PadState): Set<Key> {
-  const map = keyMapFor(p, false), down = new Set<Key>();
-  [...p.b].forEach((v, i) => { if (v === '1' && map[i]) down.add(map[i]!); });
-  return down;
-}
+export const padKeys = (p: PadState) => padTokens(p, [...p.b].map(v => v === '1'));
 
 export class Combos {
-  private down = new Map<number, Set<Key>>();
+  private down = new Map<number, Set<string>>();
   private held = new Map<number, number>();
 
-  feed(index: number, now: Set<Key>, at = Date.now()): Action[] {
-    const before = this.down.get(index) ?? now, out: Action[] = [];
+  constructor(private binds: () => Binds = () => DEFAULT_BINDS) {}
+
+  feed(index: number, now: Set<string>, at = Date.now()): Action[] {
+    const b = this.binds(), before = this.down.get(index) ?? now, out: Action[] = [];
     this.down.set(index, now);
-    const pair = (k: Set<Key>) => k.has('Select') && k.has('Start');
-    if (now.has('Home') && !before.has('Home')) this.held.set(index, at);
-    if (!now.has('Home')) this.held.delete(index);
-    if (pair(now) && !pair(before)) out.push('shot');
+    const has = (s: Set<string>, k: string[]) => k.length > 0 && k.every(x => s.has(x));
+    const sNow = has(now, b.summon), extra = [...now].some(k => !b.summon.includes(k));
+    if (!sNow) this.held.delete(index);
+    else if (extra) this.held.set(index, -1);
+    else if (!has(before, b.summon)) this.held.set(index, at);
+    if (has(now, b.shot) && !has(before, b.shot)) out.push('shot');
     return [...out, ...this.tick(at)];
   }
 
@@ -96,18 +95,20 @@ export interface InGameDeps {
   focused: () => boolean;
   sameScreen: () => boolean;
   dirsOf: (id: string) => string[];
+  binds: () => Binds;
 }
 
 export class InGame {
   readonly events = new EventEmitter<{ summon: [string]; shot: [{ title: string; file: string }] }>();
   private pad: BrowserWindow | null = null;
-  private combos = new Combos();
+  private combos: Combos;
   private busy = false;
   private timer: NodeJS.Timeout | null = null;
   private game: number | null = null;
   private follow = 0;
 
   constructor(private d: InGameDeps) {
+    this.combos = new Combos(d.binds);
     ipcMain.on('cartucho:pads', (_e, list: PadState[]) => this.onPads(list));
   }
 

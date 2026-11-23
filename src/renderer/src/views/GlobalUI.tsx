@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useSubscription } from '@trpc/tanstack-react-query';
 import { useTRPC } from '../trpc';
-import { cancelPadSetup, Glyph, PAD_NAMES, SETUP_STEPS, useKeys, usePadKind, usePadSetup } from '../lib/input';
+import { BindChips, cancelBindRec, cancelPadSetup, Glyph, PAD_NAMES, SETUP_STEPS, useBindRec, useKeys, usePadKind, usePadSetup } from '../lib/input';
 import { useSpatialNav } from '../lib/spatial';
 import { getSettings, setSettings, useSettings } from '../lib/settings';
 import { sfx } from '../lib/sfx';
@@ -25,6 +25,24 @@ export function ConfirmHost() {
           <button className="btn" data-hf data-main onClick={() => { sfx.play('back'); req.resolve(false); }}>{req.cancel ?? tt('Cancelar')}</button>
           <button className={`btn ${req.danger ? 'danger' : 'acc'}`} data-hf onClick={() => { sfx.play('ok'); req.resolve(true); }}>{req.ok ?? tt('Confirmar')}</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+export const BIND_NAMES = () => ({ summon: tt('Chamar o Cartucho'), shot: tt('Tirar captura de tela') });
+
+export function BindRecHost() {
+  const r = useBindRec();
+  useKeys(k => { if (k === 'Escape') { sfx.play('back'); cancelBindRec(); } }, !!r);
+  if (!r) return null;
+  return (
+    <div className="ov gl-ov">
+      <div className="gl-box gl-padset">
+        <h3>{BIND_NAMES()[r.action]}</h3>
+        <p>{tt('Aperte no controle o botão ou a combinação (até 4 botões) e solte. Botões extras do controle também valem.')}</p>
+        <div className="gl-padstep gl-bindstep">{r.got.length ? <BindChips bind={r.got} /> : <span>{tt('Esperando um botão…')}</span>}</div>
+        <p className="gl-padnote">{tt('Escolha botões que os jogos não usam. Esc no teclado cancela.')}</p>
       </div>
     </div>
   );

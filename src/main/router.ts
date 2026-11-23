@@ -26,6 +26,7 @@ import type { Background } from './background';
 import { logFile } from './log';
 import type { Updater, UpdState } from './updater';
 import { setLang, tt } from '@shared/i18n';
+import { cleanBind, readBinds, sameBind } from '@shared/binds';
 
 export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; info?: GameInfoService; ingame?: InGame; web?: WebPane; tr: Translator; defaultPortsDir: string; win?: () => WinCtl | null; bg?: () => Background | null; upd?: () => Updater | null }
 export const portsDirOf = (d: Pick<RouterDeps, 'db' | 'defaultPortsDir'>) => kvGet(d.db, 'portsDir') || d.defaultPortsDir;
@@ -145,6 +146,18 @@ export function createRouter(deps: RouterDeps) {
       shots: t.procedure.input(z.object({ title: z.string() })).query(({ input }) => deps.ingame?.list(input.title) ?? []),
       openShots: t.procedure.input(z.object({ title: z.string() })).mutation(async ({ input }) => { const d = deps.ingame?.folder(input.title); if (d && existsSync(d)) await shell.openPath(d); }),
       back: t.procedure.mutation(async () => { if (deps.ingame) await deps.ingame.back(); else deps.win?.()?.minimize(); }),
+      binds: t.procedure.query(() => readBinds(kvGet(deps.db, 'pad.binds'))),
+      setBind: t.procedure.input(z.object({ action: z.enum(['summon', 'shot']), bind: z.array(z.string()).nullable() })).mutation(({ input }) => {
+        const cur = readBinds(kvGet(deps.db, 'pad.binds'));
+        if (input.bind == null) { kvSet(deps.db, 'pad.binds', '{}'); return readBinds(null); }
+        const b = cleanBind(input.bind);
+        if (!b) throw new Error(tt('Nenhum botão reconhecido. Tente de novo.'));
+        const other = input.action === 'summon' ? cur.shot : cur.summon;
+        if (sameBind(b, other)) throw new Error(tt('Essa combinação já é usada pelo outro atalho.'));
+        const next = { ...cur, [input.action]: b };
+        kvSet(deps.db, 'pad.binds', JSON.stringify(next));
+        return next;
+      }),
       removeShot: t.procedure.input(z.object({ url: z.string() })).mutation(({ input }) => deps.ingame?.remove(input.url) ?? false),
     }),
 

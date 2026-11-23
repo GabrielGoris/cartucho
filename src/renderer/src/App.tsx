@@ -10,7 +10,7 @@ import { applyPalette, paletteById, PALETTES } from './lib/palettes';
 import { Glyph, setGlobalKeys, setShortcutHandler } from './lib/input';
 import { getLang, tt } from '@shared/i18n';
 import { useConfirmReq } from './lib/dialogs';
-import { CartuchoMenu, ConfirmHost, PadSetupHost, PickerHost, PlatformHost } from './views/GlobalUI';
+import { BindRecHost, CartuchoMenu, ConfirmHost, PadSetupHost, PickerHost, PlatformHost } from './views/GlobalUI';
 import { MeOverlay, RadarOverlay, SupportOverlay } from './views/Overlays';
 import { askConfirm } from './lib/dialogs';
 import { CONSOLES } from './stage/consoles';
@@ -176,6 +176,7 @@ export function App() {
       <PickerHost />
       <PlatformHost />
       <PadSetupHost />
+      <BindRecHost />
       <WebHost />
       {settingsOpen && <Settings onSupport={() => { setSettingsOpen(false); setGov('support'); }} onClose={() => setSettingsOpen(false)} onPickConsoles={() => { setSettingsOpen(false); setPicker(true); }} />}
       {askPicker && <ConsolePicker first={!s.picked} onClose={() => setPicker(false)} />}

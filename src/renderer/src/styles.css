@@ -390,6 +390,10 @@ body.pal-light .stage-behind { filter: blur(8px) brightness(.85) saturate(.6); }
 .gl-padprog { display: flex; gap: 6px; }
 .gl-padprog i { flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
 .gl-padprog i.done { background: var(--acc); } .gl-padprog i.cur { background: rgb(var(--acc-rgb) / .5); }
+.gl-bindstep { flex-direction: row; align-items: center; min-height: 74px; }
+.bind { display: inline-flex; align-items: center; gap: 6px; }
+.bind-k { display: inline-flex; align-items: center; gap: 6px; }
+.bind-k i { font-style: normal; color: var(--dim); }
 .gl-padnote { margin: 14px 0 0 !important; font-size: 16px !important; }
 .btn.danger { border-color: var(--pink); color: var(--pink); }
 .gl-menu { width: min(460px, 90%); padding: 20px; display: flex; flex-direction: column; gap: 6px; }

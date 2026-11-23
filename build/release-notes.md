@@ -1,8 +1,11 @@
-## Cartucho 1.2.2
+## Cartucho 1.2.3
 
-### Melhorado
+### Novo
 
-- **Botão Home do controle**: agora basta segurar por 1 segundo para chamar o Cartucho.
-- **Atualizações aplicadas na hora**: abrir uma versão nova do Cartucho fecha a antiga que estava escondida na bandeja, em vez de continuar rodando a versão velha.
+- **Escolha os botões dos atalhos**: em Configurações › Controle › Atalhos durante o jogo, dá para trocar o botão de chamar o Cartucho e o de tirar captura. Vale um botão só ou uma combinação de até 4, inclusive botões extras do controle.
+
+### Mudou
+
+- **Captura de tela agora é Home + RB**: o Select + Start atrapalhava jogos que usam esses botões, como o recomp de Ocarina of Time. Se preferir outro, é só trocar nas configurações.
 
 Gostou? Dá para apoiar em [buymeacoffee.com/goris](https://buymeacoffee.com/goris).

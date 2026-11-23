@@ -4,6 +4,7 @@ import { sfx } from './sfx';
 
 import { keyMapFor as mapFor, type Key, type PadMap } from '@shared/padmap';
 import { tt } from '@shared/i18n';
+import { padTokens, type BindAction } from '@shared/binds';
 export { padUsbId, type Key } from '@shared/padmap';
 type Handler = (k: Key) => void;
 
@@ -106,6 +107,39 @@ function setupPress(i: number) {
   setupEmit();
 }
 
+export interface BindRec { action: BindAction; held: string[]; got: string[] }
+let rec: BindRec | null = null, recDone: ((b: string[] | null) => void) | null = null, recIgnore = new Set<string>(), recUntil = 0;
+const recSubs = new Set<() => void>();
+const recEmit = () => recSubs.forEach(f => f());
+export const useBindRec = () => useSyncExternalStore(f => { recSubs.add(f); return () => recSubs.delete(f); }, () => rec);
+const heldTokens = () => { const out = new Set<string>(); for (const p of pads()) padTokens(p, btns(p)).forEach(t => out.add(t)); return out; };
+function endRec(b: string[] | null) { const f = recDone; rec = null; recDone = null; for (const q of pads()) prevs.set(q.index, btns(q)); recEmit(); f?.(b); }
+export function recordBind(action: BindAction): Promise<string[] | null> {
+  if (rec) endRec(null);
+  recIgnore = heldTokens(); recUntil = performance.now() + 12_000;
+  rec = { action, held: [], got: [] }; recEmit();
+  return new Promise(r => { recDone = r; });
+}
+export const cancelBindRec = () => { if (rec) endRec(null); };
+function recPoll() {
+  const now = heldTokens();
+  for (const t of [...recIgnore]) if (!now.has(t)) recIgnore.delete(t);
+  const held = [...now].filter(t => !recIgnore.has(t));
+  const r = rec!;
+  if (held.length) {
+    const got = [...new Set([...r.got, ...held])].slice(0, 4);
+    if (got.length !== r.got.length || held.length !== r.held.length) { rec = { ...r, held, got }; recEmit(); }
+    recUntil = performance.now() + 12_000;
+  } else if (r.got.length) endRec(r.got);
+  else if (performance.now() > recUntil) endRec(null);
+  else if (r.held.length) { rec = { ...r, held: [] }; recEmit(); }
+}
+const BIND_ACT: Partial<Record<string, Act>> = { Enter: 'ok', Escape: 'back', X: 'x', Y: 'y', LB: 'lb', RB: 'rb', LT: 'lt', RT: 'rt', Start: 'menu', Select: 'sel', Home: 'home' };
+const BIND_TXT: Record<string, string> = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', '#10': 'L3', '#11': 'R3' };
+export function BindChips({ bind }: { bind: string[] }) {
+  return <span className="bind">{bind.map((t, i) => <span key={t} className="bind-k">{i > 0 && <i>+</i>}{BIND_ACT[t] ? <Glyph a={BIND_ACT[t]!} pad /> : <span className="gp pill">{BIND_TXT[t] ?? tt('Botão {0}', { 0: Number(t.slice(1)) + 1 })}</span>}</span>)}</span>;
+}
+
 const hatAxis = new Map<string, number>();
 const HAT: (Key | null)[] = ['ArrowUp', 'ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowUp'];
 function hatDir(p: Gamepad): Key | null {
@@ -132,6 +166,7 @@ function activePad() {
 }
 function poll() {
   if (document.hidden || (!document.hasFocus() && !document.querySelector('.web-ov'))) { away = true; held = null; return; }
+  if (rec) { recPoll(); return; }
   const all = pads();
   if (!all.length) return;
   const now = performance.now();

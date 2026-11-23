@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { Combos, HOLD, padKeys, safeName } from '../src/main/ingame';
+import { Combos, padKeys, safeName } from '../src/main/ingame';
+import { HOLD, readBinds } from '../src/shared/binds';
 import { moveTo, ownedBy } from '../src/main/win32';
 import { mergeSessions } from '../src/main/play';
 
-const xbox = (pressed: number[]) => ({ index: 0, id: 'Xbox Wireless Controller', mapping: 'standard', b: Array.from({ length: 17 }, (_, i) => (pressed.includes(i) ? '1' : '0')).join('') });
+const xbox = (pressed: number[]) => ({ index: 0, id: 'Xbox Wireless Controller', mapping: 'standard', b: Array.from({ length: 18 }, (_, i) => (pressed.includes(i) ? '1' : '0')).join('') });
 const ps2 = (pressed: number[]) => ({ index: 1, id: 'Twin USB Joystick (Vendor: 0810 Product: 0001)', mapping: '', b: Array.from({ length: 12 }, (_, i) => (pressed.includes(i) ? '1' : '0')).join('') });
 
 describe('atalhos do controle durante o jogo', () => {
@@ -25,15 +26,26 @@ describe('atalhos do controle durante o jogo', () => {
     expect([...p.feed(1, padKeys(ps2([8, 9])), 10), ...p.tick(5000)]).not.toContain('summon');
   });
 
-  it('Select+Start tira a captura uma vez, também no adaptador de PS2', () => {
+  it('captura no atalho padrão (Home + RB) sem chamar o Cartucho', () => {
     const c = new Combos();
-    c.feed(0, padKeys(xbox([])));
-    expect(c.feed(0, padKeys(xbox([8])))).toEqual([]);
-    expect(c.feed(0, padKeys(xbox([8, 9])))).toEqual(['shot']);
-    expect(c.feed(0, padKeys(xbox([8, 9])))).toEqual([]);
-    expect(c.feed(0, padKeys(xbox([])))).toEqual([]);
-    c.feed(1, padKeys(ps2([])));
-    expect(c.feed(1, padKeys(ps2([8, 9])))).toEqual(['shot']);
+    c.feed(0, padKeys(xbox([])), 0);
+    expect(c.feed(0, padKeys(xbox([16])), 10)).toEqual([]);
+    expect(c.feed(0, padKeys(xbox([16, 5])), 200)).toEqual(['shot']);
+    expect(c.tick(5000)).toEqual([]);
+    expect(c.feed(0, padKeys(xbox([16, 5])), 5100)).toEqual([]);
+  });
+
+  it('atalhos configurados, inclusive botões extras e adaptador de PS2', () => {
+    const binds = { summon: ['#17'], shot: ['Select', 'Start'] };
+    const c = new Combos(() => binds);
+    c.feed(0, padKeys(xbox([])), 0);
+    expect(c.feed(0, padKeys(xbox([8, 9])), 10)).toEqual(['shot']);
+    expect(c.feed(0, padKeys(xbox([17])), 100)).toEqual([]);
+    expect(c.tick(100 + HOLD)).toEqual(['summon']);
+    c.feed(1, padKeys(ps2([])), 0);
+    expect(c.feed(1, padKeys(ps2([8, 9])), 10)).toEqual(['shot']);
+    expect(readBinds('{"shot":["#17","x"]}')).toEqual({ summon: ['Home'], shot: ['#17'] });
+    expect(readBinds('lixo').shot).toEqual(['Home', 'RB']);
   });
 
   it('nome da pasta das capturas sem caracteres proibidos no Windows', () => {

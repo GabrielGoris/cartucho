@@ -6,7 +6,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSubscription } from '@trpc/tanstack-react-query';
 import { useState } from 'react';
 import { useTRPC } from '../trpc';
-import { Glyph, PAD_NAMES, startPadSetup, type Key } from '../lib/input';
+import { BindChips, Glyph, PAD_NAMES, recordBind, startPadSetup, type Key } from '../lib/input';
+import { BIND_NAMES } from './GlobalUI';
 import { PALETTES, paletteById } from '../lib/palettes';
 import { setSettings, useSettings, type Settings as S } from '../lib/settings';
 import { useSpatialNav } from '../lib/spatial';
@@ -55,6 +56,16 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
   const quit = useMutation(trpc.system.quit.mutationOptions());
   const openLog = useMutation(trpc.system.openLog.mutationOptions());
   const [padNote, setPadNote] = useState<string | null>(null);
+  const binds = useQuery(trpc.ingame.binds.queryOptions());
+  const [bindNote, setBindNote] = useState<[string, string] | null>(null);
+  const setBind = useMutation(trpc.ingame.setBind.mutationOptions({ onSuccess: d => qc.setQueryData(trpc.ingame.binds.queryKey(), d) }));
+  const askBind = (a: 'summon' | 'shot') => {
+    sfx.play('ok'); setBindNote(null);
+    void recordBind(a).then(b => {
+      if (!b) return;
+      setBind.mutate({ action: a, bind: b }, { onSuccess: () => { sfx.play('ok'); setBindNote([a, tt('Atalho salvo.')]); }, onError: e => { sfx.play('back'); setBindNote([a, e.message]); } });
+    });
+  };
   const nameRef = useRef<HTMLInputElement>(null);
   const win = useQuery(trpc.win.state.queryOptions());
   useSubscription(trpc.win.onState.subscriptionOptions(undefined, { onData: d => qc.setQueryData(trpc.win.state.queryKey(), d) }));
@@ -168,6 +179,17 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
           <button className="st-r" data-hf onClick={() => { sfx.play('ok'); setPadNote(startPadSetup() ? null : tt('Conecte um controle e aperte qualquer botão nele antes.')); }}>
             <span><span className="t">{tt('Configurar os botões do controle')}</span><span className="d">{padNote ?? tt('Opcional. Controles genéricos já funcionam no layout do Xbox; use só se algum botão ficar trocado.')}</span></span>
             <span className="c"><span className="st-pick"><b style={{ minWidth: 0 }}>{tt('Configurar')}</b>›</span></span>
+          </button>
+          <div className="st-sec">{tt('ATALHOS DURANTE O JOGO')}</div>
+          {(['summon', 'shot'] as const).map(a => (
+            <button key={a} className="st-r" data-hf onClick={() => askBind(a)}>
+              <span><span className="t">{BIND_NAMES()[a]}</span><span className="d">{bindNote?.[0] === a ? bindNote[1] : a === 'summon' ? tt('Segure por 1 segundo durante o jogo. Enter troca o botão.') : tt('Aperte durante o jogo. Use botões que o jogo não usa. Enter troca o botão.')}</span></span>
+              <span className="c">{binds.data && <BindChips bind={binds.data[a]} />}</span>
+            </button>
+          ))}
+          <button className="st-r" data-hf onClick={() => { sfx.play('ok'); setBindNote(null); setBind.mutate({ action: 'shot', bind: null }); }}>
+            <span><span className="t">{tt('Restaurar atalhos padrão')}</span><span className="d">{tt('Home segurado chama o Cartucho; Home + RB tira a captura.')}</span></span>
+            <span className="c"><span className="st-pick"><b style={{ minWidth: 0 }}>{tt('Restaurar')}</b>›</span></span>
           </button>
           </>}
           {tab === 'Jogos' && <>
