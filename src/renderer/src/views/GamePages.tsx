@@ -16,6 +16,7 @@ import { WineDialog } from '../components/WineDialog';
 import { useAskDeletePrefix } from '../lib/wine';
 import { Translated } from '../components/Translated';
 import { tt } from '@shared/i18n';
+import { useHubActions, type HubGame } from '../hubs/data';
 
 const gh = (repo: string) => window.open(`https://github.com/${repo}`, '_blank');
 const LINUX = navigator.userAgent.includes('Linux');
@@ -41,6 +42,7 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
   const askPrefix = useAskDeletePrefix();
   const relink = useMutation(trpc.games.relink.mutationOptions({ onSuccess: refresh }));
   const reinstall = useMutation(trpc.ports.install.mutationOptions({ onSuccess: refresh }));
+  const hub = useHubActions();
 
   const root = useRef<HTMLDivElement>(null);
   useSpatialNav(root, { active, initial: '[data-main]', onKey: k => { if (k === 'Escape') { sfx.play('back'); onBack(); return true; } } });
@@ -48,7 +50,7 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
   const g = game.data;
   if (!g) return <p className="dim pad24">{game.error ? game.error.message : tt('Carregando…')}</p>;
   const u = upd.data, a = g.achievements, st = stats.data;
-  const err = play.error ?? update.error ?? uninstall.error ?? chooseExe.error ?? quit.error ?? relink.error ?? reinstall.error;
+  const err = play.error ?? update.error ?? uninstall.error ?? (hub.error ? new Error(hub.error) : null) ?? chooseExe.error ?? quit.error ?? relink.error ?? reinstall.error;
   const canReinstall = !!g.catalogId && !!g.sourceRepo && !isSelfInstall(g.console);
   const isWindowsProgram = LINUX && !!g.exe && /\.(exe|bat|cmd|lnk)$/i.test(g.exe);
 
@@ -91,9 +93,8 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
               <button className="btn" data-hf onClick={() => openFolder.mutate({ id })}>{tt('Abrir pasta')}</button>
               {isWindowsProgram && <button className="btn" data-hf onClick={() => setWineOpen(o => !o)}>{tt('Opções do Wine')}</button>}
               {g.sourceRepo && <button className="btn" data-hf onClick={() => gh(g.sourceRepo!)}>{tt('Projeto no GitHub')}</button>}
-              {g.managed
-                ? <button className="btn danger" data-hf onClick={() => { void askConfirm({ title: tt('Desinstalar {0}? Os arquivos que vieram no download serão apagados; saves e configurações que você mudou ficam na pasta.', { 0: g.title }), ok: tt('Desinstalar'), danger: true }).then(async y => { if (y) uninstall.mutate({ id, deletePrefix: await askPrefix(id, g.title) }); }); }}>{tt('Desinstalar')}</button>
-                : <button className="btn danger" data-hf onClick={() => { void askConfirm({ title: tt('Tirar {0} da biblioteca? Nenhum arquivo é apagado.', { 0: g.title }), ok: tt('Remover'), danger: true }).then(async y => { if (y) remove.mutate({ id, deletePrefix: await askPrefix(id, g.title) }); }); }}>{tt('Remover da biblioteca')}</button>}
+              {!g.running && <button className="btn danger" data-hf onClick={() => { void hub.uninstall({ installed: g, title: g.title } as HubGame).then(r => { if (r) onBack(); }); }}>{tt('Desinstalar')}</button>}
+              <button className="btn" data-hf onClick={() => { void askConfirm({ title: tt('Tirar {0} da biblioteca? Nenhum arquivo é apagado.', { 0: g.title }), ok: tt('Remover'), danger: true }).then(async y => { if (y) remove.mutate({ id, deletePrefix: await askPrefix(id, g.title) }); }); }}>{tt('Remover da biblioteca')}</button>
             </div>
           )}
 

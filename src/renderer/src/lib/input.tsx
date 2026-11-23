@@ -26,26 +26,92 @@ const setLast = (v: 'pad' | 'kb') => { if (last !== v) { last = v; lastSubs.forE
 export const lastInput = () => last;
 export const useLastInput = () => useSyncExternalStore(f => { lastSubs.add(f); return () => lastSubs.delete(f); }, lastInput);
 
-const KEYMAP: Record<string, Key> = {
-  Enter: 'Enter', ' ': 'Enter', Escape: 'Escape', Backspace: 'Escape', Tab: 'Tab',
-  ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight', ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown',
-  q: 'LB', Q: 'LB', e: 'RB', E: 'RB', x: 'X', X: 'X', y: 'Y', Y: 'Y',
-  PageUp: 'LT', PageDown: 'RT', F1: 'Start', F2: 'Select', Home: 'Home',
+// Teclas fixas: navegam e voltam para o palco, não dá para trocar.
+const FIXED_KEYS: Record<string, Key> = { ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight', ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown', Tab: 'Tab', Home: 'Home' };
+// Atalhos do Cartucho (S, M, C, P, /) e teclas do sistema também ficam de fora da troca.
+const RESERVED_KEYS = new Set(['s', 'm', 'c', 'p', '/', 'F11', 'F12', 'PrintScreen', 'Alt', 'Meta', 'OS', 'Dead', 'Unidentified', 'Process', 'CapsLock', 'NumLock', 'ScrollLock', 'ContextMenu']);
+export const KB_ACTIONS: Key[] = ['Enter', 'Escape', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'Select', 'Start'];
+export const KB_DEFAULT: Partial<Record<Key, string[]>> = {
+  Enter: ['Enter', ' '], Escape: ['Escape', 'Backspace'], X: ['x'], Y: ['y'], LB: ['q'], RB: ['e'], LT: ['PageUp'], RT: ['PageDown'], Start: ['F1'], Select: ['F2'],
 };
+const KB_STORE = 'cartucho.kbmap';
+const kbNorm = (k: string) => (k.length === 1 ? k.toLowerCase() : k);
+let kbMap: Partial<Record<Key, string[]>> = (() => {
+  try { const v = JSON.parse(localStorage.getItem(KB_STORE) || 'null') as Partial<Record<Key, string[]>> | null; return v && typeof v === 'object' ? v : { ...KB_DEFAULT }; } catch { return { ...KB_DEFAULT }; }
+})();
+let kbVer = 0;
+const kbSubs = new Set<() => void>();
+const kbSave = (m: Partial<Record<Key, string[]>> | null) => {
+  kbMap = m ?? { ...KB_DEFAULT }; kbVer++;
+  try { if (m) localStorage.setItem(KB_STORE, JSON.stringify(m)); else localStorage.removeItem(KB_STORE); } catch { }
+  kbSubs.forEach(f => f());
+};
+export const useKbMap = () => { useSyncExternalStore(f => { kbSubs.add(f); return () => kbSubs.delete(f); }, () => kbVer); return kbMap; };
+export const kbKeysOf = (k: Key): string[] => kbMap[k] ?? [];
+const kbAction = (key: string): Key | null => FIXED_KEYS[key] ?? (KB_ACTIONS.find(a => kbMap[a]?.includes(kbNorm(key))) ?? null);
+export function keyLabel(key: string): string {
+  const L: Record<string, string> = { ' ': tt('Espaço'), Escape: 'Esc', Backspace: '⌫', PageUp: 'PgUp', PageDown: 'PgDn', Control: 'Ctrl', Delete: 'Del', Insert: 'Ins', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Enter: tt('Enter') };
+  return L[key] ?? (key.length === 1 ? key.toUpperCase() : key);
+}
+/** Troca a tecla de uma ação. Se outra ação já usava a tecla, as duas trocam de lugar. Devolve um erro para mostrar, ou null. */
+export function rebindKey(k: Key, raw: string): string | null {
+  if (FIXED_KEYS[raw]) return tt('As setas, Tab e Home são fixas.');
+  if (raw === 'PrintScreen') return tt('Print Screen é a tecla fixa de captura durante o jogo.');
+  const key = kbNorm(raw);
+  if (RESERVED_KEYS.has(key)) return key.length === 1 ? tt('{0} já é um atalho do Cartucho.', { 0: keyLabel(key) }) : tt('Essa tecla não pode ser usada.');
+  const m: Partial<Record<Key, string[]>> = {};
+  for (const a of KB_ACTIONS) m[a] = [...(kbMap[a] ?? [])];
+  const old = m[k] ?? [];
+  if (old[0] === key && old.length === 1) return null;
+  for (const a of KB_ACTIONS) {
+    if (a === k || !m[a]!.includes(key)) continue;
+    const give = old[0] && old[0] !== key && !m[a]!.includes(old[0]) ? old[0] : null;
+    m[a] = m[a]!.flatMap(x => (x !== key ? [x] : give ? [give] : []));
+  }
+  m[k] = [key];
+  kbSave(m);
+  return null;
+}
+export const resetKbMap = () => kbSave(null);
+
+let kbRec: { label: string; k: Key } | null = null, kbRecDone: ((key: string | null) => void) | null = null, kbRecTimer = 0;
+const kbRecSubs = new Set<() => void>();
+export const useKeyRec = () => useSyncExternalStore(f => { kbRecSubs.add(f); return () => kbRecSubs.delete(f); }, () => kbRec);
+function endKeyRec(key: string | null) { const f = kbRecDone; kbRec = null; kbRecDone = null; clearTimeout(kbRecTimer); kbRecSubs.forEach(x => x()); f?.(key); }
+/** Espera a próxima tecla do teclado (Esc cancela, a não ser que a ação seja o próprio Voltar). */
+export function recordKey(label: string, k: Key): Promise<string | null> {
+  if (kbRec) endKeyRec(null);
+  kbRec = { label, k }; kbRecSubs.forEach(x => x());
+  kbRecTimer = window.setTimeout(() => endKeyRec(null), 12_000);
+  return new Promise(r => { kbRecDone = r; });
+}
+export const cancelKeyRec = () => { if (kbRec) endKeyRec(null); };
 const isTyping = (t: EventTarget | null) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
 
 let shortcut: ((key: string) => boolean) | null = null;
 export const setShortcutHandler = (fn: (key: string) => boolean) => { shortcut = fn; };
 
+// O que aparece nos botões da tela segue o que a pessoa usou por último: teclado ou controle (o mouse não muda).
+let hand: 'pad' | 'kb' = 'kb';
+const setHand = (v: 'pad' | 'kb') => { if (hand !== v) { hand = v; padSubs.forEach(f => f()); } };
+
 if (typeof window !== 'undefined') {
+  addEventListener('keydown', e => {
+    if (!kbRec) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (e.repeat) return;
+    if (e.key === 'Escape' && kbRec.k !== 'Escape') return endKeyRec(null);
+    if (FIXED_KEYS[e.key] && e.key !== 'Tab') return;
+    endKeyRec(e.key);
+  }, true);
   addEventListener('mousemove', () => setLast('kb'), { passive: true });
   addEventListener('keydown', e => {
-    setLast('kb');
+    setLast('kb'); setHand('kb');
     if (e.key === 'F11' || (e.altKey && e.key === 'Enter')) { e.preventDefault(); return; }
     if (e.repeat && (e.key === 'Enter' || e.key === 'Escape')) return;
     if (isTyping(e.target)) { if (e.key === 'Escape') (e.target as HTMLElement).blur(); return; }
     if (!e.ctrlKey && !e.altKey && !e.metaKey && shortcut?.(e.key)) { e.preventDefault(); return; }
-    const k = KEYMAP[e.key]; if (!k) return;
+    const k = kbAction(e.key); if (!k) return;
     e.preventDefault();
     send(k);
   });
@@ -59,7 +125,7 @@ const refreshPads = () => { connected = [...(navigator.getGamepads?.() ?? [])].f
 if (typeof window !== 'undefined') { addEventListener('gamepadconnected', refreshPads); addEventListener('gamepaddisconnected', refreshPads); }
 
 function detectKind(): PadKind {
-  if (!connected) return 'kb';
+  if (!connected || hand === 'kb') return 'kb';
   const id = connected.id.toLowerCase();
   if (/xbox|045e|xinput/.test(id)) return 'xbox';
   if (/054c|dualsense|dualshock|playstation|wireless controller/.test(id)) return 'ps';
@@ -219,10 +285,10 @@ function poll() {
     prevs.set(p.index, b);
     const pressed = b.findIndex((v, i) => v && !old[i]);
     const map = keyMapFor(p, padKind() === 'nin');
-    if (pressed >= 0) { setLast('pad'); touch(p); }
+    if (pressed >= 0) { setLast('pad'); setHand('pad'); touch(p); }
     for (const i in map) if (b[+i] && !old[+i]) { send(map[i]!); if (DIRS.has(map[i]!)) { held = map[i]!; heldAt = now + 250; } }
     const hat = hatDir(p);
-    if (hat && hat !== hats.get(p.index)) { setLast('pad'); touch(p); send(hat); held = hat; heldAt = now + 250; }
+    if (hat && hat !== hats.get(p.index)) { setLast('pad'); setHand('pad'); touch(p); send(hat); held = hat; heldAt = now + 250; }
     hats.set(p.index, hat);
     if (hat || Object.keys(map).some(i => b[+i] && DIRS.has(map[+i]!))) dir = true;
     const [ax = 0, ay = 0] = p.axes;
@@ -230,7 +296,7 @@ function poll() {
   }
   if (!dir) held = null;
   else if (held && now > heldAt) { send(held); heldAt = now + 110; }
-  if (stick) { setLast('pad'); if (now - axisAt > 180) { axisAt = now; send(stick); } } else axisAt = 0;
+  if (stick) { setLast('pad'); setHand('pad'); if (now - axisAt > 180) { axisAt = now; send(stick); } } else axisAt = 0;
 }
 if (typeof window !== 'undefined') setInterval(poll, 16);
 
@@ -269,7 +335,8 @@ export function PhysGlyph({ i, pad }: { i: number; pad?: PadLike | null }) {
 export function Glyph({ a, pad }: { a: Act; pad?: boolean }) {
   const kind = usePadKind(), k = pad && kind === 'kb' ? 'xbox' : kind, v = GL[k][a];
   const p = usePad();
-  if (k === 'kb') return <span className="gp kb">{v as string}</span>;
+  const km = useKbMap();
+  if (k === 'kb') { const ak = ACT_KEY[a], first = ak ? km[ak]?.[0] : undefined; return <span className="gp kb">{ak ? (first ? keyLabel(first) : '—') : v as string}</span>; }
   const key = ACT_KEY[a];
   if (key && p && maps[p.id]) { const i = buttonOf(p, key); if (i != null) return <PhysGlyph i={i} pad={p} />; }
   return show(v);

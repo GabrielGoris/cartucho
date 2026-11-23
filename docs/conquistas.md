@@ -19,6 +19,30 @@ Depois que um desbloqueio aparece, ele fica no banco do Cartucho mesmo que o sav
 | Sonic 3 A.I.R. | `Sonic3AIR.exe` | 18 conquistas do código do jogo | `<pasta>\savedata\storage\s3air_achievements.bin` se existir a pasta `savedata`, senão `%APPDATA%\Sonic3AIR\storage\…` |
 | Sonic 1/2 (2013), RSDKv4 | `RSDKv4.exe` + `Data.rsdk` | 12 conquistas de cada jogo, do código do Retro Engine | `<pasta>\UData.bin` |
 
+## Jogos de PC (Steam, emuladores de Steam e GOG)
+
+O Cartucho reconhece a pasta do jogo e escolhe o leitor, nesta ordem: recomps acima, Steam, GOG, emulador de Steam. Jogos que já estavam na biblioteca são reconhecidos ao abrir o Cartucho. O id de cada conquista é um hash (FNV-1a, 31 bits) do nome de API, então a lista e os desbloqueios casam mesmo vindo de lugares diferentes.
+
+| Origem | Como reconhece | Lista | Desbloqueios |
+|---|---|---|---|
+| Steam | pasta em `steamapps/common` com `appmanifest_*.acf` | `appcache/stats/UserGameStatsSchema_<jogo>.bin` da Steam; senão a Web API (`GetSchemaForGame`) com a chave das configurações | `appcache/stats/UserGameStats_<conta>_<jogo>.bin` (bits por stat + `AchievementTimes`) |
+| Emulador de Steam | `steam_appid.txt`, `steam_settings/` ou `steam_emu.ini` até 3 níveis abaixo da pasta | `steam_settings/achievements.json` do próprio jogo; senão a lista da Steam do PC; senão a Web API | `%APPDATA%\GSE Saves\<jogo>\achievements.json`, `%APPDATA%\Goldberg SteamEmu Saves\…`, save local (`local_save.txt` ou `local_save_path`), `%PUBLIC%\Documents\Steam\CODEX\<jogo>\achievements.ini`, `%APPDATA%\Steam\CODEX\…`, `%PUBLIC%\Documents\Steam\RUNE\…` |
+| GOG | `goggame-<produto>.info` | `gameplay.gog.com/clients/<produto>/users/<conta>/achievements` com o login da GOG | o mesmo endereço; conferido ao fechar o jogo e a cada 5 min com ele aberto |
+
+Os arquivos da Steam são KeyValues binário (`src/main/achievements/vdf.ts`). Nada é enviado para a Steam nem para a GOG.
+
+**Epic Games Store**: não há API pública para ler conquistas do jogador (a própria Epic diz isso no fórum de desenvolvedores), então não é lido.
+
+## Recomps com conquistas próprias (leitor genérico)
+
+Em nov/2026 o código dos recomps de Xbox 360, PS3 e PS4 do catálogo (294 projetos) foi varrido atrás de arquivos de conquistas/troféus. Uns 40 gravam um arquivo próprio, cada um do seu jeito. O leitor `recomp-local` (`src/main/achievements/recomp.ts`) procura os nomes mais usados (`ACH-DATA`, `trophies.txt`, `trophies.jsonl`, `trophies.json`, `achievements.txt`, `achievements.json`, `achievements.ini`, `port_achievements.txt`) até 3 níveis dentro da pasta do jogo e na pasta que o recomp cria em AppData com o nome do .exe, e reconhece o formato pelo conteúdo. Arquivos binários próprios (`trophies.dat`, `trophies.bin`, `achievements.dat`) ainda não são lidos: cada um precisa de um leitor feito para ele.
+
+Quando o arquivo não traz o nome da conquista, ela aparece como "Conquista #id" até alguém montar a lista daquele jogo.
+
+## RetroAchievements
+
+Ficou de fora de propósito. A API pública (`API_GetGameExtended`) só dá um hash das regras (`MemAddr`), não as regras. As regras só saem pela conexão dos emuladores, e o RetroAchievements exige que o emulador seja aprovado e proíbe ferramentas que leem ou editam a memória. Ler a memória de um recomp com as regras deles iria contra isso.
+
 ## Formatos
 
 ### hedge-dev (UnleashedRecomp e MarathonRecomp)

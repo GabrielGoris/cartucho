@@ -22,6 +22,7 @@ import { loadConfig, readPatch, resetGame, writePatch } from './wine/config';
 import { askBeforeDownload, deletePrefix, runLog, runWinetricks, setAskBeforeDownload, setDownloadAsker, wineStatus } from './wine/launch';
 import { type Download, mergeConfig, VERB } from '@shared/wine';
 import { prefixDir } from './steam';
+import { planUninstall } from './uninstall';
 import type { Artwork } from './artwork/service';
 import type { GameInfoService } from './artwork/info';
 import type { InGame } from './ingame';
@@ -33,7 +34,7 @@ import type { Updater, UpdState } from './updater';
 import { setLang, tt } from '@shared/i18n';
 import { bindsFor, cleanBind, readAllBinds, sameBind } from '@shared/binds';
 
-export interface RouterDeps { db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; info?: GameInfoService; ingame?: InGame; web?: WebPane; tr: Translator; defaultPortsDir: string; win?: () => WinCtl | null; bg?: () => Background | null; upd?: () => Updater | null }
+export interface RouterDeps { gog?: import('./gog').GogAccount; mainWindow?: () => BrowserWindow | null; db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; info?: GameInfoService; ingame?: InGame; web?: WebPane; tr: Translator; defaultPortsDir: string; win?: () => WinCtl | null; bg?: () => Background | null; upd?: () => Updater | null }
 export const portsDirOf = (d: Pick<RouterDeps, 'db' | 'defaultPortsDir'>) => kvGet(d.db, 'portsDir') || d.defaultPortsDir;
 
 export interface PickRequest { id: number; title: string; kind: 'dir' | 'exe'; start: string; explicit: boolean }
@@ -125,6 +126,12 @@ const t = initTRPC.create({ transformer: superjson, isServer: true });
 export function createRouter(deps: RouterDeps) {
   const { db, ach, ports, player, art, tr } = deps;
   setDownloadAsker((title, items) => { deps.win?.()?.summon(); return askDownload(title, items); });
+  const protectedDirs = () => {
+    const P = (n: Parameters<typeof app.getPath>[0]) => { try { return app.getPath(n); } catch { return ''; } };
+    return [homedir(), P('desktop'), P('documents'), P('downloads'), P('music'), P('pictures'), P('videos'), P('appData'), P('userData'), portsDirOf(deps),
+      process.env.ProgramFiles ?? '', process.env['ProgramFiles(x86)'] ?? '', process.env.SystemRoot ?? ''].filter(Boolean);
+  };
+  const planFor = (id: string) => planUninstall(ach.getGame(id), ach.listGames(), protectedDirs());
   return t.router({
     art: t.router({
       get: t.procedure.input(z.object({ console: z.string(), platformName: z.string().nullish(), title: z.string() }))
@@ -242,6 +249,22 @@ export function createRouter(deps: RouterDeps) {
     }),
 
     settings: t.router({
+      steamKey: t.procedure.query(() => kvGet(db, 'steam.apikey') ?? ''),
+      setSteamKey: t.procedure.input(z.object({ key: z.string().max(64) })).mutation(async ({ input }) => {
+        const k = input.key.trim();
+        if (k && !/^[0-9A-F]{32}$/i.test(k)) throw new Error(tt('A chave da Steam tem 32 letras e números (0-9, A-F).'));
+        if (k) kvSet(db, 'steam.apikey', k); else db.prepare('DELETE FROM kv WHERE key = ?').run('steam.apikey');
+        await ach.resyncKind(['steam', 'steam-emu']);
+        return k;
+      }),
+      gog: t.procedure.query(() => deps.gog?.state() ?? { signedIn: false, name: null }),
+      gogLogin: t.procedure.mutation(async () => {
+        if (!deps.gog) return { signedIn: false, name: null };
+        const ok = await deps.gog.login(deps.mainWindow?.() ?? null);
+        if (ok) await ach.resyncKind(['gog']);
+        return deps.gog.state();
+      }),
+      gogLogout: t.procedure.mutation(() => { deps.gog?.logout(); return { signedIn: false, name: null }; }),
       portsDir: t.procedure.query(() => portsDirOf(deps)),
       pickPortsDir: t.procedure.mutation(async () => {
         const dir = await pick(tt('Onde o Cartucho deve instalar os jogos?'), ['openDirectory', 'createDirectory'], { defaultPath: portsDirOf(deps) });
@@ -372,6 +395,25 @@ export function createRouter(deps: RouterDeps) {
         return dir ? ach.relocate(input.id, dir) : null;
       }),
       remove: t.procedure.input(z.object({ id: z.string(), deletePrefix: z.boolean().optional() })).mutation(({ input }) => { ach.removeGame(input.id); if (input.deletePrefix) deletePrefix(input.id); }),
+      uninstallPlan: t.procedure.input(z.object({ id: z.string() })).query(({ input }) => planFor(input.id)),
+      uninstall: t.procedure.input(z.object({ id: z.string(), deletePrefix: z.boolean().optional() })).mutation(async ({ input }) => {
+        const g = ach.getGame(input.id);
+        if (g.running) throw new Error(tt('Feche o jogo antes.'));
+        const plan = planFor(input.id);
+        if (plan.kind === 'blocked') throw new Error(plan.reason);
+        if (plan.kind === 'managed') await ports.uninstall(input.id);
+        else {
+          if (plan.kind === 'steam') await shell.openExternal(`steam://uninstall/${plan.appid}`);
+          else {
+            try { await shell.trashItem(plan.path); }
+            catch (e) { throw new Error(/EBUSY|EPERM|in use|em uso/i.test(String(e)) ? tt('Um arquivo está em uso. Feche o jogo e tente de novo.') : tt('Não deu para mandar para a Lixeira: {0}', { 0: e instanceof Error ? e.message : String(e) })); }
+          }
+          ach.removeGame(input.id);
+          db.prepare('DELETE FROM kv WHERE key = ?').run(`upd.${input.id}`);
+        }
+        if (input.deletePrefix) deletePrefix(input.id);
+        return plan.kind;
+      }),
       openFolder: t.procedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
         const g = ach.listGames().find(x => x.id === input.id);
         if (g) await shell.openPath(g.installDir);
@@ -379,6 +421,7 @@ export function createRouter(deps: RouterDeps) {
     }),
 
     achievements: t.router({
+      dismiss: t.procedure.input(z.object({ items: z.array(z.object({ gameId: z.string(), achId: z.number() })).optional() })).mutation(({ input }) => ach.dismissRecent(input.items)),
       recent: t.procedure.input(z.object({ limit: z.number().int().min(1).max(50).optional() }).optional())
         .query(({ input }) => ach.recentUnlocks(input?.limit)),
       supported: t.procedure.query(() => ADAPTERS.map(a => ({ id: a.id, label: a.label, repos: a.repos }))),

@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { dirname, join, normalize, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { app, BrowserWindow, net, protocol, shell } from 'electron';
+import { app, BrowserWindow, globalShortcut, net, protocol, shell } from 'electron';
 import { createIPCHandler } from 'electron-trpc/main';
 import { kvGet, openDb } from './db';
 import { wineEvents } from './wine/components';
@@ -25,7 +25,9 @@ import { WinCtl } from './window';
 import { Background, playArg, startHidden } from './background';
 import { Updater } from './updater';
 import { initLog, log } from './log';
-import { pickLang, setLang, tt } from '@shared/i18n';
+import { getLang, pickLang, setLang, tt } from '@shared/i18n';
+import { setAchNet } from './achievements/net';
+import { GogAccount } from './gog';
 
 if (process.env.CARTUCHO_USER_DATA) app.setPath('userData', process.env.CARTUCHO_USER_DATA);
 const lockData = { version: app.getVersion() };
@@ -125,6 +127,14 @@ void app.whenReady().then(async () => {
   const ach = new AchievementService(db, app.getPath('appData'));
   const player = new Player(db, ach, p => shell.openPath(p), () => { if (win && !win.isDestroyed() && win.isVisible()) { if (win.isMinimized()) win.restore(); win.focus(); } else bg?.gameClosed(); });
   ach.isRunning = player.isRunning;
+  const gogAcc = new GogAccount(db, ((url, init) => net.fetch(url, init as RequestInit)) as ConstructorParameters<typeof GogAccount>[1]);
+  setAchNet({
+    fetch: ((url, init) => net.fetch(url, init as RequestInit)) as NonNullable<Parameters<typeof setAchNet>[0]['fetch']>,
+    steamKey: () => kvGet(db, 'steam.apikey') || null,
+    gogToken: () => gogAcc.token(),
+    lang: () => (getLang() === 'en' ? 'en' : 'pt'),
+  });
+  player.events.on('play', e => { if (!e.running) setTimeout(() => void ach.refreshRemote(e.gameId), 4000); });
   player.events.on('play', e => log(`jogo ${e.running ? 'aberto' : 'fechado'}:`, e.title, e.sessionMs ? `${Math.round(e.sessionMs / 60000)} min` : ''));
   const gh = createGitHub({ fetch: ((url, init) => net.fetch(url, init as RequestInit)) as Fetch, ...(process.env.CARTUCHO_GITHUB_API ? { api: process.env.CARTUCHO_GITHUB_API } : {}) });
   const defaultPortsDir = join(app.getPath('home'), 'Games', 'Cartucho');
@@ -152,6 +162,22 @@ void app.whenReady().then(async () => {
   });
   if (process.platform === 'win32' || process.platform === 'linux') ingame.setActive(true);
   player.events.on('launch', e => void ingame.place(e.dirs, e.pid));
+  // Teclado durante o jogo: Home chama o Cartucho e Print Screen tira a captura. Fixas, e só valem
+  // com um jogo aberto e o Cartucho fora de foco (fora disso as teclas voltam a ser do sistema).
+  let gameKeys = false;
+  const syncGameKeys = () => {
+    const on = !!player.current() && !(win && !win.isDestroyed() && win.isFocused());
+    if (on === gameKeys) return;
+    gameKeys = on;
+    if (!on) { globalShortcut.unregister('Home'); globalShortcut.unregister('PrintScreen'); return; }
+    if (!globalShortcut.register('Home', () => ingame.fromKeyboard('summon'))) log('não deu para usar a tecla Home durante o jogo: outro programa já usa');
+    if (!globalShortcut.register('PrintScreen', () => ingame.fromKeyboard('shot'))) log('não deu para usar a tecla Print Screen durante o jogo: outro programa já usa');
+  };
+  player.events.on('play', () => setTimeout(syncGameKeys, 0));
+  app.on('browser-window-focus', syncGameKeys);
+  app.on('browser-window-blur', () => setTimeout(syncGameKeys, 0));
+  setInterval(syncGameKeys, 3000);
+  app.on('will-quit', () => globalShortcut.unregisterAll());
   protocol.handle('media', req => {
     const u = new URL(req.url);
     const file = u.hostname === 'art' ? art.resolve(decodeURIComponent(u.pathname)) : u.hostname === 'shots' ? ingame.resolve(u.pathname) : null;
@@ -165,7 +191,7 @@ void app.whenReady().then(async () => {
   player.events.on('progress', p => ports.events.emit('progress', p));
   wineEvents.on('progress', p => ports.events.emit('progress', p));
   createIPCHandler({
-    router: createRouter({ db, ach, ports, player, art, info, ingame, web: new WebPane(() => win), win: () => ctl, bg: () => bg, upd: () => upd, tr: new Translator(db, ((url, init) => net.fetch(url, init as RequestInit)) as ConstructorParameters<typeof Translator>[1]), defaultPortsDir }),
+    router: createRouter({ db, ach, ports, player, art, info, ingame, gog: gogAcc, mainWindow: () => win, web: new WebPane(() => win), win: () => ctl, bg: () => bg, upd: () => upd, tr: new Translator(db, ((url, init) => net.fetch(url, init as RequestInit)) as ConstructorParameters<typeof Translator>[1]), defaultPortsDir }),
     preload: false,
     allow: e => isOurPage(e.senderFrame?.url ?? ''),
   });

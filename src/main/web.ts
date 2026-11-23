@@ -52,8 +52,12 @@ export class WebPane {
     const v = this.view;
     if (!v) return;
     this.view = null;
-    this.win()?.contentView.removeChildView(v);
+    const w = this.win();
+    const hadFocus = v.webContents.isFocused();
+    w?.contentView.removeChildView(v);
     v.webContents.close();
+    // A página tinha o foco do teclado; sem devolver, o Cartucho fica sem ouvir teclado e controle depois de fechar.
+    if (w && !w.isDestroyed() && (hadFocus || w.isFocused())) w.webContents.focus();
     if (!silent) this.events.emit('closed');
   }
 }

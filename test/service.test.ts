@@ -97,21 +97,23 @@ describe('banco, catálogo e conquistas', async () => {
     expect(g).toMatchObject({ title: 'Sonic Unleashed', console: 'x360', adapter: 'unleashed-recomp', catalogId: 'recomps/unleashed', achievements: { unlocked: 1, total: 3 } });
     expect(events).toEqual([]);
 
-    writeFileSync(join(save, 'ACH-DATA'), buildHedgeAch([{ id: 24, time: 1_700_000_000 }, { id: 26, time: 1_700_000_500 }, { id: 99, time: 1_700_000_600 }]));
-    expect(await svc.syncUnlocks(g.id)).toEqual([26, 99]);
+    // 26 e 99 acabaram de ser desbloqueadas (avisa); 25 é antiga e aparece agora (entra calada).
+    const now = Math.floor(Date.now() / 1000);
+    writeFileSync(join(save, 'ACH-DATA'), buildHedgeAch([{ id: 24, time: 1_700_000_000 }, { id: 25, time: 1_600_000_000 }, { id: 26, time: now - 5 }, { id: 99, time: now }]));
+    expect(await svc.syncUnlocks(g.id)).toEqual([25, 26, 99]);
     expect(events).toEqual(['C', 'Conquista #99']);
 
     const view = svc.forGame(g.id);
     expect(view.errors).toEqual([]);
-    expect(view.list.find(a => a.id === 26)).toMatchObject({ name: 'C', points: 30, unlockedAt: 1_700_000_500_000 });
+    expect(view.list.find(a => a.id === 26)).toMatchObject({ name: 'C', points: 30, unlockedAt: (now - 5) * 1000 });
     expect(view.list.find(a => a.id === 24)!.icon).toMatch(/^data:image\/png;base64,/);
     expect(view.list.at(-1)).toMatchObject({ id: 99, name: 'Conquista #99' });
 
     writeFileSync(join(save, 'ACH-DATA'), buildHedgeAch([]));
     await svc.syncUnlocks(g.id);
-    expect(svc.listGames()[0]!.achievements!.unlocked).toBe(3);
+    expect(svc.listGames()[0]!.achievements!.unlocked).toBe(4);
 
-    writeFileSync(join(save, 'ACH-DATA'), buildHedgeAch([{ id: 25, time: 1 }], 50, { badChecksum: true }));
+    writeFileSync(join(save, 'ACH-DATA'), buildHedgeAch([{ id: 27, time: 1 }], 50, { badChecksum: true }));
     await svc.syncUnlocks(g.id);
     expect(svc.forGame(g.id).errors[0]).toMatch(/checksum/);
 

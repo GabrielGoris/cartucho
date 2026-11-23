@@ -46,6 +46,15 @@ export const sfx = {
     initAudio();
     noise(0.05, 0.06, 1200); tone(110, 0.16, 'square', 0.035, 0, 70); tone(1568, 0.05, 'square', 0.015, 0.06);
   },
+  /** Conquista desbloqueada: três notas subindo e um brilho, no timbre do perfil de som atual, bem baixinho. */
+  achievement() {
+    initAudio();
+    const type: OscillatorType = profile === 'square' ? 'square' : profile === 'tri' ? 'triangle' : 'sine';
+    const v = type === 'square' ? 0.018 : type === 'triangle' ? 0.045 : 0.04;
+    arp([659, 880, 1319], type, v, 0.09, 0.22);
+    tone(1760, 0.6, 'sine', v * 0.5, 0.3);
+    tone(2637, 0.5, 'sine', v * 0.25, 0.38);
+  },
   jingle() {
     if (!getSettings().bootSnd) return;
     initAudio();

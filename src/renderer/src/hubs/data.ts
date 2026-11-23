@@ -74,13 +74,14 @@ export function useHubActions() {
   const add = useMutation(trpc.games.addFromDialog.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
   const relink = useMutation(trpc.games.relink.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
   const remove = useMutation(trpc.games.remove.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
+  const uninstall = useMutation(trpc.games.uninstall.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
   const askPrefix = useAskDeletePrefix();
   const checkAll = useMutation({ mutationFn: async (ids: string[]) => { await Promise.all(ids.map(id => qc.fetchQuery(trpc.ports.checkUpdate.queryOptions({ id, force: true }, { staleTime: 0 })))); await qc.invalidateQueries({ queryKey: trpc.ports.checkUpdate.pathKey() }); } });
-  const error = play.error ?? install.error ?? update.error ?? quit.error ?? add.error ?? relink.error ?? remove.error;
+  const error = play.error ?? install.error ?? update.error ?? quit.error ?? add.error ?? relink.error ?? remove.error ?? uninstall.error;
 
   return {
     error: error?.message ?? null,
-    reset: () => { play.reset(); install.reset(); update.reset(); quit.reset(); add.reset(); relink.reset(); },
+    reset: () => { play.reset(); install.reset(); update.reset(); quit.reset(); add.reset(); relink.reset(); uninstall.reset(); },
     primary(g: HubGame): 'play' | 'resume' | 'install' | 'add' | 'pick' | 'relink' | 'none' {
       if (g.installed?.running) { resume.mutate(); return 'resume'; }
       if (g.installed?.missing) {
@@ -96,6 +97,26 @@ export function useHubActions() {
     update: (g: HubGame) => { if (g.installed && !isSelfInstall(g.console)) update.mutate({ id: g.installed.id }); },
     relink: (g: HubGame) => { if (g.installed) relink.mutate({ id: g.installed.id }); },
     remove: async (g: HubGame) => { if (g.installed) remove.mutate({ id: g.installed.id, deletePrefix: await askPrefix(g.installed.id, g.title) }); },
+    /** Pergunta e desinstala. Devolve o que aconteceu, ou null se a pessoa desistiu ou deu erro. */
+    uninstall: async (g: HubGame): Promise<'done' | 'steam' | 'removed' | null> => {
+      const inst = g.installed; if (!inst) return null;
+      if (inst.running) { await askConfirm({ title: tt('Feche {0} antes de desinstalar', { 0: g.title }), ok: tt('OK'), cancel: tt('Voltar') }); return null; }
+      let plan;
+      try { plan = await qc.fetchQuery(trpc.games.uninstallPlan.queryOptions({ id: inst.id }, { staleTime: 0 })); } catch { return null; }
+      if (plan.kind === 'blocked') {
+        const y = await askConfirm({ title: tt('O Cartucho não vai apagar {0}', { 0: g.title }), text: tt('{0} Se quiser, ele só sai da biblioteca e os arquivos ficam.', { 0: plan.reason }), ok: tt('Tirar da biblioteca'), cancel: tt('Cancelar') });
+        if (!y) return null;
+        remove.mutate({ id: inst.id, deletePrefix: await askPrefix(inst.id, g.title) });
+        return 'removed';
+      }
+      const text = plan.kind === 'managed' ? tt('Os arquivos que vieram no download são apagados. Saves e configurações que você mudou ficam na pasta.')
+        : plan.kind === 'steam' ? tt('A Steam vai abrir e pedir para confirmar. O jogo sai da biblioteca do Cartucho.')
+        : plan.kind === 'folder' ? tt('A pasta {0} vai para a Lixeira com tudo o que tem dentro, inclusive saves guardados nela. Dá para recuperar pela Lixeira.', { 0: plan.path })
+        : tt('O arquivo {0} vai para a Lixeira. Dá para recuperar por lá.', { 0: plan.path });
+      if (!await askConfirm({ title: tt('Desinstalar {0}?', { 0: g.title }), text, ok: tt('Desinstalar'), cancel: tt('Manter'), danger: true })) return null;
+      try { await uninstall.mutateAsync({ id: inst.id, deletePrefix: await askPrefix(inst.id, g.title) }); } catch { return null; }
+      return plan.kind === 'steam' ? 'steam' : 'done';
+    },
     reinstall: (g: HubGame) => { if (g.catalog?.repo) install.mutate({ catalogId: g.catalog.id }); },
     addFolder: (g: HubGame) => { if (g.catalog && !g.installed) add.mutate({ catalogId: g.catalog.id }); },
     github: (g: HubGame) => { if (g.repo) window.open(`https://github.com/${g.repo}`, '_blank'); },
@@ -103,6 +124,9 @@ export function useHubActions() {
     checking: checkAll.isPending,
   };
 }
+
+export const uninstallMsg = (r: 'done' | 'steam' | 'removed', title: string) =>
+  r === 'steam' ? tt('Confirme na Steam para desinstalar {0}', { 0: title }) : r === 'removed' ? tt('{0} saiu da biblioteca · nenhum arquivo foi apagado', { 0: title }) : tt('{0} desinstalado', { 0: title });
 
 export const useGameProgress = (g: HubGame | null | undefined) => {
   const a = useProgress(g?.installed?.id), b = useProgress(g?.catalog?.id);

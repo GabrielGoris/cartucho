@@ -104,6 +104,11 @@
 .gv-head h1 { margin: 0; font-family: var(--d-title); font-weight: var(--d-tw); font-size: 72px; line-height: 1.05; text-wrap: balance; }
 .gv-logo { max-width: 760px; max-height: 220px; object-fit: contain; object-position: left center; filter: drop-shadow(0 6px 20px rgba(0,0,0,.45)); align-self: flex-start; }
 .gv-meta { margin: 0; font-size: 26px; color: var(--d-dim); }
+.gv-metarow { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.gv-achpill { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px 0 10px; border: 0; border-radius: 99px; background: color-mix(in srgb, var(--d-ink) 12%, transparent); color: var(--d-ink); font: inherit; font-size: 20px; font-weight: 500; cursor: pointer; transition: transform .12s, box-shadow .12s, background .12s; }
+.gv-achpill:hover { background: color-mix(in srgb, var(--d-ink) 20%, transparent); }
+.gv-achpill.on { box-shadow: var(--d-focus); transform: scale(1.06); }
+.gv-achpill-ic { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--d-acc); color: var(--d-on-acc); font-size: 15px; }
 .gv-pills { position: relative; z-index: 9; display: flex; flex-wrap: wrap; gap: 10px; }
 .gv-pills .pill { padding: 7px 16px; border-radius: 8px; font-size: 21px; font-weight: 500; background: var(--d-line); color: var(--d-ink); }
 .gv-pills .pill.full { background: #1f7a45; color: #fff; } .gv-pills .pill.play { background: #2a63b8; color: #fff; } .gv-pills .pill.wip { background: #a86a10; color: #fff; }
@@ -214,3 +219,50 @@
 .dsc.idle .on { box-shadow: none !important; outline: none !important; transform: none !important; }
 .gv-shots button.mine { position: relative; }
 .gv-shots button.mine::after { content: 'SUA'; position: absolute; top: 8px; left: 8px; padding: 2px 8px; border-radius: 6px; background: var(--d-acc); color: var(--d-on-acc); font-size: 14px; font-weight: 700; letter-spacing: 1px; }
+
+.gv-bigs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin-bottom: 22px; }
+.gv-bigs > div { display: flex; flex-direction: column; gap: 6px; padding: 20px 24px; border-radius: var(--d-r); background: var(--d-panel); border: 1px solid var(--d-line); min-width: 0; }
+.gv-bigs b { font-family: var(--d-title); font-weight: var(--d-tw); font-size: 38px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gv-bigs span { font-size: 20px; color: var(--d-dim); }
+.gv-chart { padding: 22px 24px 16px; border-radius: var(--d-r); background: var(--d-panel); border: 1px solid var(--d-line); }
+.gv-b14 { height: 150px; display: flex; align-items: flex-end; gap: 10px; }
+.gv-b14 i { flex: 1; border-radius: 6px 6px 2px 2px; background: var(--d-acc); min-height: 2px; }
+.gv-b14 i.z { background: var(--d-line); }
+.gv-ax { display: flex; justify-content: space-between; margin-top: 12px; font-size: 18px; color: var(--d-dim); }
+
+/* Coluna das conquistas: à direita da capa, com a altura dela, rolando por dentro (como na Steam). */
+/* Tempo de jogo e conquistas lado a lado, na mesma altura. */
+.gv-duo { max-width: none; }
+.gv-duo-row { display: flex; gap: 40px; align-items: stretch; height: 500px; }
+.gv-duo .gv-time { flex: 1; min-width: 0; max-width: 900px; display: flex; flex-direction: column; }
+.gv-duo .gv-bigs { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.gv-duo .gv-bigs > div { padding: 14px 16px; }
+.gv-duo .gv-bigs b { font-size: 28px; }
+.gv-duo .gv-bigs span { font-size: 16px; }
+.gv-duo .gv-chart { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.gv-duo .gv-b14 { flex: 1; height: auto; gap: 8px; }
+.gv-duo .gv-time > p { flex: 1; }
+.gv-side { flex: 0 0 600px; height: 100%; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--d-line) transparent;
+  padding: 0 16px 16px; border-radius: var(--d-r); background: color-mix(in srgb, var(--gv-solid, #101218) 85%, transparent); border: 1px solid var(--d-line); backdrop-filter: blur(8px); transition: box-shadow .15s, border-color .15s; }
+.gv-side.on { border-color: var(--d-acc); box-shadow: 0 0 0 3px color-mix(in srgb, var(--d-acc) 35%, transparent); }
+.gv-sidehd { position: sticky; top: 0; z-index: 1; margin: 0 -16px; padding: 14px 16px 10px; background: var(--gv-solid, #101218); border-bottom: 1px solid var(--d-line); }
+.gv-sidehd h3 { margin: 0 0 4px; font-family: var(--d-font); font-weight: 500; font-size: 16px; color: var(--d-dim); text-transform: uppercase; letter-spacing: .06em; }
+.gv-achsum { display: flex; align-items: baseline; gap: 6px; margin-bottom: 8px; }
+.gv-achsum b { font-size: 24px; font-weight: 500; line-height: 1; }
+.gv-achsum span { font-size: 15px; color: var(--d-dim); }
+.gv-achsum em { margin-left: auto; font-style: normal; font-size: 15px; color: var(--d-acc); }
+.gv-achbar { height: 6px; border-radius: 99px; background: var(--d-line); overflow: hidden; }
+.gv-achbar i { display: block; height: 100%; background: var(--d-acc); border-radius: inherit; }
+.gv-side h4 { margin: 12px 0 8px; font-size: 13px; font-weight: 500; color: var(--d-dim); text-transform: uppercase; letter-spacing: .06em; }
+.gv-sidenote { font-size: 15px; color: var(--d-dim); margin: 8px 0; }
+.gv-ach { display: flex; gap: 14px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--d-panel); margin-bottom: 8px; min-width: 0; }
+.gv-ach.off { opacity: .55; }
+.gv-ach.off .gv-achic { filter: grayscale(1) brightness(.7); }
+.gv-achic { width: 54px; height: 54px; flex: 0 0 auto; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: var(--d-line); }
+.gv-achic img { width: 100%; height: 100%; object-fit: cover; }
+.gv-achic i { font-style: normal; font-size: 26px; color: var(--d-acc); }
+.gv-acht { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.gv-acht b { font-weight: 500; font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gv-acht span { font-size: 16px; color: var(--d-dim); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.gv-acht small { font-size: 15px; color: var(--d-dim); }
+.gv-achsrc { display: block; margin-top: 10px; font-size: 13px; color: var(--d-dim); }

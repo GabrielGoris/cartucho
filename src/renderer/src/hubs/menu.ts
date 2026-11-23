@@ -3,7 +3,7 @@ import { isSelfInstall } from '@shared/consoles';
 import { useTRPC } from '../trpc';
 import { sfx } from '../lib/sfx';
 import type { DOpt } from '../components/Discover';
-import { useHubActions, type HubGame } from './data';
+import { uninstallMsg, useHubActions, type HubGame } from './data';
 import { tt } from '@shared/i18n';
 
 export function useGameMenu({ show, onInfo, onAch, onRemoved }: { show: (t: string) => void; onInfo: (g: HubGame) => void; onAch?: (g: HubGame) => void; onRemoved?: () => void }) {
@@ -26,6 +26,7 @@ export function useGameMenu({ show, onInfo, onAch, onRemoved }: { show: (t: stri
       if (inst.adapter && onAch) L.push({ k: 'ach', l: tt('Conquistas') });
       L.push({ k: 'folder', l: tt('Abrir pasta') });
       if (inst.exe) L.push({ k: 'exe', l: tt('Trocar o .exe') });
+      if (!inst.running) L.push({ k: 'uninstall', l: tt('Desinstalar') }, { k: 'remove', l: tt('Tirar da biblioteca') });
     } else {
       if (x.repo && !self) L.push({ k: 'install', l: tt('Instalar') });
       L.push({ k: 'add', l: self ? tt('Já instalei: adicionar pasta') : tt('Escolher pasta') });
@@ -50,6 +51,7 @@ export function useGameMenu({ show, onInfo, onAch, onRemoved }: { show: (t: stri
     if (k === 'add') { act.addFolder(x); return show(tt('Escolha a pasta do jogo')); }
     if (k === 'reinstall') { act.reinstall(x); return show(tt('Baixando {0} de novo…', { 0: x.repo })); }
     if (k === 'relink') { act.relink(x); return show(tt('Escolha onde o jogo está agora')); }
+    if (k === 'uninstall') { void act.uninstall(x).then(r => { if (!r) return; onRemoved?.(); show(uninstallMsg(r, x.title)); }); return; }
     if (k === 'remove') { act.remove(x); onRemoved?.(); return show(tt('Jogo tirado da biblioteca · nenhum arquivo apagado')); }
     if (k === 'update') { act.update(x); return show(tt('Atualizando para {0}…', { 0: x.update?.latest?.tag })); }
     if (k === 'ach') return onAch?.(x);

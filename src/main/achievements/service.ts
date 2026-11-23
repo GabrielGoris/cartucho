@@ -25,12 +25,14 @@ const GAME_SQL = `SELECT g.*, c.cover_url, c.platform_name,
   (SELECT COALESCE(SUM(p.ended_at - p.started_at), 0) FROM play_session p WHERE p.game_id = g.id AND p.ended_at IS NOT NULL) play_ms,
   (SELECT MAX(p.started_at) FROM play_session p WHERE p.game_id = g.id) last_played
   FROM installed_game g LEFT JOIN catalog_game c ON c.id = g.catalog_id`;
+const imgType = (b: Uint8Array) => (b[0] === 0xff && b[1] === 0xd8 ? 'image/jpeg' : b[0] === 0x47 && b[1] === 0x49 ? 'image/gif' : b[0] === 0x52 && b[1] === 0x49 ? 'image/webp' : 'image/png');
+export const FEED_DAYS = 14;
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 export class AchievementService {
   readonly events = new EventEmitter<{ unlock: [UnlockEvent]; changed: [string] }>();
-  private watching = new Map<string, string>();
+  private watching = new Map<string, { files: string[]; stop: () => void }>();
   private busy = new Map<string, Promise<number[]>>();
 
   constructor(private db: DB, private appData: string) {}
@@ -174,13 +176,17 @@ export class AchievementService {
   private async doSyncUnlocks(id: string, opts: { silent?: boolean }): Promise<number[]> {
     const r = this.row(id), adapter = adapterById(r.adapter);
     if (!adapter) return [];
-    const file = adapter.unlockFile(this.ctx(r));
-    if (!existsSync(file)) { this.db.prepare('DELETE FROM kv WHERE key = ?').run(`ach.unlockError.${id}`); return []; }
-
+    const ctx = this.ctx(r);
     let unlocks: Unlock[] | null = null, lastErr: unknown;
-    for (let i = 0; i < 4 && !unlocks; i++) {
-      try { unlocks = adapter.readUnlocks(new Uint8Array(await readFile(file))); }
-      catch (e) { lastErr = e; await sleep(250 * (i + 1)); }
+    if (adapter.remote) {
+      try { unlocks = await adapter.remote(ctx); } catch (e) { lastErr = e; }
+    } else {
+      const file = adapter.unlockFile(ctx);
+      if (!file || !existsSync(file)) { this.db.prepare('DELETE FROM kv WHERE key = ?').run(`ach.unlockError.${id}`); return []; }
+      for (let i = 0; i < 4 && !unlocks; i++) {
+        try { unlocks = adapter.readUnlocks(new Uint8Array(await readFile(file)), ctx); }
+        catch (e) { lastErr = e; await sleep(250 * (i + 1)); }
+      }
     }
     if (!unlocks) { kvSet(this.db, `ach.unlockError.${id}`, tt('Não consegui ler os desbloqueios: {0}', { 0: msg(lastErr) })); return []; }
     this.db.prepare('DELETE FROM kv WHERE key = ?').run(`ach.unlockError.${id}`);
@@ -189,20 +195,27 @@ export class AchievementService {
     const have = new Map((this.db.prepare('SELECT ach_id, unlocked_at FROM achievement_unlock WHERE game_id = ?').all(id) as { ach_id: number; unlocked_at: number | null }[]).map(u => [u.ach_id, u.unlocked_at]));
     const ins = this.db.prepare('INSERT INTO achievement_unlock (game_id, ach_id, unlocked_at, seen_at) VALUES (?, ?, ?, ?)');
     const fix = this.db.prepare('UPDATE achievement_unlock SET unlocked_at = ? WHERE game_id = ? AND ach_id = ?');
+    const known = new Set((this.db.prepare('SELECT ach_id FROM achievement_def WHERE game_id = ?').all(id) as { ach_id: number }[]).map(d => d.ach_id));
+    const addDef = this.db.prepare('INSERT INTO achievement_def (game_id, ach_id, name, description, points, image, sort) VALUES (?, ?, ?, ?, NULL, NULL, ?)');
     tx(this.db, () => {
       for (const u of unlocks!) {
         if (!have.has(u.id)) { ins.run(id, u.id, u.at, now); fresh.push(u.id); }
         else if (have.get(u.id) == null && u.at != null) fix.run(u.at, id, u.id);
+        if (u.name && !known.has(u.id)) { addDef.run(id, u.id, u.name, '', 100_000 + known.size); known.add(u.id); }
       }
     });
 
     if (fresh.length) {
       this.events.emit('changed', id);
       if (!opts.silent) {
-        const name = this.db.prepare('SELECT name FROM achievement_def WHERE game_id = ? AND ach_id = ?');
+        const def = this.db.prepare('SELECT name, description, points, image FROM achievement_def WHERE game_id = ? AND ach_id = ?');
         for (const achId of fresh) {
-          const n = (name.get(id, achId) as { name: string } | undefined)?.name ?? tt('Conquista #{0}', { 0: achId });
-          this.events.emit('unlock', { gameId: id, gameTitle: r.title, achId, name: n, at: unlocks.find(u => u.id === achId)?.at ?? now });
+          // Conquistas antigas que aparecem agora (importadas) entram caladas; só avisa o que acabou de acontecer.
+          const at = unlocks.find(u => u.id === achId)?.at ?? null;
+          if (at != null && now - at > 15 * 60_000) continue;
+          const d = def.get(id, achId) as { name: string; description: string; points: number | null; image: Uint8Array | null } | undefined;
+          this.events.emit('unlock', { gameId: id, gameTitle: r.title, achId, name: d?.name ?? tt('Conquista #{0}', { 0: achId }), description: d?.description ?? '', points: d?.points ?? null,
+            icon: d?.image ? `data:${imgType(d.image)};base64,${Buffer.from(d.image).toString('base64')}` : null, at: at ?? now });
         }
       }
     }
@@ -212,17 +225,47 @@ export class AchievementService {
   watch(id: string) {
     const r = this.row(id), adapter = adapterById(r.adapter);
     if (!adapter || this.watching.has(id)) return;
-    const file = adapter.unlockFile(this.ctx(r));
+    const ctx = this.ctx(r);
+    if (adapter.remote) {
+      // Da internet: confere a cada 5 minutos com o jogo aberto, e quando ele fecha (pelo index).
+      const t = setInterval(() => { if (this.isRunning(id)) void this.syncUnlocks(id).catch(() => {}); }, 5 * 60_000);
+      t.unref?.();
+      this.watching.set(id, { files: [], stop: () => clearInterval(t) });
+      return;
+    }
+    const files = [...new Set([adapter.unlockFile(ctx), ...(adapter.watchFiles?.(ctx) ?? [])].filter(Boolean))];
     let timer: NodeJS.Timeout | undefined;
-    watchFile(file, { interval: 1500, persistent: false }, () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => { void this.syncUnlocks(id).catch(() => {}); }, 400);
-    });
-    this.watching.set(id, file);
+    const on = () => { clearTimeout(timer); timer = setTimeout(() => { void this.syncUnlocks(id).catch(() => {}); }, 400); };
+    for (const f of files) watchFile(f, { interval: 1500, persistent: false }, on);
+    this.watching.set(id, { files, stop: () => { clearTimeout(timer); for (const f of files) unwatchFile(f, on); } });
   }
   unwatch(id: string) {
-    const file = this.watching.get(id);
-    if (file) { unwatchFile(file); this.watching.delete(id); }
+    const w = this.watching.get(id);
+    if (w) { w.stop(); this.watching.delete(id); }
+  }
+  /** Jogos que já estavam na biblioteca ganham leitor quando um novo serve para eles. */
+  private detectAdapters() {
+    for (const r of this.db.prepare('SELECT id, install_dir FROM installed_game WHERE adapter IS NULL').all() as { id: string; install_dir: string }[]) {
+      if (!existsSync(r.install_dir)) continue;
+      let a: Adapter | null = null;
+      try { a = adapterForDir(r.install_dir); } catch { }
+      if (a) this.db.prepare('UPDATE installed_game SET adapter = ? WHERE id = ?').run(a.id, r.id);
+    }
+  }
+  /** Relê lista e desbloqueios dos jogos com esses leitores (depois de pôr a chave da Steam ou entrar na GOG). */
+  async resyncKind(kinds: string[]) {
+    for (const g of this.listGames()) {
+      if (!g.adapter || !kinds.includes(g.adapter) || g.missing) continue;
+      await this.syncDefinitions(g.id);
+      await this.syncUnlocks(g.id, { silent: true }).catch(() => {});
+      this.watch(g.id);
+      this.events.emit('changed', g.id);
+    }
+  }
+  /** Confere os desbloqueios de um jogo que veio da internet (chamado quando o jogo fecha). */
+  async refreshRemote(id: string) {
+    let r; try { r = this.row(id); } catch { return; }
+    if (adapterById(r.adapter)?.remote) await this.syncUnlocks(id).catch(() => {});
   }
   async start() {
     for (const r of this.db.prepare('SELECT id, title, install_dir, exe FROM installed_game WHERE catalog_id IS NULL').all() as { id: string; title: string; install_dir: string; exe: string | null }[]) {
@@ -236,20 +279,34 @@ export class AchievementService {
       if (!exe) try { exe = findGameExe(r.install_dir) ?? guessProgram(r.install_dir, r.repo); } catch {  }
       this.db.prepare('UPDATE installed_game SET exe = ?, source_repo = COALESCE(source_repo, ?) WHERE id = ?').run(exe, r.repo, r.id);
     }
+    this.detectAdapters();
     for (const g of this.listGames()) {
-      if (!g.adapter) continue;
+      if (!g.adapter || g.missing) continue;
       if (!this.db.prepare('SELECT 1 FROM achievement_def WHERE game_id = ? LIMIT 1').get(g.id)) await this.syncDefinitions(g.id);
-      await this.syncUnlocks(g.id).catch(() => {});
+      const first = !this.db.prepare('SELECT 1 FROM achievement_unlock WHERE game_id = ? LIMIT 1').get(g.id);
+      await this.syncUnlocks(g.id, { silent: first }).catch(() => {});
       this.watch(g.id);
     }
   }
   stop() { for (const id of [...this.watching.keys()]) this.unwatch(id); }
 
+  /** Conquistas recentes, como notificações: somem sozinhas depois de FEED_DAYS dias ou quando a pessoa apaga. */
   recentUnlocks(limit = 8): RecentUnlock[] {
-    return (this.db.prepare(`SELECT u.game_id, g.title game, u.ach_id, COALESCE(d.name, 'Conquista #' || u.ach_id) name, d.points, COALESCE(u.unlocked_at, u.seen_at) at
+    const since = Date.now() - FEED_DAYS * 86400_000, hidden = this.hiddenFeed();
+    return (this.db.prepare(`SELECT u.game_id, g.title game, u.ach_id, COALESCE(d.name, 'Conquista #' || u.ach_id) name, d.points, d.image, COALESCE(u.unlocked_at, u.seen_at) at
       FROM achievement_unlock u JOIN installed_game g ON g.id = u.game_id LEFT JOIN achievement_def d ON d.game_id = u.game_id AND d.ach_id = u.ach_id
-      ORDER BY at DESC LIMIT ?`).all(limit) as { game_id: string; game: string; ach_id: number; name: string; points: number | null; at: number }[])
-      .map(r => ({ gameId: r.game_id, gameTitle: r.game, achId: r.ach_id, name: r.name, points: r.points, at: r.at }));
+      WHERE COALESCE(u.unlocked_at, u.seen_at) >= ? ORDER BY at DESC LIMIT ?`).all(since, limit + hidden.size) as { game_id: string; game: string; ach_id: number; name: string; points: number | null; image: Uint8Array | null; at: number }[])
+      .filter(r => !hidden.has(`${r.game_id}:${r.ach_id}`)).slice(0, limit)
+      .map(r => ({ gameId: r.game_id, gameTitle: r.game, achId: r.ach_id, name: r.name, points: r.points, at: r.at, icon: r.image ? `data:${imgType(r.image)};base64,${Buffer.from(r.image).toString('base64')}` : null }));
+  }
+  private hiddenFeed() { try { return new Set(JSON.parse(kvGet(this.db, 'ach.feed.hidden') ?? '[]') as string[]); } catch { return new Set<string>(); } }
+  /** Tira conquistas da lista de recentes (todas, se nenhuma for passada). Elas continuam desbloqueadas no jogo. */
+  dismissRecent(keys?: { gameId: string; achId: number }[]) {
+    const since = Date.now() - FEED_DAYS * 86400_000;
+    const live = new Set((this.db.prepare('SELECT game_id, ach_id FROM achievement_unlock WHERE COALESCE(unlocked_at, seen_at) >= ?').all(since) as { game_id: string; ach_id: number }[]).map(r => `${r.game_id}:${r.ach_id}`));
+    const set = new Set([...this.hiddenFeed()].filter(k => live.has(k)));
+    for (const k of keys ?? [...live].map(x => ({ gameId: x.split(':')[0]!, achId: Number(x.split(':')[1]) }))) set.add(`${k.gameId}:${k.achId}`);
+    kvSet(this.db, 'ach.feed.hidden', JSON.stringify([...set]));
   }
 
   totals() {
@@ -265,11 +322,11 @@ export class AchievementService {
     const unlocks = new Map((this.db.prepare('SELECT ach_id, COALESCE(unlocked_at, seen_at) at FROM achievement_unlock WHERE game_id = ?').all(id) as { ach_id: number; at: number }[]).map(u => [u.ach_id, u.at]));
     const list = defs.map(d => ({
       id: d.ach_id, name: d.name, description: d.description, points: d.points, unlockedAt: unlocks.get(d.ach_id) ?? null,
-      icon: d.image ? `data:image/png;base64,${Buffer.from(d.image).toString('base64')}` : null,
+      icon: d.image ? `data:${imgType(d.image)};base64,${Buffer.from(d.image).toString('base64')}` : null,
     }));
     const known = new Set(defs.map(d => d.ach_id));
     for (const [achId, at] of unlocks) if (!known.has(achId)) list.push({ id: achId, name: tt('Conquista #{0}', { 0: achId }), description: '', points: null, unlockedAt: at, icon: null });
     const errors = [kvGet(this.db, `ach.defError.${id}`), kvGet(this.db, `ach.unlockError.${id}`)].filter((e): e is string => !!e);
-    return { game: this.toGame(r), origin: kvGet(this.db, `ach.origin.${id}`), unlockFile: adapter ? adapter.unlockFile(this.ctx(r)) : null, errors, list };
+    return { game: this.toGame(r), origin: kvGet(this.db, `ach.origin.${id}`), unlockFile: adapter ? adapter.unlockFile(this.ctx(r)) || null : null, errors, list };
   }
 }

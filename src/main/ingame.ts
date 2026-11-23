@@ -186,6 +186,13 @@ export class InGame {
     }
   }
 
+  /** Atalhos fixos do teclado durante o jogo (Home e Print Screen). */
+  fromKeyboard(a: 'summon' | 'shot') {
+    if (this.d.focused()) return;
+    if (a === 'summon') { log('Cartucho chamado pelo teclado (Home)'); void this.summon(); }
+    else { log('captura pelo teclado (Print Screen)'); void this.capture(); }
+  }
+
   private async lateShot() {
     if (this.pre) { await this.capture(true); await this.back(); return; }
     await this.back();

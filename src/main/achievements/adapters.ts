@@ -7,6 +7,9 @@ import { readHedgeAch, readOxygenAchievements, readRsdkUserdata, type Unlock } f
 import { SONIC3AIR } from './data/sonic3air';
 import { SONIC1_2013, SONIC2_2013 } from './data/rsdk4';
 import { tt } from '@shared/i18n';
+import { steamEmu, steamLegit } from './steam';
+import { gog } from './gog';
+import { recompLocal } from './recomp';
 
 export interface AdapterContext {
   installDir: string;
@@ -25,8 +28,13 @@ export interface Adapter {
   detect(dir: string): boolean;
   definitions(ctx: AdapterContext): Promise<Definitions>;
 
+  /** Arquivo de desbloqueios (vazio quando vem da internet). */
   unlockFile(ctx: AdapterContext): string;
-  readUnlocks(buf: Uint8Array): Unlock[];
+  readUnlocks(buf: Uint8Array, ctx: AdapterContext): Unlock[];
+  /** Outros arquivos que podem receber desbloqueios (observados todos). */
+  watchFiles?(ctx: AdapterContext): string[];
+  /** Desbloqueios que vêm da internet em vez de um arquivo. */
+  remote?(ctx: AdapterContext): Promise<Unlock[]>;
 }
 
 const hasFile = (dir: string, ...names: string[]) => names.some(n => existsSync(join(dir, n)));
@@ -95,7 +103,7 @@ export const rsdkv4: Adapter = {
   readUnlocks: readRsdkUserdata,
 };
 
-export const ADAPTERS: Adapter[] = [unleashedRecomp, marathonRecomp, sonic3air, rsdkv4];
+export const ADAPTERS: Adapter[] = [unleashedRecomp, marathonRecomp, sonic3air, rsdkv4, steamLegit, gog, steamEmu, recompLocal];
 
 export const adapterForRepo = (repo: string | null | undefined) => {
   const name = (repo ?? '').split('/').pop()?.toLowerCase() ?? '';

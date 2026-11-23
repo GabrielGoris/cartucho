@@ -121,11 +121,58 @@ function Carousel({ list, G, sel, mode, zoom, padColor, onSelect, onEnter }: { l
   const anim = useRef({ rotTarget: -sel * STEP, rotNow: -sel * STEP, zoom: 0 });
   const tmp = useMemo(() => new THREE.Vector3(), []);
   const { camera, gl } = useThree();
+  // Arrastar com o mouse gira o palco; o console que passa na frente fica escolhido.
+  const drag = useRef({ on: false, id: -1, x0: 0, rot0: 0, moved: false, lastX: 0, lastT: 0, vel: 0 });
+  const live = useRef({ sel, mode, n: list.length, onSelect });
+  live.current = { sel, mode, n: list.length, onSelect };
 
   useEffect(() => {
+    const el = gl.domElement, d = drag.current;
+    const PX = 190; // pixels para passar um console
+    const idxOf = (rot: number) => { const n = live.current.n; return ((Math.round(-rot / STEP) % n) + n) % n; };
+    const down = (e: PointerEvent) => {
+      if (e.button !== 0 || live.current.mode !== 'stage') return;
+      d.on = true; d.id = e.pointerId; d.x0 = e.clientX; d.rot0 = anim.current.rotTarget; d.moved = false;
+      d.lastX = e.clientX; d.lastT = performance.now(); d.vel = 0;
+    };
+    const move = (e: PointerEvent) => {
+      if (!d.on || e.pointerId !== d.id) return;
+      const dx = e.clientX - d.x0;
+      if (!d.moved && Math.abs(dx) < 6) return;
+      if (!d.moved) { d.moved = true; try { el.setPointerCapture(e.pointerId); } catch { } }
+      el.style.cursor = 'grabbing';
+      const now = performance.now(), dt = Math.max(1, now - d.lastT);
+      d.vel = d.vel * 0.6 + ((e.clientX - d.lastX) / dt) * 0.4; d.lastX = e.clientX; d.lastT = now;
+      const a = anim.current;
+      a.rotTarget = d.rot0 + (dx / PX) * STEP;
+      a.rotNow = a.rotNow + (a.rotTarget - a.rotNow) * 0.5;
+      const i = idxOf(a.rotTarget);
+      if (i !== live.current.sel) live.current.onSelect(i);
+    };
+    const up = (e: PointerEvent) => {
+      if (!d.on || e.pointerId !== d.id) return;
+      d.on = false;
+      try { el.releasePointerCapture(e.pointerId); } catch { }
+      if (!d.moved) return;
+      el.style.cursor = '';
+      const a = anim.current;
+      const fling = Math.max(-3, Math.min(3, d.vel * 1.6)); // embalo do arrasto, até 3 consoles
+      a.rotTarget = Math.round((a.rotTarget + (fling * STEP) / 2) / STEP) * STEP;
+      const i = idxOf(a.rotTarget);
+      if (i !== live.current.sel) live.current.onSelect(i);
+    };
+    el.addEventListener('pointerdown', down);
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    return () => { el.removeEventListener('pointerdown', down); el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); };
+  }, [gl, STEP]);
+
+  useEffect(() => {
+    if (list[sel]) setModelFocus(list[sel]!.id);
+    if (drag.current.on && drag.current.moved) return;
     const a = anim.current, base = -sel * STEP, TAU = Math.PI * 2;
     a.rotTarget = base + Math.round((a.rotTarget - base) / TAU) * TAU;
-    if (list[sel]) setModelFocus(list[sel]!.id);
   }, [sel, STEP, list]);
 
   useFrame((state, delta) => {
@@ -149,10 +196,10 @@ function Carousel({ list, G, sel, mode, zoom, padColor, onSelect, onEnter }: { l
 
   const click = (i: number) => (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
-    if (mode !== 'stage') return;
+    if (mode !== 'stage' || drag.current.moved) return;
     if (i === sel) onEnter(i); else onSelect(i);
   };
-  const hover = (on: boolean) => () => { if (mode === 'stage') gl.domElement.style.cursor = on ? 'pointer' : ''; };
+  const hover = (on: boolean) => () => { if (mode === 'stage' && !drag.current.on) gl.domElement.style.cursor = on ? 'pointer' : ''; };
 
   return (
     <group ref={carousel}>

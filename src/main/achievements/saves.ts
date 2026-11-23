@@ -1,7 +1,8 @@
 import { Reader } from './binary';
 import { tt } from '@shared/i18n';
 
-export interface Unlock { id: number; at: number | null }
+/** `name` é o nome de API (Steam, GOG), usado quando a lista não tem essa conquista. */
+export interface Unlock { id: number; at: number | null; name?: string }
 
 export function readHedgeAch(buf: Uint8Array): Unlock[] {
   const r = new Reader(buf, true);

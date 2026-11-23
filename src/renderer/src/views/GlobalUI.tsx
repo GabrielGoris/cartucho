@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSubscription } from '@trpc/tanstack-react-query';
 import { useTRPC } from '../trpc';
-import { cancelBindRec, Glyph, IdxChips, PAD_NAMES, useBindRec, useKeys, usePadKind } from '../lib/input';
+import { cancelBindRec, cancelKeyRec, Glyph, IdxChips, PAD_NAMES, useBindRec, useKeyRec, useKeys, usePadKind } from '../lib/input';
 import { useSpatialNav } from '../lib/spatial';
 import { getSettings, setSettings, useSettings } from '../lib/settings';
 import { sfx } from '../lib/sfx';
@@ -34,7 +34,18 @@ export const BIND_NAMES = () => ({ summon: tt('Chamar o Cartucho'), shot: tt('Ti
 
 export function BindRecHost() {
   const r = useBindRec();
+  const kr = useKeyRec();
   useKeys(k => { if (k === 'Escape') { sfx.play('back'); cancelBindRec(); } }, !!r);
+  if (kr) return (
+    <div className="ov gl-ov" onClick={() => { sfx.play('back'); cancelKeyRec(); }}>
+      <div className="gl-box gl-padset">
+        <h3>{kr.label}</h3>
+        <p>{tt('Aperte no teclado a tecla que você quer para esta ação.')}</p>
+        <div className="gl-padstep gl-bindstep"><span>{tt('Esperando uma tecla…')}</span></div>
+        <p className="gl-padnote">{kr.k === 'Escape' ? tt('Esc deixa o Esc como Voltar. Clique fora para cancelar.') : tt('Esc cancela.')}</p>
+      </div>
+    </div>
+  );
   if (!r) return null;
   return (
     <div className="ov gl-ov">

@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSubscription } from '@trpc/tanstack-react-query';
 import { useState } from 'react';
 import { useTRPC } from '../trpc';
-import { BindChips, buttonOf, Glyph, PAD_NAMES, PadTester, PhysGlyph, rebind, recordButtons, resetPadMap, SETUP_STEPS, tokensOf, usePad, type Key } from '../lib/input';
+import { BindChips, buttonOf, Glyph, KB_DEFAULT, keyLabel, PAD_NAMES, PadTester, PhysGlyph, rebind, rebindKey, recordButtons, recordKey, resetKbMap, resetPadMap, SETUP_STEPS, tokensOf, useKbMap, usePad, usePadKind, type Key } from '../lib/input';
 import { BIND_NAMES } from './GlobalUI';
 import { bindsFor } from '@shared/binds';
 import { PALETTES, paletteById } from '../lib/palettes';
@@ -37,7 +37,7 @@ const ROWS: Record<string, Row> = Object.fromEntries(([
   { k: 'lang', t: tt('Idioma'), d: tt('Automático segue o idioma do Windows.'), kind: 'pick', opts: [['auto', tt('Automático')], ['pt', tt('Português')], ['en', tt('English')]] },
   { k: 'boot', t: tt('Mostrar a abertura'), d: tt('Desligado, o Cartucho abre direto.'), kind: 'sw' },
   { k: 'start', t: tt('Começar em'), d: '', kind: 'pick', opts: [['act', tt('Início')], ['stage', tt('Consoles')]] },
-  { k: 'pad', t: tt('Botões na tela'), d: tt('Automático segue o controle conectado.'), kind: 'pick', opts: Object.entries(PAD_NAMES) as [string, string][] },
+  { k: 'pad', t: tt('Botões na tela'), d: tt('Automático segue o que você usou por último: teclado ou controle.'), kind: 'pick', opts: Object.entries(PAD_NAMES) as [string, string][] },
   { k: 'translate', t: tt('Traduzir textos dos jogos'), d: tt('Descrições e requisitos do catálogo vêm em inglês; o Cartucho traduz pelo MyMemory e guarda.'), kind: 'sw' },
 ] as Row[]).map(r => [r.k, r]));
 
@@ -78,8 +78,35 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
       sfx.play(err ? 'back' : 'ok'); setNote([k, err ?? tt('Botão trocado.')]);
     });
   };
-  const resetAll = () => { sfx.play('ok'); if (pad) { resetPadMap(pad.id); setBind.mutate({ pad: pad.id, action: 'shot', bind: null }); } setNote(['reset', tt('Tudo de volta ao padrão.')]); };
+  const kbMode = usePadKind() === 'kb';
+  const kb = useKbMap();
+  const askKey = (k: Key, name: string) => {
+    sfx.play('ok'); setNote(null);
+    void recordKey(name, k).then(key => {
+      if (!key) return;
+      const err = rebindKey(k, key);
+      sfx.play(err ? 'back' : 'ok'); setNote([k, err ?? tt('Tecla trocada.')]);
+    });
+  };
+  const keyChips = (k: Key) => { const ks = kb[k] ?? []; return ks.length ? <span className="bind">{ks.map((x, i) => <span key={x} className="bind-k">{i > 0 && <i>/</i>}<span className="gp kb">{keyLabel(x)}</span></span>)}</span> : <span className="gp pill">—</span>; };
+  const resetAll = () => { sfx.play('ok'); if (kbMode) { resetKbMap(); setNote(['reset', tt('Teclas de volta ao padrão.')]); return; } if (pad) { resetPadMap(pad.id); setBind.mutate({ pad: pad.id, action: 'shot', bind: null }); } setNote(['reset', tt('Tudo de volta ao padrão.')]); };
   const nameRef = useRef<HTMLInputElement>(null);
+  const keyRef = useRef<HTMLInputElement>(null);
+  const steamKey = useQuery(trpc.settings.steamKey.queryOptions());
+  const [keyDraft, setKeyDraft] = useState<string | null>(null);
+  const [keyNote, setKeyNote] = useState<string | null>(null);
+  const saveKey = useMutation(trpc.settings.setSteamKey.mutationOptions({
+    onSuccess: k => { qc.setQueryData(trpc.settings.steamKey.queryKey(), k); setKeyDraft(null); setKeyNote(k ? tt('Chave salva. As listas dos jogos da Steam foram buscadas de novo.') : tt('Chave apagada.')); void qc.invalidateQueries({ queryKey: trpc.achievements.pathKey() }); void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }); },
+    onError: e => setKeyNote(e.message),
+  }));
+  const gogQ = useQuery(trpc.settings.gog.queryOptions());
+  const gogIn = useMutation(trpc.settings.gogLogin.mutationOptions({ onSuccess: d => { qc.setQueryData(trpc.settings.gog.queryKey(), d); void qc.invalidateQueries({ queryKey: trpc.achievements.pathKey() }); void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }); } }));
+  const gogOut = useMutation(trpc.settings.gogLogout.mutationOptions({ onSuccess: d => qc.setQueryData(trpc.settings.gog.queryKey(), d) }));
+  const gogRow = () => {
+    sfx.play('ok');
+    if (!gogQ.data?.signedIn) return gogIn.mutate();
+    void askConfirm({ title: tt('Sair da conta da GOG?'), text: tt('As conquistas que o Cartucho já viu ficam guardadas.'), ok: tt('Sair'), cancel: tt('Cancelar') }).then(y => { if (y) gogOut.mutate(); });
+  };
   const win = useQuery(trpc.win.state.queryOptions());
   useSubscription(trpc.win.onState.subscriptionOptions(undefined, { onData: d => qc.setQueryData(trpc.win.state.queryKey(), d) }));
   const toggleFs = useMutation(trpc.win.toggleFullScreen.mutationOptions());
@@ -195,15 +222,23 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
             <PadTester />
             <p className="st-note">{tt('Aperte os botões do controle: cada um que o Windows mostra para os programas acende aqui, e só esses podem ser usados. Alguns controles escondem os botões extras no modo Xbox (XInput); no 8BitDo Ultimate 2, por exemplo, L4/R4 e as palhetas de trás só aparecem no modo Bluetooth (DInput).')}</p>
           </>}
-          <div className="st-sec">{tt('BOTÕES DO CARTUCHO')}</div>
-          {!pad && <p className="st-note">{tt('Conecte um controle e aperte qualquer botão nele para trocar os botões.')}</p>}
-          {SETUP_STEPS.map(([k, name, hint]) => (
+          <div className="st-sec">{kbMode ? tt('TECLAS DO CARTUCHO') : tt('BOTÕES DO CARTUCHO')}</div>
+          {kbMode && <p className="st-note">{pad ? tt('Você está no teclado. Aperte qualquer botão do controle para trocar os botões dele.') : tt('Você está no teclado. Para trocar os botões de um controle, conecte ele e aperte qualquer botão.')}</p>}
+          {!kbMode && !pad && <p className="st-note">{tt('Conecte um controle e aperte qualquer botão nele para trocar os botões.')}</p>}
+          {kbMode && SETUP_STEPS.map(([k, name]) => (
+            <button key={k} className="st-r st-bind" data-hf onClick={() => askKey(k, name)}>
+              <span><span className="t">{name}</span><span className="d">{note?.[0] === k ? note[1] : tt('Padrão: {0}', { 0: (KB_DEFAULT[k] ?? []).map(keyLabel).join(tt(' ou ')) })}</span></span>
+              <span className="c">{keyChips(k)}</span>
+            </button>
+          ))}
+          {!kbMode && SETUP_STEPS.map(([k, name, hint]) => (
             <button key={k} className="st-r st-bind" data-hf disabled={!pad} onClick={() => askNav(k, name)}>
               <span><span className="t">{name}</span><span className="d">{note?.[0] === k ? note[1] : hint}</span></span>
               <span className="c"><PhysGlyph i={buttonOf(pad, k) ?? -1} pad={pad} /></span>
             </button>
           ))}
           <div className="st-sec">{tt('ATALHOS DURANTE O JOGO')}</div>
+          {kbMode && <p className="st-note">{tt('No teclado eles são fixos: com um jogo aberto, Home chama o Cartucho e Print Screen tira a captura. Os botões abaixo são do controle.')}</p>}
           {LINUX && <p className="st-note">{tt('No Linux, trazer o Cartucho para a frente e a captura do instante do primeiro botão precisam de uma sessão X11 com o xdotool instalado. No Wayland a captura passa pelo sistema, que pode pedir permissão na primeira vez, e o Cartucho não consegue pegar o foco sozinho.')}</p>}
           {(['summon', 'shot'] as const).map(a => (
             <button key={a} className="st-r st-bind" data-hf disabled={!pad} onClick={() => askBind(a)}>
@@ -212,10 +247,10 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
             </button>
           ))}
           <button className="st-r" data-hf onClick={resetAll}>
-            <span><span className="t">{tt('Restaurar o padrão')}</span><span className="d">{note?.[0] === 'reset' ? note[1] : tt('Volta todos os botões e atalhos ao original deste controle.')}</span></span>
+            <span><span className="t">{tt('Restaurar o padrão')}</span><span className="d">{note?.[0] === 'reset' ? note[1] : kbMode ? tt('Volta todas as teclas ao original.') : tt('Volta todos os botões e atalhos ao original deste controle.')}</span></span>
             <span className="c"><span className="st-pick"><b style={{ minWidth: 0 }}>{tt('Restaurar')}</b>›</span></span>
           </button>
-          <p className="st-note">{tt('Enter troca o botão: aperte no controle o que você quer. Se ele já estiver em outra ação, as duas trocam de lugar.')}</p>
+          <p className="st-note">{kbMode ? tt('Enter troca a tecla: aperte a que você quer. Se ela já estiver em outra ação, as duas trocam de lugar. As setas, Tab, Home e os atalhos S, C, M, P e / são fixos.') : tt('Enter troca o botão: aperte no controle o que você quer. Se ele já estiver em outra ação, as duas trocam de lugar.')}</p>
           </>}
           {tab === 'Jogos' && <>
           <button className="st-r" data-hf onClick={() => pickDir.mutate()}>
@@ -225,6 +260,16 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
             {bg.data && bgRow('screen', tt('Abrir o jogo na tela do Cartucho'), tt('Com mais de um monitor, o jogo vai para a tela onde o Cartucho está. Jogos em tela cheia exclusiva podem ignorar.'))}
             {bg.data && bgRow('track', tt('Contar jogos abertos fora do Cartucho'), tt('Com o Cartucho aberto (ou na bandeja), o tempo conta mesmo se você abrir o jogo pelo .exe ou por um atalho.'))}
             {getLang() === 'pt' && row('translate')}
+          <div className="st-sec">{tt('CONQUISTAS')}</div>
+          <p className="st-note">{tt('O Cartucho lê as conquistas da Steam deste PC, dos emuladores de Steam (Goldberg, GSE, CODEX, RUNE) e da sua conta da GOG. Só lê: nada é enviado para a Steam nem para a GOG.')}</p>
+          <button className="st-r" data-hf onClick={() => keyRef.current?.focus()}>
+            <span><span className="t">{tt('Chave da API da Steam')}</span><span className="d">{keyNote ?? tt('Opcional. Serve para buscar nomes e ícones quando a Steam deste PC não tem a lista do jogo. Pegue a sua em steamcommunity.com/dev/apikey.')}</span></span>
+            <span className="c"><SearchBox ref={keyRef} value={keyDraft ?? steamKey.data ?? ''} onChange={v => setKeyDraft(v.slice(0, 64))} onDone={() => { if (keyDraft != null) saveKey.mutate({ key: keyDraft }); }} placeholder={tt('Sem chave')} nav={false} className="st-name" /></span>
+          </button>
+          <button className="st-r" data-hf onClick={gogRow} disabled={gogIn.isPending}>
+            <span><span className="t">{tt('Conta da GOG')}</span><span className="d">{gogIn.isPending ? tt('Entre na janela da GOG que abriu…') : gogQ.data?.signedIn ? tt('Conectada{0}. Enter sai da conta.', { 0: gogQ.data.name ? ` (${gogQ.data.name})` : '' }) : tt('Para ver as conquistas dos jogos da GOG. Enter abre o login da GOG.')}</span></span>
+            <span className="c"><span className="st-pick"><b style={{ minWidth: 0 }}>{gogQ.data?.signedIn ? tt('Sair') : tt('Entrar')}</b>›</span></span>
+          </button>
           <button className="st-r" data-hf onClick={() => artRefresh.mutate()} disabled={artRefresh.isPending}>
             <span><span className="t">{tt('Imagens dos jogos')}</span><span className="d">{artStatus ?? artStatus0.data ?? tt('Capas, fundos e logos do LaunchBox Games Database. Enter baixa o banco de novo e procura as que faltaram.')}</span></span>
             <span className="c"><span className="st-pick"><b style={{ minWidth: 0 }}>{artRefresh.isPending ? tt('Atualizando…') : tt('Atualizar')}</b>›</span></span>

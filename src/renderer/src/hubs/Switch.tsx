@@ -16,7 +16,7 @@ import { Discover, initialDiscover, type DOpt } from '../components/Discover';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
-import { useFeed, useGameProgress, useHubActions, useHubData, type HubGame } from './data';
+import { uninstallMsg, useFeed, useGameProgress, useHubActions, useHubData, type HubGame } from './data';
 import { tt } from '@shared/i18n';
 
 type Page = 'home' | 'cat' | 'news' | 'time' | 'upd' | 'cfg' | 'game';
@@ -154,7 +154,8 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     if (!inst) return [self ? { k: 'add', l: tt('Já instalei: adicionar pasta') } : { k: 'install', l: tt('Instalar') }, ...(!self ? [{ k: 'add', l: tt('Escolher pasta') }] : []), ...(g.repo ? [{ k: 'gh', l: tt('Ver no GitHub') }] : [])];
     return [inst.running ? { k: 'play', l: tt('Voltar para o jogo') } : inst.exe ? { k: 'play', l: tt('Jogar') } : { k: 'exe', l: tt('Escolher o .exe') }, ...(inst.running ? [{ k: 'quit', l: tt('Fechar o jogo') }] : []),
       ...(g.update?.updateAvailable && !self ? [{ k: 'ver', l: tt('Atualizar para {0}', { 0: g.update.latest?.tag }) }] : []),
-      { k: 'folder', l: tt('Abrir pasta') }, ...(inst.exe ? [{ k: 'exe', l: tt('Trocar o .exe') }] : []), ...(g.repo ? [{ k: 'gh', l: tt('Ver no GitHub') }] : [])];
+      { k: 'folder', l: tt('Abrir pasta') }, ...(inst.exe ? [{ k: 'exe', l: tt('Trocar o .exe') }] : []), ...(g.repo ? [{ k: 'gh', l: tt('Ver no GitHub') }] : []),
+      ...(!inst.running ? [{ k: 'uninstall', l: tt('Desinstalar') }, { k: 'remove', l: tt('Tirar da biblioteca') }] : [])];
   };
   const gRun = (k: string, g: HubGame) => {
     if (k === 'quit') { act.quit(g); sfx.play('back'); return show(tt('Fechando {0}…', { 0: g.title })); }
@@ -163,6 +164,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
     if (k === 'exe') { sfx.play('ok'); return chooseExe.mutate({ id: g.installed!.id }); }
     if (k === 'reinstall') { sfx.play('ok'); act.reinstall(g); return show(tt('Baixando {0} de novo… o tempo de jogo continua', { 0: g.repo })); }
     if (k === 'relink') { sfx.play('ok'); act.relink(g); return show(tt('Escolha onde o jogo está agora')); }
+    if (k === 'uninstall') { sfx.play('ok'); void act.uninstall(g).then(r => { if (!r) return; show(uninstallMsg(r, g.title)); up({ page: 'home', zone: 'row', game: null, from: null }); }); return; }
     if (k === 'remove') { sfx.play('back'); act.remove(g); show(tt('{0} saiu da biblioteca · nenhum arquivo foi apagado', { 0: g.title })); return up({ page: 'home', zone: 'row', game: null, from: null }); }
     if (k === 'folder') { sfx.play('ok'); return openFolder.mutate({ id: g.installed!.id }); }
     if (k === 'gh') { sfx.play('ok'); return act.github(g); }
@@ -236,7 +238,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
                 options={dOpts} run={dRun} onOpen={x => open('game', { game: x.key, from: 'cat', fromSi: 0 })} onBack={() => { sfx.play('back'); up({ page: 'home', zone: 'row' }); }} />
             : st.page === 'game'
             ? game && <GameView theme="d-s2" g={game} self={self} opts={gOpts(game)} run={gRun} onBack={closeGame}
-                extra={game.installed && <>{game.installed.adapter && <><h3>{tt('Conquistas')}</h3><GameAch id={game.installed.id} /></>}<h3>{tt('Tempo de jogo')}</h3><GameTime g={game} /></>} />
+                />
             : st.page === 'home'
             ? <Home v1={v1} row={row} st={st} feedCount={data.feed.length} updCount={data.withUpdate.length} newCount={data.catalog.filter(g => g.isNew).length}
                 onTile={i => { if (st.zone === 'row' && st.idx === i) enter(); else { sfx.play('move'); up({ zone: 'row', idx: i }); } }}

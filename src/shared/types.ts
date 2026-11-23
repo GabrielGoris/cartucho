@@ -87,9 +87,9 @@ export interface GameAchievements {
   list: AchievementView[];
 }
 
-export interface UnlockEvent { gameId: string; gameTitle: string; achId: number; name: string; at: number }
+export interface UnlockEvent { gameId: string; gameTitle: string; achId: number; name: string; at: number; description?: string; icon?: string | null; points?: number | null }
 
-export interface RecentUnlock { gameId: string; gameTitle: string; achId: number; name: string; points: number | null; at: number }
+export interface RecentUnlock { gameId: string; gameTitle: string; achId: number; name: string; points: number | null; at: number; icon?: string | null }
 
 export interface LibrarySummary {
   catalogTotal: number;

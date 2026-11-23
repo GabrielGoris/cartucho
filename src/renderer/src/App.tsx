@@ -55,9 +55,11 @@ export function App() {
   const [gov, setGov] = useState<null | 'radar' | 'me' | 'support'>(null);
   const confirmReq = useConfirmReq();
   const [tvAnim, setTvAnim] = useState<'' | 'off' | 'on'>('');
-  const [toasts, setToasts] = useState<{ k: string; n: string; g: string }[]>([]);
+  type Toast = { k: string; n: string; g: string; icon?: string | null; ach?: boolean; out?: boolean };
+  const [toasts, setToasts] = useState<Toast[]>([]);
   const [playing, setPlaying] = useState<Record<string, string>>({});
-  const toast = (t: { k: string; n: string; g: string }) => { setToasts(x => [...x, t]); setTimeout(() => setToasts(x => x.filter(y => y !== t)), 6000); };
+  const dropToast = (t: Toast) => { setToasts(x => x.map(y => (y === t ? { ...y, out: true } : y))); setTimeout(() => setToasts(x => x.filter(y => y !== t && !(y.out && y.n === t.n && y.g === t.g))), 320); };
+  const toast = (t: Toast) => { setToasts(x => [...x.slice(-3), t]); setTimeout(() => dropToast(t), t.ach ? 7000 : 6000); };
 
   const trpc = useTRPC(), qc = useQueryClient();
   const resume = useMutation(trpc.ingame.back.mutationOptions());
@@ -122,7 +124,7 @@ export function App() {
   }), [booting, picker]);
 
   useSubscription(trpc.achievements.onUnlock.subscriptionOptions(undefined, {
-    onData: (e: UnlockEvent) => toast({ k: tt('CONQUISTA DESBLOQUEADA'), n: e.name, g: e.gameTitle }),
+    onData: (e: UnlockEvent) => { sfx.achievement(); toast({ k: tt('CONQUISTA DESBLOQUEADA'), n: e.name, g: e.gameTitle, icon: e.icon ?? null, ach: true }); },
   }));
   useSubscription(trpc.ports.onProgress.subscriptionOptions(undefined, {
     onData: p => { pushProgress(p); if (p.done) { void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }); void qc.invalidateQueries({ queryKey: trpc.library.summary.queryKey() }); } },
@@ -185,10 +187,15 @@ export function App() {
       {askPicker && <ConsolePicker first={!s.picked} onClose={() => setPicker(false)} />}
       {booting && <Boot summary={summary.data} onDone={() => setBooting(false)} />}
 
-      {(gameOpen || away != null) && <button className="playing" onClick={back}>▶ {Object.values(playing).join(', ') || away ? tt('JOGANDO {g}', { g: (Object.values(playing).join(', ') || away || '').toUpperCase() }) : tt('JOGO ABERTO')}<span className="pl-k"><Glyph a="home" pad />{tt('voltar para o jogo')}</span></button>}
+      {(gameOpen || away != null) && <button className="playing" onClick={back}>▶ {Object.values(playing).join(', ') || away ? tt('JOGANDO {g}', { g: (Object.values(playing).join(', ') || away || '').toUpperCase() }) : tt('JOGO ABERTO')}<span className="pl-k"><Glyph a="home" />{tt('voltar para o jogo')}</span></button>}
       <div className="toasts">
-        {toasts.map((t, i) => (
-          <div key={i} className="toast">
+        {toasts.map((t, i) => t.ach ? (
+          <button key={i} className={`toast ach ${t.out ? 'out' : ''}`} onClick={() => dropToast(t)}>
+            <span className="toast-ic">{t.icon ? <img src={t.icon} alt="" /> : <i>★</i>}</span>
+            <span className="toast-b"><span className="toast-k">{t.k}</span><span className="toast-n">{t.n}</span><span className="toast-g">{t.g}</span></span>
+          </button>
+        ) : (
+          <div key={i} className={`toast ${t.out ? 'out' : ''}`}>
             <div className="toast-k">{t.k}</div>
             <div className="toast-n">{t.n}</div>
             <div className="toast-g">{t.g}</div>

@@ -64,7 +64,10 @@ export function MeOverlay({ onClose }: { onClose: () => void }) {
   const me = useProfile();
   const trpc = useTRPC();
   const summary = useQuery(trpc.library.summary.queryOptions());
+  const qc = useQueryClient();
   const recent = useQuery(trpc.achievements.recent.queryOptions({ limit: 8 }));
+  const dismiss = useMutation(trpc.achievements.dismiss.mutationOptions({ onSuccess: () => void qc.invalidateQueries({ queryKey: trpc.achievements.recent.pathKey() }) }));
+  const drop = (items?: { gameId: string; achId: number }[]) => { sfx.play('back'); dismiss.mutate(items ? { items } : {}); };
   const stats = useQuery(trpc.play.stats.queryOptions());
   const a = summary.data?.achievements, st = stats.data;
   const week = st ? st.days.slice(7).reduce((x, y) => x + y, 0) : 0;
@@ -72,11 +75,13 @@ export function MeOverlay({ onClose }: { onClose: () => void }) {
     <Shell title={me.name.toUpperCase()} onClose={onClose}>
       <div className="hm-big glow">{fmtPlay(st?.totalMs ?? 0)}<small>{tt('{0} nos últimos 7 dias · {1} na biblioteca', { 0: fmtPlay(week * 3600_000), 1: plural(summary.data?.installed ?? 0, tt('jogo'), tt('jogos')) })}</small></div>
       {st && <Bars days={st.days.slice(7)} />}
-      <div className="hm-sub">{tt('CONQUISTAS · {0} de {1}', { 0: a?.unlocked ?? 0, 1: a?.total ?? 0 })}</div>
+      <div className="hm-sub hm-achbar"><span>{tt('CONQUISTAS · {0} de {1}', { 0: a?.unlocked ?? 0, 1: a?.total ?? 0 })}</span><span className="grow" />
+        {!!recent.data?.length && <button data-hf onClick={() => drop()}>{tt('Limpar')}</button>}</div>
       <div className="hm-ach">
-        {recent.data?.length === 0 && <span className="dim">{tt('Nenhuma ainda. Elas aparecem aqui assim que você desbloquear algo num jogo suportado.')}</span>}
+        {recent.data?.length === 0 && <span className="dim">{tt('Nada novo. As conquistas aparecem aqui quando você desbloqueia e somem sozinhas depois de {0} dias; todas continuam na página de cada jogo.', { 0: 14 })}</span>}
         {recent.data?.map(u => (
-          <div key={`${u.gameId}:${u.achId}`}><i /><span>{u.name}<br /><small>{u.gameTitle}</small></span><small>{ago(u.at)}</small></div>
+          <div key={`${u.gameId}:${u.achId}`} className="hm-row">{u.icon ? <img className="hm-ic" src={u.icon} alt="" /> : <i />}<span>{u.name}<br /><small>{u.gameTitle}</small></span><small>{ago(u.at)}</small>
+            <button className="hm-x" data-hf title={tt('Apagar')} onClick={() => drop([{ gameId: u.gameId, achId: u.achId }])}>✕</button></div>
         ))}
       </div>
     </Shell>
