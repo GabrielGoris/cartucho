@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useSubscription } from '@trpc/tanstack-react-query';
 import { useTRPC } from '../trpc';
-import { BindChips, cancelBindRec, cancelPadSetup, Glyph, PAD_NAMES, SETUP_STEPS, useBindRec, useKeys, usePadKind, usePadSetup } from '../lib/input';
+import { cancelBindRec, Glyph, IdxChips, PAD_NAMES, useBindRec, useKeys, usePadKind } from '../lib/input';
 import { useSpatialNav } from '../lib/spatial';
 import { getSettings, setSettings, useSettings } from '../lib/settings';
 import { sfx } from '../lib/sfx';
@@ -39,28 +39,10 @@ export function BindRecHost() {
   return (
     <div className="ov gl-ov">
       <div className="gl-box gl-padset">
-        <h3>{BIND_NAMES()[r.action]}</h3>
-        <p>{tt('Aperte no controle o botão ou a combinação (até 4 botões) e solte. Botões extras do controle também valem.')}</p>
-        <div className="gl-padstep gl-bindstep">{r.got.length ? <BindChips bind={r.got} /> : <span>{tt('Esperando um botão…')}</span>}</div>
-        <p className="gl-padnote">{tt('Escolha botões que os jogos não usam. Esc no teclado cancela.')}</p>
-      </div>
-    </div>
-  );
-}
-
-export function PadSetupHost() {
-  const st = usePadSetup();
-  useKeys(k => { if (k === 'Escape') { sfx.play('back'); cancelPadSetup(); } }, !!st);
-  if (!st) return null;
-  const [, name, hint] = SETUP_STEPS[st.step]!;
-  return (
-    <div className="ov gl-ov">
-      <div className="gl-box gl-padset">
-        <h3>{tt('Configurar o controle')}</h3>
-        <p>{tt('Aperte no controle o botão que você quer para cada ação.')}</p>
-        <div className="gl-padstep"><b>{name}</b><span>{hint}</span></div>
-        <div className="gl-padprog">{SETUP_STEPS.map((x, i) => <i key={x[0]} className={i < st.step ? 'done' : i === st.step ? 'cur' : ''} />)}</div>
-        <p className="gl-padnote">{tt('{0} Esc no teclado cancela.', { 0: st.step >= 2 ? tt('Para pular esta ação, aperte o botão de Confirmar.') : tt('O direcional e o analógico esquerdo já funcionam sozinhos.') })}</p>
+        <h3>{r.label}</h3>
+        <p>{r.multi ? tt('Aperte no controle o botão ou a combinação (até 4 botões) e solte. Botões extras do controle também valem.') : tt('Aperte no controle o botão que você quer para esta ação. Botões extras do controle também valem.')}</p>
+        <div className="gl-padstep gl-bindstep">{r.got.length ? <IdxChips idx={r.got} pad={r.pad} /> : <span>{tt('Esperando um botão…')}</span>}</div>
+        <p className="gl-padnote">{r.multi ? tt('Escolha botões que os jogos não usam. Esc no teclado cancela.') : tt('Esc no teclado cancela.')}</p>
       </div>
     </div>
   );
