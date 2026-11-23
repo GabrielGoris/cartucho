@@ -65,7 +65,8 @@ export function guessAsset(assets: Asset[], platform: NodeJS.Platform = process.
     }
     return v;
   };
-  return assets.map(a => [score(a), a] as const).filter(([v]) => v >= 0).sort((x, y) => y[0] - x[0])[0]?.[1] ?? null;
+  const best = assets.map(a => [score(a), a] as const).filter(([v]) => v >= 0).sort((x, y) => y[0] - x[0])[0]?.[1] ?? null;
+  return best ?? (platform === 'linux' ? guessAsset(assets, 'win32') : null);
 }
 
 export function createGitHub({ fetch = globalThis.fetch as Fetch, api = 'https://api.github.com', platform = process.platform as NodeJS.Platform } = {}) {

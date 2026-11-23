@@ -1,13 +1,14 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { accessSync, chmodSync, constants, existsSync, readdirSync, readFileSync, readlinkSync } from 'node:fs';
-import { basename, dirname, normalize } from 'node:path';
+import { accessSync, chmodSync, constants, existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync } from 'node:fs';
+import { basename, dirname, join, normalize } from 'node:path';
 import type { PlayEvent, PlayStats } from '@shared/types';
 import type { DB } from './db';
 import type { AchievementService } from './achievements/service';
 import { emulatorFor } from './emulators';
 import { tt } from '@shared/i18n';
-import { steamManifest } from './steam';
+import { log } from './log';
+import { findProton, prefixDir, steamManifest } from './steam';
 
 export class Player {
   readonly events = new EventEmitter<{ play: [PlayEvent]; launch: [{ gameId: string; dirs: string[]; pid?: number }] }>();
@@ -57,7 +58,7 @@ export class Player {
       return;
     }
 
-    let cmd = g.exe, args: string[] = [];
+    let cmd = g.exe, args: string[] = [], extraEnv: Record<string, string> = {};
     if (process.platform === 'linux') {
       if (/\.exe$/i.test(g.exe)) {
         const steam = steamManifest(g.installDir, g.exe);
@@ -67,14 +68,16 @@ export class Player {
           this.trackDetached(gameId, g.title, g.exe, g.installDir, 30);
           return;
         }
-        if (!(await run('which', ['wine']).catch(() => ''))) throw new Error(tt('{0} é um programa do Windows. No Linux, abra o jogo pela Steam (Proton) ou instale o Wine.', { 0: basename(g.exe) }));
-        cmd = 'wine'; args = [g.exe];
+        const w = await windowsRunner(gameId, g.exe);
+        if (!w) throw new Error(tt('{0} é um programa do Windows. No Linux, o Cartucho roda ele pelo Proton: instale a Steam (com o Proton) ou o umu-launcher. O Wine também serve.', { 0: basename(g.exe) }));
+        cmd = w.cmd; args = w.args; extraEnv = w.env;
+        log(`${g.title}: programa do Windows aberto pelo ${w.how}`);
       } else {
         try { accessSync(g.exe, constants.X_OK); } catch { try { chmodSync(g.exe, 0o755); } catch { } }
       }
     }
 
-    const env = await this.env();
+    const env = { ...(await this.env()), ...extraEnv };
     const denied = await new Promise<boolean>((ok, fail) => {
       const child = spawn(cmd, args, { cwd: dirname(g.exe!), env, detached: true, stdio: 'ignore' });
       child.once('error', e => {
@@ -369,6 +372,21 @@ function wineTarget(pid: string) {
   let args: string[] = [];
   try { args = readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean); } catch { return null; }
   for (const a of args) if (/\.exe$/i.test(a)) { const p = winePath(a); if (p) return p; }
+  return null;
+}
+
+export async function windowsRunner(gameId: string, exe: string): Promise<{ cmd: string; args: string[]; env: Record<string, string>; how: string } | null> {
+  const dir = prefixDir(gameId), has = (c: string) => run('which', [c]).then(x => !!x.trim(), () => false);
+  if (await has('umu-run')) {
+    mkdirSync(join(dir, 'pfx'), { recursive: true });
+    return { cmd: 'umu-run', args: [exe], env: { WINEPREFIX: join(dir, 'pfx'), GAMEID: 'umu-default', STORE: 'none' }, how: 'umu' };
+  }
+  const p = findProton();
+  if (p) {
+    mkdirSync(dir, { recursive: true });
+    return { cmd: p.proton, args: ['run', exe], env: { STEAM_COMPAT_DATA_PATH: dir, STEAM_COMPAT_CLIENT_INSTALL_PATH: p.root }, how: basename(dirname(p.proton)) };
+  }
+  if (await has('wine')) return { cmd: 'wine', args: [exe], env: {}, how: 'wine' };
   return null;
 }
 

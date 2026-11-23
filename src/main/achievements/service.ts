@@ -53,7 +53,7 @@ export class AchievementService {
     };
   }
   private ctx(r: GameRow): AdapterContext {
-    const appData = process.platform === 'linux' ? windowsAppData(r.install_dir, r.exe) ?? this.appData : this.appData;
+    const appData = process.platform === 'linux' ? windowsAppData(r.install_dir, r.exe, r.id) ?? this.appData : this.appData;
     return { installDir: r.install_dir, appData, title: r.title };
   }
 
