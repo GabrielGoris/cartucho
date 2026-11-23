@@ -1,17 +1,17 @@
-## Cartucho 1.2.6
+## Cartucho 1.3.0
 
-### Corrigido
+### Novo: Cartucho no Linux
 
-- **Captura de tela durante o jogo**: o Cartucho agora lê o controle direto do Windows, então Xbox + RB funciona com o jogo em primeiro plano. Antes os botões só chegavam com o Cartucho em foco.
-- **Print do instante certo**: a imagem é tirada assim que você aperta o primeiro botão da combinação, antes de o jogo reagir. Se o Cartucho aparecer antes de você completar a combinação, ele tira o print do jogo mesmo assim e volta para ele.
-- **Aviso e som da captura**: o aviso aparece por cima do jogo e o som da câmera toca mesmo quando o aviso não consegue aparecer.
-- **Galeria do jogo**: as capturas novas aparecem na página do jogo na hora.
-- **Palco 3D cinza**: o palco volta a aparecer quando você chama o Cartucho com um jogo aberto.
-- **Foco ao chamar o Cartucho pelo controle**: o Cartucho insiste mais para vir para a frente com o foco certo.
+- **AppImage para Linux**: baixe o arquivo `.AppImage`, dê permissão de execução e abra. Ele se atualiza sozinho, como no Windows. Para tudo funcionar, instale `xdotool`, `wmctrl` e `libfuse2` (no Ubuntu e no Mint 22: `sudo apt install xdotool wmctrl libfuse2t64`).
+- **Jogos do Windows pelo Proton**: jogos da biblioteca da Steam abrem pela própria Steam. Outros programas do Windows rodam pelo umu-launcher, pelo Proton que já vem com a Steam ou pelo Wine, cada jogo com a sua própria pasta de configurações. Recomps sem versão para Linux baixam a versão do Windows e rodam pelo Proton.
+- **Tempo de jogo, emuladores e conquistas**: o tempo conta também para jogos abertos por fora do Cartucho e pelo Proton, e as conquistas são lidas dentro da pasta do Proton.
+- **Atalhos do controle durante o jogo**: segurar o botão Xbox chama o Cartucho e Xbox + RB tira a captura, com o controle lido direto pelo sistema.
+- **Captura de tela**: no X11, a captura é do instante do primeiro botão. No Wayland, a captura passa pelo sistema, que pode pedir permissão na primeira vez.
+- **Abrir junto com o sistema e atalho na área de trabalho** funcionam no Linux.
 
-### Melhorado
+### Bom saber
 
-- **Atalhos por controle**: cada controle (ou modo do controle, como 2.4G e Bluetooth) guarda os seus próprios atalhos.
-- **Nome certo dos jogos da Steam**: o Cartucho usa o nome do jogo na Steam em vez do nome da pasta, então capa, fundo e informações aparecem. Os jogos que já estavam na biblioteca são corrigidos sozinhos.
+- No Wayland, o Cartucho não consegue vir para a frente sozinho: é uma regra do próprio sistema.
+- No GNOME, o ícone perto do relógio só aparece com a extensão AppIndicator. As configurações avisam quando ela falta.
 
 Gostou? Dá para apoiar em [buymeacoffee.com/goris](https://buymeacoffee.com/goris).
