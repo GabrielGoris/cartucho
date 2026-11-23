@@ -7,7 +7,7 @@ const xbox = (pressed: number[]) => ({ index: 0, id: 'Xbox Wireless Controller',
 const ps2 = (pressed: number[]) => ({ index: 1, id: 'Twin USB Joystick (Vendor: 0810 Product: 0001)', mapping: '', b: Array.from({ length: 12 }, (_, i) => (pressed.includes(i) ? '1' : '0')).join('') });
 
 describe('atalhos do controle durante o jogo', () => {
-  it('o Cartucho só aparece com o Home segurado por 1,5 s', () => {
+  it('o Cartucho só aparece com o Home segurado por 1 s', () => {
     const c = new Combos();
     expect(c.feed(0, padKeys(xbox([])), 0)).toEqual([]);
     expect(c.feed(0, padKeys(xbox([16])), 100)).toEqual([]);

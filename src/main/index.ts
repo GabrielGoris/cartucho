@@ -25,7 +25,8 @@ import { initLog, log } from './log';
 import { pickLang, setLang, tt } from '@shared/i18n';
 
 if (process.env.CARTUCHO_USER_DATA) app.setPath('userData', process.env.CARTUCHO_USER_DATA);
-if (!app.requestSingleInstanceLock()) app.quit();
+const lockData = { version: app.getVersion() };
+let locked = app.requestSingleInstanceLock(lockData);
 app.commandLine.appendSwitch('disable-gpu-process-crash-limit');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
@@ -69,13 +70,42 @@ function createWindow(show = true) {
   return win;
 }
 
-app.on('second-instance', (_e, argv) => { void bg?.handleArgs(argv).then(played => { if (!played) bg?.show(); }); });
+app.on('second-instance', (_e, argv, _dir, data) => {
+  const v = (data as { version?: string } | null)?.version;
+  if (v && newer(v, app.getVersion())) {
+    log(`Cartucho ${v} abrindo: esta versão (${app.getVersion()}) fecha para dar lugar a ela`);
+    if (bg) bg.quitting = true;
+    app.quit();
+    return;
+  }
+  const key = JSON.stringify(argv.slice(1)), now = Date.now();
+  if (key === lastArgs.key && now - lastArgs.at < 12_000) return;
+  lastArgs = { key, at: now };
+  void bg?.handleArgs(argv).then(played => { if (!played) bg?.show(); });
+});
+let lastArgs = { key: '', at: 0 };
+
+function newer(a: string, b: string) {
+  const p = (x: string) => x.split(/[.-]/).slice(0, 3).map(n => parseInt(n, 10) || 0);
+  const [x, y] = [p(a), p(b)];
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i]! > y[i]!;
+  return false;
+}
+
+async function takeLock() {
+  for (let i = 0; !locked && i < 20; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    locked = app.requestSingleInstanceLock(lockData);
+  }
+  return locked;
+}
 
 if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'app.cartucho' : process.execPath);
 
 app.on('child-process-gone', (_e, d) => log('processo do Electron caiu:', d.type, d.reason, d.exitCode, d.name ?? ''));
 
 void app.whenReady().then(async () => {
+  if (!locked && !(await takeLock())) { app.quit(); return; }
   initLog(app.getPath('userData'));
   log(`Cartucho ${app.getVersion()} abriu`, process.platform, process.arch);
   const root = join(__dirname, '../renderer');

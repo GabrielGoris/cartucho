@@ -9,7 +9,7 @@ import { log } from './log';
 
 export interface PadState { index: number; id: string; mapping: string; b: string }
 export type Action = 'summon' | 'shot';
-export const HOLD = 1500;
+export const HOLD = 1000;
 
 const PAD_PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:transparent"><script>
 const { ipcRenderer } = require('electron');
