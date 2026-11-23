@@ -12,10 +12,13 @@ import { sfx } from '../lib/sfx';
 import { GameArt } from '../components/GameArt';
 import { Bars } from '../components/Bars';
 import { ProgressBar } from '../components/ProgressBar';
+import { WineDialog } from '../components/WineDialog';
+import { useAskDeletePrefix } from '../lib/wine';
 import { Translated } from '../components/Translated';
 import { tt } from '@shared/i18n';
 
 const gh = (repo: string) => window.open(`https://github.com/${repo}`, '_blank');
+const LINUX = navigator.userAgent.includes('Linux');
 
 export function GamePage({ id, active, onBack, onAchievements }: { id: string; active: boolean; onBack: () => void; onAchievements: () => void }) {
   const trpc = useTRPC(), qc = useQueryClient();
@@ -34,6 +37,8 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
   const uninstall = useMutation(trpc.ports.uninstall.mutationOptions({ onSuccess: () => { void qc.invalidateQueries(); onBack(); } }));
   const progress = useProgress(id);
   const [more, setMore] = useState(false);
+  const [wineOpen, setWineOpen] = useState(false);
+  const askPrefix = useAskDeletePrefix();
   const relink = useMutation(trpc.games.relink.mutationOptions({ onSuccess: refresh }));
   const reinstall = useMutation(trpc.ports.install.mutationOptions({ onSuccess: refresh }));
 
@@ -45,6 +50,7 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
   const u = upd.data, a = g.achievements, st = stats.data;
   const err = play.error ?? update.error ?? uninstall.error ?? chooseExe.error ?? quit.error ?? relink.error ?? reinstall.error;
   const canReinstall = !!g.catalogId && !!g.sourceRepo && !isSelfInstall(g.console);
+  const isWindowsProgram = LINUX && !!g.exe && /\.(exe|bat|cmd|lnk)$/i.test(g.exe);
 
   return (
     <div ref={root} className="gp-page">
@@ -64,7 +70,7 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
             <div className="hm-btns">
               {canReinstall && <button className="hm-go" data-hf data-main disabled={reinstall.isPending || !!progress} onClick={() => { sfx.play('ok'); reinstall.mutate({ catalogId: g.catalogId! }); }}>{tt('⬇ INSTALAR DE NOVO')}</button>}
               <button className={`hm-go ${canReinstall ? 'ghost' : ''}`} data-hf data-main={canReinstall ? undefined : true} disabled={relink.isPending} onClick={() => relink.mutate({ id })}>{tt('PROCURAR A PASTA')}</button>
-              <button className="hm-go ghost" data-hf onClick={() => { void askConfirm({ title: tt('Tirar {0} da biblioteca? Nenhum arquivo é apagado.', { 0: g.title }), ok: tt('Remover'), danger: true }).then(y => { if (y) remove.mutate({ id }); }); }}>{tt('TIRAR DA BIBLIOTECA')}</button>
+              <button className="hm-go ghost" data-hf onClick={() => { void askConfirm({ title: tt('Tirar {0} da biblioteca? Nenhum arquivo é apagado.', { 0: g.title }), ok: tt('Remover'), danger: true }).then(async y => { if (y) remove.mutate({ id, deletePrefix: await askPrefix(id, g.title) }); }); }}>{tt('TIRAR DA BIBLIOTECA')}</button>
             </div>
           ) : (
           <div className="hm-btns">
@@ -83,12 +89,15 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
             <div className="gp-more">
               <button className="btn" data-hf onClick={() => chooseExe.mutate({ id })}>{tt('Escolher o .exe')}</button>
               <button className="btn" data-hf onClick={() => openFolder.mutate({ id })}>{tt('Abrir pasta')}</button>
+              {isWindowsProgram && <button className="btn" data-hf onClick={() => setWineOpen(o => !o)}>{tt('Opções do Wine')}</button>}
               {g.sourceRepo && <button className="btn" data-hf onClick={() => gh(g.sourceRepo!)}>{tt('Projeto no GitHub')}</button>}
               {g.managed
-                ? <button className="btn danger" data-hf onClick={() => { void askConfirm({ title: tt('Desinstalar {0}? Os arquivos que vieram no download serão apagados; saves e configurações que você mudou ficam na pasta.', { 0: g.title }), ok: tt('Desinstalar'), danger: true }).then(y => { if (y) uninstall.mutate({ id }); }); }}>{tt('Desinstalar')}</button>
-                : <button className="btn danger" data-hf onClick={() => { void askConfirm({ title: tt('Tirar {0} da biblioteca? Nenhum arquivo é apagado.', { 0: g.title }), ok: tt('Remover'), danger: true }).then(y => { if (y) remove.mutate({ id }); }); }}>{tt('Remover da biblioteca')}</button>}
+                ? <button className="btn danger" data-hf onClick={() => { void askConfirm({ title: tt('Desinstalar {0}? Os arquivos que vieram no download serão apagados; saves e configurações que você mudou ficam na pasta.', { 0: g.title }), ok: tt('Desinstalar'), danger: true }).then(async y => { if (y) uninstall.mutate({ id, deletePrefix: await askPrefix(id, g.title) }); }); }}>{tt('Desinstalar')}</button>
+                : <button className="btn danger" data-hf onClick={() => { void askConfirm({ title: tt('Tirar {0} da biblioteca? Nenhum arquivo é apagado.', { 0: g.title }), ok: tt('Remover'), danger: true }).then(async y => { if (y) remove.mutate({ id, deletePrefix: await askPrefix(id, g.title) }); }); }}>{tt('Remover da biblioteca')}</button>}
             </div>
           )}
+
+          {wineOpen && <WineDialog id={id} title={g.title} onClose={() => setWineOpen(false)} />}
 
           {progress && <ProgressBar p={progress} />}
           {err && <p className="err" style={{ margin: 0 }}>{err.message}</p>}

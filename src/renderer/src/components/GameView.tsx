@@ -12,6 +12,7 @@ import { useTranslated } from '../lib/translate';
 import { GameArt } from './GameArt';
 import { useGameProgress, type HubGame } from '../hubs/data';
 import type { DOpt } from './Discover';
+import { WineDialog } from './WineDialog';
 import { getLang, tt } from '@shared/i18n';
 
 type Zone = 'score' | 'acts' | 'shots' | 'text';
@@ -60,12 +61,14 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
     ...base,
     ...(inst && !inst.missing && !base.some(o => o.k === 'relink') ? [{ k: '__dir', l: tt('Trocar a pasta') }] : []),
     ...(inst && !inst.missing && inst.exe && /Windows|Linux/.test(navigator.userAgent) ? [{ k: '__lnk', l: tt('Atalho na Área de Trabalho') }] : []),
+    ...(inst && !inst.missing && inst.exe && navigator.userAgent.includes('Linux') && /\.(exe|bat|cmd|lnk)$/i.test(inst.exe) ? [{ k: '__wine', l: tt('Opções do Wine') }] : []),
     ...(inst && !g.catalog ? [{ k: '__plat', l: tt('Trocar a plataforma') }] : []),
     ...(caps.length ? [{ k: '__shots', l: tt('Abrir pasta das capturas') }] : []),
   ];
   const main = opts.filter((o, j) => j === 0 || MAIN.has(o.k)), rest = opts.filter((o, j) => j !== 0 && !MAIN.has(o.k));
   const shown: DOpt[] = rest.length > 1 ? [...main, { k: '__more', l: tt('Mais opções') }] : [...main, ...rest];
   const [more, setMore] = useState(false);
+  const [wine, setWine] = useState(false);
   const [mi, setMi] = useState(0);
   const tone = score ? (score.value >= 75 ? 'hi' : score.value >= 50 ? 'mid' : 'lo') : '';
   const tops = [score ? 'score' : null, 'ttb'].filter((x): x is 'score' | 'ttb' => !!x);
@@ -90,12 +93,14 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
     else el.querySelector('.gv-text')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }, [zone]);
   useEffect(() => { strip.current?.children[si]?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); }, [si]);
+  useEffect(() => { if (more) scroll.current?.querySelector('.gv-menu .on')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, [more, mi]);
 
   const mv = (f: () => void) => { sfx.play('move'); f(); };
-  const runOpt = (o: DOpt | undefined) => { if (!o) return; setMore(false); if (o.k === '__lnk') { sfx.play('ok'); lnk.mutate({ id: inst!.id }); } else if (o.k === '__dir') { sfx.play('ok'); dir.mutate({ id: inst!.id }); } else if (o.k === '__plat') { sfx.play('ok'); plat.mutate({ id: inst!.id }); } else if (o.k === '__shots') { sfx.play('ok'); openShots.mutate({ title: g.title }); } else run(o.k, g); };
+  const runOpt = (o: DOpt | undefined) => { if (!o) return; setMore(false); if (o.k === '__lnk') { sfx.play('ok'); lnk.mutate({ id: inst!.id }); } else if (o.k === '__wine') { sfx.play('ok'); setWine(true); } else if (o.k === '__dir') { sfx.play('ok'); dir.mutate({ id: inst!.id }); } else if (o.k === '__plat') { sfx.play('ok'); plat.mutate({ id: inst!.id }); } else if (o.k === '__shots') { sfx.play('ok'); openShots.mutate({ title: g.title }); } else run(o.k, g); };
   const act = (j: number) => { const o = shown[j]; if (o?.k === '__more') { sfx.play(more ? 'back' : 'ok'); setMi(0); setMore(!more); } else runOpt(o); };
 
   useKeys((k: Key) => {
+    if (wine) return;
     const R = k === 'ArrowRight', L = k === 'ArrowLeft', U = k === 'ArrowUp', D = k === 'ArrowDown';
     if (view != null) {
       if (k === 'X' && view < caps.length) return askDrop(view);
@@ -229,6 +234,7 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
       {view != null && shots[view] && (
         <div className="gv-view" onClick={() => setView(null)}><img src={shots[view]} alt="" /><span>{view < caps.length ? tt('Sua captura · ') : ''}{view + 1} / {shots.length}</span></div>
       )}
+      {wine && inst && <WineDialog id={inst.id} title={g.title} onClose={() => setWine(false)} />}
     </div>
   );
 }

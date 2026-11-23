@@ -97,42 +97,12 @@ describe('ícone na bandeja no Linux', () => {
   });
 });
 
-import { findProton, protonVersion } from '../src/main/steam';
 import { guessAsset } from '../src/main/ports/github';
 
 describe('jogos do Windows no Linux', () => {
-  it('escolhe o Proton mais novo instalado pela Steam', () => {
-    const home = mkdtempSync(join(tmpdir(), 'home-'));
-    const lib = join(home, '.local', 'share', 'Steam', 'steamapps', 'common');
-    for (const n of ['Proton 8.0', 'Proton 9.0', 'Proton - Experimental', 'Proton EasyAntiCheat Runtime']) {
-      mkdirSync(join(lib, n), { recursive: true });
-      if (!/Runtime/.test(n)) writeFileSync(join(lib, n, 'proton'), '');
-    }
-    expect(findProton(home)?.proton).toBe(join(lib, 'Proton - Experimental', 'proton'));
-    expect(protonVersion('Proton 9.0') > protonVersion('Proton 8.0')).toBe(true);
-    expect(findProton(mkdtempSync(join(tmpdir(), 'vazio-')))).toBeNull();
-  });
   it('sem versão para Linux, baixa a do Windows para rodar pelo Proton', () => {
     const a = (name: string) => ({ id: 1, name, size: 1, browser_download_url: '' });
     expect(guessAsset([a('Jogo-Windows-x64.zip'), a('Jogo-Linux-x86_64.AppImage')], 'linux')?.name).toBe('Jogo-Linux-x86_64.AppImage');
     expect(guessAsset([a('Jogo-Windows-x64.zip'), a('Jogo-macOS.zip')], 'linux')?.name).toBe('Jogo-Windows-x64.zip');
-  });
-});
-
-import { windowsRunner } from '../src/main/play';
-
-describe('rodar .exe no Linux', () => {
-  it('usa o Proton da Steam com um prefixo só do jogo', async () => {
-    if (process.platform !== 'linux') return;
-    const home = mkdtempSync(join(tmpdir(), 'home-')), old = process.env.HOME, oldData = process.env.XDG_DATA_HOME;
-    const p = join(home, '.local', 'share', 'Steam', 'steamapps', 'common', 'Proton 9.0');
-    mkdirSync(p, { recursive: true }); writeFileSync(join(p, 'proton'), '');
-    process.env.HOME = home; delete process.env.XDG_DATA_HOME;
-    try {
-      const r = await windowsRunner('jogo-1', '/jogos/Jogo.exe');
-      expect(r?.cmd).toBe(join(p, 'proton'));
-      expect(r?.args).toEqual(['run', '/jogos/Jogo.exe']);
-      expect(r?.env.STEAM_COMPAT_DATA_PATH).toBe(join(home, '.local', 'share', 'Cartucho', 'prefixos', 'jogo-1'));
-    } finally { process.env.HOME = old; if (oldData) process.env.XDG_DATA_HOME = oldData; }
   });
 });

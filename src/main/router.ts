@@ -17,6 +17,11 @@ import { ADAPTERS } from './achievements/adapters';
 import type { Ports } from './ports/installer';
 import { parseRepo } from './ports/github';
 import type { Player } from './play';
+import { installBuild, installUmu, installWinetricks, listVersions, remoteBuilds, removeBuild } from './wine/components';
+import { loadConfig, readPatch, resetGame, writePatch } from './wine/config';
+import { deletePrefix, runLog, runWinetricks, wineStatus } from './wine/launch';
+import { mergeConfig, VERB } from '@shared/wine';
+import { prefixDir } from './steam';
 import type { Artwork } from './artwork/service';
 import type { GameInfoService } from './artwork/info';
 import type { InGame } from './ingame';
@@ -217,12 +222,38 @@ export function createRouter(deps: RouterDeps) {
       }),
     }),
 
+    wine: t.router({
+      status: t.procedure.query(() => wineStatus()),
+      versions: t.procedure.query(() => listVersions()),
+      config: t.procedure.input(z.object({ id: z.string().optional() })).query(({ input }) => ({
+        global: mergeConfig(readPatch(db, null)),
+        game: input.id ? loadConfig(db, input.id) : null,
+        override: input.id ? readPatch(db, input.id) : null,
+        hasPrefix: !!input.id && existsSync(prefixDir(input.id)),
+        logFile: input.id ? runLog(input.id) : null,
+      })),
+      setConfig: t.procedure.input(z.object({ id: z.string().optional(), patch: z.record(z.string(), z.unknown()) })).mutation(({ input }) => writePatch(db, input.id ?? null, input.patch)),
+      resetGame: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => resetGame(db, input.id)),
+      pickPrefix: t.procedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+        const dir = await pick(tt('Escolha a pasta do prefixo do Wine'), ['openDirectory', 'createDirectory'], { defaultPath: readPatch(db, input.id).prefixPath ?? prefixDir(input.id) });
+        if (dir) writePatch(db, input.id, { prefixPath: dir });
+        return loadConfig(db, input.id);
+      }),
+      remoteBuilds: t.procedure.query(() => remoteBuilds()),
+      installBuild: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => installBuild(input.id)),
+      removeBuild: t.procedure.input(z.object({ dir: z.string() })).mutation(({ input }) => removeBuild(input.dir)),
+      installUmu: t.procedure.mutation(() => installUmu()),
+      installWinetricks: t.procedure.mutation(() => installWinetricks()),
+      winetricks: t.procedure.input(z.object({ id: z.string(), verbs: z.array(z.string().regex(VERB)).min(1) })).mutation(({ input }) => runWinetricks(db, input.id, input.verbs)),
+      openLog: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => { if (existsSync(runLog(input.id))) shell.showItemInFolder(runLog(input.id)); }),
+    }),
+
     ports: t.router({
       install: t.procedure.input(z.object({ catalogId: z.string() })).mutation(({ input }) => ports.installFromCatalog(input.catalogId)),
       installRepo: t.procedure.input(z.object({ repo: z.string() })).mutation(({ input }) => ports.install(parseRepo(input.repo))),
       checkUpdate: t.procedure.input(z.object({ id: z.string(), force: z.boolean().optional() })).query(({ input }) => ports.checkUpdate(input.id, input.force)),
       update: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => ports.update(input.id)),
-      uninstall: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => ports.uninstall(input.id)),
+      uninstall: t.procedure.input(z.object({ id: z.string(), deletePrefix: z.boolean().optional() })).mutation(async ({ input }) => { const r = await ports.uninstall(input.id); if (input.deletePrefix) deletePrefix(input.id); return r; }),
       setSource: t.procedure.input(z.object({ id: z.string(), repo: z.string().nullable() })).mutation(({ input }) => {
         ach.patchGame(input.id, { sourceRepo: input.repo ? parseRepo(input.repo) : null, release: null });
         db.prepare('DELETE FROM kv WHERE key = ?').run(`upd.${input.id}`);
@@ -306,7 +337,7 @@ export function createRouter(deps: RouterDeps) {
         const dir = await pick(tt('Onde está {0} agora?', { 0: ach.getGame(input.id).title }), ['openDirectory']);
         return dir ? ach.relocate(input.id, dir) : null;
       }),
-      remove: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => ach.removeGame(input.id)),
+      remove: t.procedure.input(z.object({ id: z.string(), deletePrefix: z.boolean().optional() })).mutation(({ input }) => { ach.removeGame(input.id); if (input.deletePrefix) deletePrefix(input.id); }),
       openFolder: t.procedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
         const g = ach.listGames().find(x => x.id === input.id);
         if (g) await shell.openPath(g.installDir);

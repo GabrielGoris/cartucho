@@ -12,6 +12,7 @@ import { type Adapter, type AdapterContext, adapterById, adapterForDir } from '.
 import type { Unlock } from './saves';
 import { tt } from '@shared/i18n';
 import { steamManifest, windowsAppData } from '../steam';
+import { readPatch } from '../wine/config';
 
 const ADAPTER_CONSOLE: Record<string, ConsoleId> = { 'unleashed-recomp': 'x360', 'marathon-recomp': 'x360', sonic3air: 'other', rsdkv4: 'other' };
 
@@ -53,7 +54,7 @@ export class AchievementService {
     };
   }
   private ctx(r: GameRow): AdapterContext {
-    const appData = process.platform === 'linux' ? windowsAppData(r.install_dir, r.exe, r.id) ?? this.appData : this.appData;
+    const appData = process.platform === 'linux' ? windowsAppData(r.install_dir, r.exe, r.id, readPatch(this.db, r.id).prefixPath) ?? this.appData : this.appData;
     return { installDir: r.install_dir, appData, title: r.title };
   }
 
