@@ -1,4 +1,5 @@
 export const EN: Record<string, string> = {
+  "Não deu para capturar a tela": "Couldn't capture the screen",
   "No Linux, a captura de tela e trazer o Cartucho para a frente precisam de uma sessão X11 com o xdotool instalado. No Wayland, o sistema não deixa um programa capturar a tela ou pegar o foco sozinho.": "On Linux, screenshots and bringing Cartucho to the front need an X11 session with xdotool installed. On Wayland, the system doesn't let a program capture the screen or take focus on its own.",
   "Abrir junto com o sistema": "Open with the system",
   "{0} pelo Cartucho": "{0} through Cartucho",
