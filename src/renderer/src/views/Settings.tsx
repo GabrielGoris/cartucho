@@ -40,6 +40,7 @@ const ROWS: Record<string, Row> = Object.fromEntries(([
   { k: 'translate', t: tt('Traduzir textos dos jogos'), d: tt('Descrições e requisitos do catálogo vêm em inglês; o Cartucho traduz pelo MyMemory e guarda.'), kind: 'sw' },
 ] as Row[]).map(r => [r.k, r]));
 
+const LINUX = navigator.userAgent.includes('Linux');
 const TABS = ['Geral', 'Visual', 'Áudio', 'Controle', 'Jogos', 'Sistema', 'Sobre'] as const;
 type Tab = typeof TABS[number];
 
@@ -201,7 +202,8 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
             </button>
           ))}
           <div className="st-sec">{tt('ATALHOS DURANTE O JOGO')}</div>
-          {(['summon', 'shot'] as const).map(a => (
+          {LINUX && <p className="st-note">{tt('No Linux os atalhos durante o jogo ainda não funcionam: por enquanto eles só valem no Windows.')}</p>}
+          {!LINUX && (['summon', 'shot'] as const).map(a => (
             <button key={a} className="st-r st-bind" data-hf disabled={!pad} onClick={() => askBind(a)}>
               <span><span className="t">{BIND_NAMES()[a]}</span><span className="d">{note?.[0] === a ? note[1] : a === 'summon' ? tt('Segure por 1 segundo durante o jogo.') : tt('Aperte durante o jogo. Use botões que o jogo não usa.')}</span></span>
               <span className="c">{binds.data && <BindChips bind={bindsFor(binds.data, pad?.id ?? '')[a]} />}</span>
@@ -218,7 +220,7 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
             <span><span className="t">{tt('Pasta dos jogos')}</span><span className="d">{tt('Onde o Cartucho instala o que você baixa. Jogos já instalados ficam onde estão.')}</span></span>
             <span className="c"><span className="st-pick"><b style={{ minWidth: 0, maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{portsDir.data ?? '…'}</b>›</span></span>
           </button>
-            {bg.data && bgRow('screen', tt('Abrir o jogo na tela do Cartucho'), tt('Com mais de um monitor, o jogo vai para a tela onde o Cartucho está. Jogos em tela cheia exclusiva podem ignorar.'))}
+            {bg.data && !LINUX && bgRow('screen', tt('Abrir o jogo na tela do Cartucho'), tt('Com mais de um monitor, o jogo vai para a tela onde o Cartucho está. Jogos em tela cheia exclusiva podem ignorar.'))}
             {bg.data && bgRow('track', tt('Contar jogos abertos fora do Cartucho'), tt('Com o Cartucho aberto (ou na bandeja), o tempo conta mesmo se você abrir o jogo pelo .exe ou por um atalho.'))}
             {getLang() === 'pt' && row('translate')}
           <button className="st-r" data-hf onClick={() => artRefresh.mutate()} disabled={artRefresh.isPending}>
@@ -236,7 +238,7 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
             <span className="c"><span className={`st-sw ${win.data?.fullscreen ? 'f' : ''}`}><i /></span></span>
           </button>
             {bg.data && bgRow('tray', tt('Fechar para a bandeja'), tt('O X esconde o Cartucho perto do relógio em vez de fechar. Para sair de vez, use Sair no ícone da bandeja.'))}
-            {bg.data && bgRow('autostart', tt('Abrir com o Windows'), tt('Liga escondido na bandeja quando o computador inicia, pronto para contar o tempo.'))}
+            {bg.data && bgRow('autostart', LINUX ? tt('Abrir junto com o sistema') : tt('Abrir com o Windows'), tt('Liga escondido na bandeja quando o computador inicia, pronto para contar o tempo.'))}
           <button className="st-r" data-hf onClick={() => { sfx.play('ok'); if (u?.status === 'ready') install.mutate(); else check.mutate(); }}>
             <span><span className="t">{tt('Cartucho {0}', { 0: u ? `v${u.current}` : '' })}</span><span className="d">{updText}</span></span>
             <span className="c"><span className="st-pick"><b style={{ minWidth: 0 }}>{u?.status === 'ready' ? tt('Reiniciar e atualizar') : check.isPending || u?.status === 'checking' ? tt('Verificando…') : tt('Verificar agora')}</b>›</span></span>

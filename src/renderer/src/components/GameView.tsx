@@ -59,7 +59,7 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
   const opts: DOpt[] = [
     ...base,
     ...(inst && !inst.missing && !base.some(o => o.k === 'relink') ? [{ k: '__dir', l: tt('Trocar a pasta') }] : []),
-    ...(inst && !inst.missing && inst.exe && navigator.userAgent.includes('Windows') ? [{ k: '__lnk', l: tt('Atalho na Área de Trabalho') }] : []),
+    ...(inst && !inst.missing && inst.exe && /Windows|Linux/.test(navigator.userAgent) ? [{ k: '__lnk', l: tt('Atalho na Área de Trabalho') }] : []),
     ...(inst && !g.catalog ? [{ k: '__plat', l: tt('Trocar a plataforma') }] : []),
     ...(caps.length ? [{ k: '__shots', l: tt('Abrir pasta das capturas') }] : []),
   ];

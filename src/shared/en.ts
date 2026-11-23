@@ -1,4 +1,9 @@
 export const EN: Record<string, string> = {
+  "No Linux os atalhos durante o jogo ainda não funcionam: por enquanto eles só valem no Windows.": "On Linux the in-game shortcuts don't work yet: for now they only work on Windows.",
+  "Abrir junto com o sistema": "Open with the system",
+  "{0} pelo Cartucho": "{0} through Cartucho",
+  "Não consegui pedir para a Steam abrir {0}: {1}": "Couldn't ask Steam to open {0}: {1}",
+  "{0} é um programa do Windows. No Linux, abra o jogo pela Steam (Proton) ou instale o Wine.": "{0} is a Windows program. On Linux, open the game through Steam (Proton) or install Wine.",
   "TESTE DO CONTROLE": "CONTROLLER TEST",
   "{0} botões · layout padrão": "{0} buttons · standard layout",
   "{0} botões · layout genérico": "{0} buttons · generic layout",

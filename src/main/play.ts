@@ -1,12 +1,13 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { existsSync, readdirSync, readFileSync, readlinkSync } from 'node:fs';
+import { accessSync, chmodSync, constants, existsSync, readdirSync, readFileSync, readlinkSync } from 'node:fs';
 import { basename, dirname, normalize } from 'node:path';
 import type { PlayEvent, PlayStats } from '@shared/types';
 import type { DB } from './db';
 import type { AchievementService } from './achievements/service';
 import { emulatorFor } from './emulators';
 import { tt } from '@shared/i18n';
+import { steamManifest } from './steam';
 
 export class Player {
   readonly events = new EventEmitter<{ play: [PlayEvent]; launch: [{ gameId: string; dirs: string[]; pid?: number }] }>();
@@ -56,9 +57,26 @@ export class Player {
       return;
     }
 
+    let cmd = g.exe, args: string[] = [];
+    if (process.platform === 'linux') {
+      if (/\.exe$/i.test(g.exe)) {
+        const steam = steamManifest(g.installDir, g.exe);
+        if (steam) {
+          const err = await run('xdg-open', [`steam://rungameid/${steam.appid}`], 15_000).then(() => '', e => (e instanceof Error ? e.message : String(e)));
+          if (err) throw new Error(tt('Não consegui pedir para a Steam abrir {0}: {1}', { 0: g.title, 1: err }));
+          this.trackDetached(gameId, g.title, g.exe, g.installDir, 30);
+          return;
+        }
+        if (!(await run('which', ['wine']).catch(() => ''))) throw new Error(tt('{0} é um programa do Windows. No Linux, abra o jogo pela Steam (Proton) ou instale o Wine.', { 0: basename(g.exe) }));
+        cmd = 'wine'; args = [g.exe];
+      } else {
+        try { accessSync(g.exe, constants.X_OK); } catch { try { chmodSync(g.exe, 0o755); } catch { } }
+      }
+    }
+
     const env = await this.env();
     const denied = await new Promise<boolean>((ok, fail) => {
-      const child = spawn(g.exe!, [], { cwd: dirname(g.exe!), env, detached: true, stdio: 'ignore' });
+      const child = spawn(cmd, args, { cwd: dirname(g.exe!), env, detached: true, stdio: 'ignore' });
       child.once('error', e => {
         if ((e as NodeJS.ErrnoException).code === 'EACCES' && process.platform === 'win32') ok(true);
         else fail(new Error(tt('Não consegui abrir o jogo: {0}', { 0: e.message })));
@@ -84,10 +102,14 @@ export class Player {
     } catch {
       throw new Error(tt('O Windows não deixou abrir {0}. Se o jogo pede permissão de administrador, aceite o aviso do Windows; se o aviso não apareceu, veja se o antivírus bloqueou o arquivo.', { 0: basename(exe) }));
     }
+    this.trackDetached(gameId, title, exe, installDir, 8);
+  }
+
+  private trackDetached(gameId: string, title: string, exe: string, installDir: string, tries: number) {
     const start = Date.now();
     const session = Number(this.db.prepare('INSERT INTO play_session (game_id, started_at) VALUES (?, ?)').run(gameId, start).lastInsertRowid);
     const r: Run = { child: null, session, start };
-    r.follow = { pids: new Set(), dirs: [...new Set([installDir, dirname(exe)])], names: [basename(exe)], exitAt: start, seenAt: 0, misses: 0, timer: null, tries: 8 };
+    r.follow = { pids: new Set(), dirs: [...new Set([installDir, dirname(exe)])], names: [basename(exe)], exitAt: start, seenAt: 0, misses: 0, timer: null, tries };
     this.running.set(gameId, r);
     this.events.emit('play', { gameId, title, running: true });
     this.events.emit('launch', { gameId, dirs: r.follow.dirs.filter(Boolean) });
@@ -133,7 +155,7 @@ export class Player {
   }
 
   watchExternal(on: boolean) {
-    if (process.platform !== 'win32') return;
+    if (process.platform !== 'win32' && process.platform !== 'linux') return;
     if (on && !this.scanTimer) { this.scanTimer = setInterval(() => void this.scan(), 5000); void this.scan(); }
     else if (!on && this.scanTimer) { clearInterval(this.scanTimer); this.scanTimer = null; this.endExternal(); for (const pid of [...this.emu.keys()]) this.endEmu(pid); }
   }
@@ -142,7 +164,8 @@ export class Player {
     if (this.scanning) return;
     this.scanning = true;
     try {
-      const procs = await listProcesses();
+      const table = process.platform === 'win32' ? null : await this.procs();
+      const procs = table ? namesOf(table) : await listProcesses();
       const seen = new Set<string>();
       for (const g of this.games.listGames()) {
         if (!g.exe || !/\.exe$/i.test(g.exe) || this.running.has(g.id) || emulatorFor(g.exe)) continue;
@@ -150,7 +173,7 @@ export class Player {
         if (!pids?.length) continue;
         const cur = this.external.get(g.id);
         if (cur && pids.includes(cur.pid)) { seen.add(g.id); continue; }
-        const paths = await processPaths(pids);
+        const paths = table ? pathsOf(table, pids) : await processPaths(pids);
         const want = normalize(g.exe).toLowerCase();
         const pid = pids.find(p => paths.get(p) === want);
         if (pid == null) continue;
@@ -328,10 +351,25 @@ async function processTable(): Promise<Proc[]> {
       const st = readFileSync(`/proc/${d}/stat`, 'utf8'), ppid = Number(st.slice(st.lastIndexOf(')') + 2).split(' ')[1]);
       let path = '', name = ''; try { path = readlinkSync(`/proc/${d}/exe`); } catch { }
       try { name = readFileSync(`/proc/${d}/comm`, 'utf8').trim(); } catch { }
+      const win = /wine|proton/i.test(basename(path)) ? wineTarget(d) : null;
+      if (win) { path = win; name = basename(win.replace(/\\/g, '/')); }
       L.push({ pid: Number(d), ppid, path, name });
     } catch { }
   }
   return L;
+}
+
+export function winePath(arg: string) {
+  const a = arg.trim();
+  if (/^[a-z]:[\\/]/i.test(a)) return /^z:/i.test(a) ? a.slice(2).replace(/\\/g, '/') : null;
+  return a.startsWith('/') ? a : null;
+}
+
+function wineTarget(pid: string) {
+  let args: string[] = [];
+  try { args = readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean); } catch { return null; }
+  for (const a of args) if (/\.exe$/i.test(a)) { const p = winePath(a); if (p) return p; }
+  return null;
 }
 
 function killTree(pid: number) {
@@ -352,9 +390,25 @@ export function parseWindows(out: string) {
   return m;
 }
 
+export function parseWmctrl(out: string, paths: Map<number, string>) {
+  const m = new Map<number, { path: string; title: string }>();
+  for (const line of out.split(/\r?\n/)) {
+    const f = line.match(/^0x[0-9a-f]+\s+-?\d+\s+(\d+)\s+\S+\s+(.*)$/i);
+    if (!f) continue;
+    const pid = Number(f[1]);
+    if (paths.has(pid) && !m.has(pid)) m.set(pid, { path: paths.get(pid)!, title: f[2]!.trim() });
+  }
+  return m;
+}
+
 async function windowTitles(pids: number[]) {
   const ids = pids.filter(p => Number.isInteger(p) && p > 0).slice(0, 32);
   if (!ids.length) return new Map<number, { path: string; title: string }>();
+  if (process.platform !== 'win32') {
+    const paths = new Map<number, string>();
+    for (const id of ids) { try { paths.set(id, readlinkSync(`/proc/${id}/exe`)); } catch { } }
+    return parseWmctrl(await run('wmctrl', ['-lp']).catch(() => ''), paths);
+  }
   return parseWindows(await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `${PS_UTF8}Get-Process -Id ${ids.join(',')} -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Id)|$($_.Path)|$($_.MainWindowTitle)" }`]));
 }
 
@@ -370,6 +424,21 @@ export function parseTasklist(csv: string) {
     const k = f[1]!.toLowerCase();
     m.set(k, [...(m.get(k) ?? []), Number(f[2])]);
   }
+  return m;
+}
+
+function namesOf(table: Proc[]) {
+  const m = new Map<string, number[]>();
+  for (const p of table) {
+    const k = basename(p.path || p.name || '').toLowerCase();
+    if (k) m.set(k, [...(m.get(k) ?? []), p.pid]);
+  }
+  return m;
+}
+
+function pathsOf(table: Proc[], pids: number[]) {
+  const m = new Map<number, string>();
+  for (const p of table) if (pids.includes(p.pid) && p.path) m.set(p.pid, normalize(p.path).toLowerCase());
   return m;
 }
 

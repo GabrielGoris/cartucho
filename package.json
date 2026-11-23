@@ -8,6 +8,7 @@
   },
   "description": "Hub de recomps, ports e emuladores com palco 3D, hub por console, tempo de jogo e conquistas.",
   "author": "Goris",
+  "desktopName": "cartucho.desktop",
   "license": "MIT",
   "main": "./out/main/index.js",
   "scripts": {
@@ -18,7 +19,9 @@
     "test": "vitest run",
     "postinstall": "install-electron",
     "dist": "electron-vite build && electron-builder --win",
-    "release": "electron-vite build && electron-builder --win --publish always"
+    "release": "electron-vite build && electron-builder --win --publish always",
+    "dist:linux": "electron-vite build && electron-builder --linux",
+    "release:linux": "electron-vite build && electron-builder --linux --publish always"
   },
   "dependencies": {
     "@fontsource/nunito": "^5.3.0",
@@ -71,6 +74,16 @@
         "zip"
       ],
       "icon": "build/icon.ico",
+      "artifactName": "Cartucho-${version}-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png",
+      "category": "Game",
+      "syncDesktopName": true,
+      "synopsis": "Hub de recomps, ports e emuladores",
       "artifactName": "Cartucho-${version}-${arch}.${ext}"
     },
     "nsis": {
