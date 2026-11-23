@@ -1,11 +1,33 @@
-## Cartucho 1.4.0
+## Cartucho 1.4.1
 
-### Jogos do Windows no Linux
+### Conquistas de PC
 
-- **Wine/Proton por jogo**: programas do Windows (`.exe`, `.bat`, `.lnk`) rodam pelo umu-launcher com o Proton-GE que você já tem instalado, pelo Proton direto ou pelo Wine, cada jogo com o seu próprio prefixo.
-- **Configurações > Wine** (e Opções do Wine na página de cada jogo): escolha o runner, a versão do Proton-GE, Proton-CachyOS ou Wine (dá para baixar de dentro do Cartucho), o DXVK (sempre a versão mais nova por padrão, ou a mais nova que a sua placa aceita; com versão async), VKD3D-Proton, componentes do winetricks, variáveis de ambiente e um prefixo que você já tenha. O registro da última execução fica na pasta do prefixo. Ao desinstalar, o Cartucho pergunta se apaga o prefixo também.
-- **O Cartucho pergunta antes de baixar**: quando um jogo precisa de algo que ainda não está no computador (Proton-GE, DXVK, componentes do winetricks), o Cartucho mostra a lista com o tamanho e só baixa se você permitir. Dá para desligar a pergunta em Configurações > Wine.
+- **Steam**: o Cartucho lê as conquistas dos jogos da Steam direto dos arquivos que a própria Steam guarda no PC, sem login. Se a Steam ainda não tem a lista de um jogo, dá para colocar uma chave da API da Steam em Configurações > Jogos.
+- **Emuladores de Steam**: lê as conquistas gravadas pelo Goldberg, pelo fork GSE, pelo CODEX e pelo RUNE.
+- **GOG**: entre na sua conta em Configurações > Jogos e as conquistas dos jogos da GOG aparecem.
+- **Recomps**: além dos que já eram lidos, o Cartucho procura os arquivos de conquistas e troféus que vários recomps e ports gravam sozinhos.
+- O Cartucho só lê: nada é enviado para a Steam nem para a GOG.
 
-### Downloads mais simples
+### Página do jogo
 
-- Os arquivos da versão agora dizem o sistema no nome: `Cartucho-1.4.0-windows.exe` e `Cartucho-1.4.0-linux.AppImage`. Os arquivos `latest.yml` e `latest-linux.yml` são os que o Cartucho usa para se atualizar sozinho.
+- As conquistas aparecem ao lado do tempo de jogo, com a lista que rola sozinha. O atalho ao lado do ano leva direto para elas, também pelo controle.
+- Tempo de jogo, sessões, média por sessão e o gráfico dos últimos 14 dias em todos os consoles.
+- **Desinstalar** em todos os consoles: jogos baixados pelo Cartucho apagam só o que veio no download; jogos da Steam abrem a desinstalação da Steam; os outros vão para a Lixeira.
+- A nota da crítica abre dentro do Cartucho, como o tempo para zerar.
+
+### Avisos de conquista
+
+- Quando você desbloqueia uma conquista, o aviso sobe com uma animação e um som baixinho, no timbre dos sons da interface.
+- Conquistas antigas que o Cartucho encontra pela primeira vez entram sem aviso.
+- As conquistas recentes do perfil funcionam como notificações: dá para apagar uma a uma ou todas, e elas somem sozinhas depois de 14 dias.
+
+### Teclado, mouse e palco
+
+- O Cartucho percebe na hora se você está no teclado ou no controle e mostra as teclas certas, inclusive no aviso de jogo aberto (Home volta para o jogo).
+- As teclas do teclado podem ser trocadas em Configurações > Controle.
+- Durante o jogo, **Home** chama o Cartucho e **Print Screen** tira a captura.
+- O palco 3D pode ser arrastado com o mouse.
+
+### Correções
+
+- Depois de fechar uma página aberta dentro do Cartucho, o teclado e o controle voltam a funcionar.
