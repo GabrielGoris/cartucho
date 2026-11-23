@@ -5,6 +5,7 @@ import { app, BrowserWindow, desktopCapturer, type Display, ipcMain, nativeImage
 import { type Binds, DEFAULT_BINDS, HOLD, padTokens } from '@shared/binds';
 import { type Desk, moveTo, ownedBy, type Rect, type Win, xinputButtons } from './win32';
 import { tt } from '@shared/i18n';
+import { toDip } from './linux';
 import { log } from './log';
 
 export interface PadState { index: number; id: string; mapping: string; b: string }
@@ -193,6 +194,7 @@ export class InGame {
   }
 
   private arm() {
+    if (this.d.w32.early === false) return;
     const at = Date.now();
     if (this.pre && at - this.preAt < 300) return;
     void this.pre?.then(x => { if (x?.file) try { unlinkSync(x.file); } catch { } });
@@ -262,7 +264,8 @@ export class InGame {
     if (fg) {
       try {
         const [l, tp, r, b] = fg.m;
-        return screen.getDisplayMatching(screen.screenToDipRect(null, { x: l, y: tp, width: r - l, height: b - tp }));
+        const box = { x: l, y: tp, width: r - l, height: b - tp };
+        return screen.getDisplayMatching(process.platform === 'linux' ? toDip(box) : screen.screenToDipRect(null, box));
       } catch { }
     }
     return screen.getDisplayNearestPoint(screen.getCursorScreenPoint());

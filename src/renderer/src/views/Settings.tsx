@@ -202,7 +202,7 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
             </button>
           ))}
           <div className="st-sec">{tt('ATALHOS DURANTE O JOGO')}</div>
-          {LINUX && <p className="st-note">{tt('No Linux, a captura de tela e trazer o Cartucho para a frente precisam de uma sessão X11 com o xdotool instalado. No Wayland, o sistema não deixa um programa capturar a tela ou pegar o foco sozinho.')}</p>}
+          {LINUX && <p className="st-note">{tt('No Linux, trazer o Cartucho para a frente e a captura do instante do primeiro botão precisam de uma sessão X11 com o xdotool instalado. No Wayland a captura passa pelo sistema, que pode pedir permissão na primeira vez, e o Cartucho não consegue pegar o foco sozinho.')}</p>}
           {(['summon', 'shot'] as const).map(a => (
             <button key={a} className="st-r st-bind" data-hf disabled={!pad} onClick={() => askBind(a)}>
               <span><span className="t">{BIND_NAMES()[a]}</span><span className="d">{note?.[0] === a ? note[1] : a === 'summon' ? tt('Segure por 1 segundo durante o jogo.') : tt('Aperte durante o jogo. Use botões que o jogo não usa.')}</span></span>

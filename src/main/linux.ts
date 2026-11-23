@@ -3,10 +3,15 @@ import { createReadStream, existsSync, openSync, readdirSync, readFileSync, read
 import { desktopCapturer, screen } from 'electron';
 import { log } from './log';
 import type { Desk, Mon, PadFeed, Rect, Win } from './win32';
+import { Portal } from './portal';
 
 const run = (cmd: string, args: string[], timeout = 3000) => new Promise<string | null>(ok => {
   execFile(cmd, args, { timeout, encoding: 'utf8' }, (e, out) => ok(e ? null : out));
 });
+
+const scaled = (r: Electron.Rectangle, k: number) => ({ x: Math.round(r.x * k), y: Math.round(r.y * k), width: Math.round(r.width * k), height: Math.round(r.height * k) });
+export const toDip = (r: Electron.Rectangle) => (typeof screen.screenToDipRect === 'function' ? screen.screenToDipRect(null, r) : scaled(r, 1 / (screen.getPrimaryDisplay().scaleFactor || 1)));
+const toPx = (r: Electron.Rectangle) => (typeof screen.dipToScreenRect === 'function' ? screen.dipToScreenRect(null, r) : scaled(r, screen.getPrimaryDisplay().scaleFactor || 1));
 
 export const BTN_MASK: Record<number, number> = {
   0x130: 0x1000, 0x131: 0x2000, 0x133: 0x4000, 0x134: 0x8000, 0x136: 0x0100, 0x137: 0x0200, 0x138: 0x10000, 0x139: 0x20000,
@@ -51,7 +56,13 @@ export class LinuxDesk implements Desk {
   private wayland = process.env.XDG_SESSION_TYPE === 'wayland';
   private tools = new Map<string, Promise<boolean>>();
 
-  constructor(private sys = process.env.CARTUCHO_INPUT_SYS || '/sys/class/input', private dev = process.env.CARTUCHO_INPUT_DEV || '/dev/input') {}
+  private portal = new Portal();
+  grab?: () => Promise<Electron.NativeImage | null>;
+  early = !this.wayland;
+
+  constructor(private sys = process.env.CARTUCHO_INPUT_SYS || '/sys/class/input', private dev = process.env.CARTUCHO_INPUT_DEV || '/dev/input') {
+    if (!this.wayland) this.grab = async () => (await this.capture())?.img ?? null;
+  }
 
   private has(cmd: string) {
     let p = this.tools.get(cmd);
@@ -61,8 +72,8 @@ export class LinuxDesk implements Desk {
 
   private monOf(r: Rect): Mon {
     const box = { x: r[0], y: r[1], width: Math.max(1, r[2] - r[0]), height: Math.max(1, r[3] - r[1]) };
-    const d = screen.getDisplayMatching(screen.screenToDipRect(null, box));
-    const px = (x: Electron.Rectangle): Rect => { const q = screen.dipToScreenRect(null, x); return [q.x, q.y, q.x + q.width, q.y + q.height]; };
+    const d = screen.getDisplayMatching(toDip(box));
+    const px = (x: Electron.Rectangle): Rect => { const q = toPx(x); return [q.x, q.y, q.x + q.width, q.y + q.height]; };
     return { m: px(d.bounds), w: px(d.workArea) };
   }
 
@@ -120,7 +131,7 @@ export class LinuxDesk implements Desk {
   private async capture() {
     if (this.wayland) { this.err = 'sessão Wayland: o sistema não deixa capturar a tela sem pedir'; return null; }
     const fg = await this.foreground();
-    const d = fg ? screen.getDisplayMatching({ x: fg.r[0], y: fg.r[1], width: Math.max(1, fg.r[2] - fg.r[0]), height: Math.max(1, fg.r[3] - fg.r[1]) }) : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const d = fg ? screen.getDisplayMatching(toDip({ x: fg.r[0], y: fg.r[1], width: Math.max(1, fg.r[2] - fg.r[0]), height: Math.max(1, fg.r[3] - fg.r[1]) })) : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const size = { width: Math.round(d.size.width * d.scaleFactor), height: Math.round(d.size.height * d.scaleFactor) };
     const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: size });
     const src = sources.find(s => s.display_id === String(d.id)) ?? sources[0];
@@ -129,9 +140,13 @@ export class LinuxDesk implements Desk {
     return { img: src.thumbnail, m: [b.x, b.y, b.x + b.width, b.y + b.height] as Rect };
   }
 
-  async grab() { return (await this.capture())?.img ?? null; }
-
   async shot(file: string) {
+    if (this.wayland) {
+      const ok = await this.portal.screenshot(file);
+      if (!ok) { this.err = this.portal.err; return null; }
+      const b = screen.getPrimaryDisplay().bounds;
+      return { m: [b.x, b.y, b.x + b.width, b.y + b.height] as Rect };
+    }
     const c = await this.capture();
     if (!c) return null;
     writeFileSync(file, c.img.toPNG());
@@ -190,6 +205,7 @@ export class LinuxDesk implements Desk {
   }
 
   stop() {
+    this.portal.stop();
     if (this.timer) clearInterval(this.timer);
     for (const d of this.devs.values()) d.stream.destroy();
     this.devs.clear();

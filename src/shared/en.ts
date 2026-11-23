@@ -1,7 +1,11 @@
 export const EN: Record<string, string> = {
+  "No Linux, trazer o Cartucho para a frente e a captura do instante do primeiro botão precisam de uma sessão X11 com o xdotool instalado. No Wayland a captura passa pelo sistema, que pode pedir permissão na primeira vez, e o Cartucho não consegue pegar o foco sozinho.": "On Linux, bringing Cartucho to the front and capturing the moment of the first button need an X11 session with xdotool installed. On Wayland the capture goes through the system, which may ask for permission the first time, and Cartucho can't take focus on its own.",
+  "o sistema não respondeu ao pedido de captura": "the system didn't answer the capture request",
+  "sem conexão com o D-Bus da sessão": "no connection to the session D-Bus",
+  "a captura foi negada no sistema": "the capture was denied by the system",
+  "o sistema não fez a captura ({0})": "the system didn't take the capture ({0})",
   "No GNOME o ícone perto do relógio só aparece com a extensão AppIndicator, que não está ligada. Sem ela, o Cartucho some ao fechar e só volta abrindo de novo pelo menu de aplicativos.": "On GNOME the icon by the clock only shows up with the AppIndicator extension, which isn't enabled. Without it, Cartucho disappears when closed and only comes back by opening it again from the app menu.",
   "Não deu para capturar a tela": "Couldn't capture the screen",
-  "No Linux, a captura de tela e trazer o Cartucho para a frente precisam de uma sessão X11 com o xdotool instalado. No Wayland, o sistema não deixa um programa capturar a tela ou pegar o foco sozinho.": "On Linux, screenshots and bringing Cartucho to the front need an X11 session with xdotool installed. On Wayland, the system doesn't let a program capture the screen or take focus on its own.",
   "Abrir junto com o sistema": "Open with the system",
   "{0} pelo Cartucho": "{0} through Cartucho",
   "Não consegui pedir para a Steam abrir {0}: {1}": "Couldn't ask Steam to open {0}: {1}",

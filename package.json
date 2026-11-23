@@ -33,6 +33,7 @@
     "@trpc/client": "^11.29.5",
     "@trpc/server": "^11.29.5",
     "@trpc/tanstack-react-query": "^11.29.5",
+    "dbus-next": "^0.10.2",
     "electron-trpc": "^1.0.0",
     "electron-updater": "^6.8.11",
     "qrcode": "^1.5.4",

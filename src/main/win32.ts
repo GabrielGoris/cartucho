@@ -19,6 +19,7 @@ export interface Desk {
   beep(file: string): Promise<boolean | null>;
   xinput(cb: PadFeed): Promise<boolean | null>;
   grab?(): Promise<NativeImage | null>;
+  early?: boolean;
   stop(): void;
 }
 
