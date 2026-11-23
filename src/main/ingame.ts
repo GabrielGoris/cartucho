@@ -33,6 +33,8 @@ export class Combos {
     this.down.set(index, now);
     const has = (s: Set<string>, k: string[]) => k.length > 0 && k.every(x => s.has(x));
     const sNow = has(now, b.summon), extra = [...now].some(k => !b.summon.includes(k));
+    const since = this.held.get(index);
+    if (!sNow && since != null && since >= 0 && at - since >= HOLD && !has(now, b.shot)) out.push('summon');
     if (!sNow) this.held.delete(index);
     else if (extra) this.held.set(index, -1);
     else if (!has(before, b.summon)) this.held.set(index, at);
@@ -101,7 +103,7 @@ export class InGame {
   private game: number | null = null;
   private follow = 0;
   private seen = new Set<string>();
-  private pre: Promise<{ file: string; at: number } | null> | null = null;
+  private pre: Promise<{ file?: string; img?: NativeImage; at: number } | null> | null = null;
   private preAt = 0;
   private summonAt = 0;
   private summonTitle = '';
@@ -122,7 +124,11 @@ export class InGame {
     this.xon = true;
     const pid = id ?? this.xid;
     if (mask < 0) { this.xseen.delete(slot); this.combos.feed(100 + slot, new Set(), Date.now(), pid); return; }
-    if (!this.xseen.has(slot) && !id) { this.xseen.add(slot); log(`controle XInput ${slot + 1} lido direto pelo Windows`, mode === 3 ? '(sem o botão Xbox: XInput antigo)' : ''); }
+    if (!this.xseen.has(slot)) {
+      this.xseen.add(slot);
+      this.combos.feed(100 + slot, new Set(), Date.now(), pid);
+      if (!id) log(`controle XInput ${slot + 1} lido direto pelo Windows`, mode === 3 ? '(sem o botão Xbox: XInput antigo)' : '');
+    }
     this.run(this.combos.feed(100 + slot, padTokens({ id: pid, mapping: 'standard' }, xinputButtons(mask)), Date.now(), pid));
     this.schedule();
   }
@@ -189,10 +195,12 @@ export class InGame {
   private arm() {
     const at = Date.now();
     if (this.pre && at - this.preAt < 300) return;
-    const file = join(app.getPath('temp'), `cartucho-pre-${process.pid}-${at}.png`);
-    void this.pre?.then(x => { if (x) try { unlinkSync(x.file); } catch { } });
+    void this.pre?.then(x => { if (x?.file) try { unlinkSync(x.file); } catch { } });
     this.preAt = at;
-    this.pre = this.d.w32.shot(file).then(r => (r && existsSync(file) ? { file, at } : null), () => null);
+    const fail = (why: string) => { log('pré-captura falhou', why); return null; };
+    if (this.d.w32.grab) { this.pre = this.d.w32.grab().then(img => (img && !img.isEmpty() ? { img, at } : fail(this.d.w32.err.trim().slice(-200))), e => fail(String(e))); return; }
+    const file = join(app.getPath('temp'), `cartucho-pre-${process.pid}-${at}.png`);
+    this.pre = this.d.w32.shot(file).then(r => (r && existsSync(file) ? { file, at } : fail(this.d.w32.err.trim().slice(-200))), e => fail(String(e)));
   }
 
   async summon() {
@@ -276,8 +284,11 @@ export class InGame {
       const d = await this.display(fg);
       let img: NativeImage | null = null;
       const early = pre ? await pre : null;
-      if (early && Date.now() - early.at < 4500) { copyFileSync(early.file, file); img = nativeImage.createFromPath(file); }
-      if (early) try { unlinkSync(early.file); } catch { }
+      if (early && Date.now() - early.at < 4500) {
+        if (early.img) { writeFileSync(file, early.img.toPNG()); img = early.img; }
+        else if (early.file) { copyFileSync(early.file, file); img = nativeImage.createFromPath(file); }
+      }
+      if (early?.file) try { unlinkSync(early.file); } catch { }
       if ((!img || img.isEmpty()) && await this.d.w32.shot(file) && existsSync(file)) img = nativeImage.createFromPath(file);
       if (!img || img.isEmpty()) {
         const size = { width: Math.round(d.size.width * d.scaleFactor), height: Math.round(d.size.height * d.scaleFactor) };

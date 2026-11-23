@@ -51,6 +51,8 @@ export class LinuxDesk implements Desk {
   private wayland = process.env.XDG_SESSION_TYPE === 'wayland';
   private tools = new Map<string, Promise<boolean>>();
 
+  constructor(private sys = process.env.CARTUCHO_INPUT_SYS || '/sys/class/input', private dev = process.env.CARTUCHO_INPUT_DEV || '/dev/input') {}
+
   private has(cmd: string) {
     let p = this.tools.get(cmd);
     if (!p) { p = run('which', [cmd]).then(x => !!x?.trim()); this.tools.set(cmd, p); }
@@ -58,9 +60,10 @@ export class LinuxDesk implements Desk {
   }
 
   private monOf(r: Rect): Mon {
-    const d = screen.getDisplayMatching({ x: r[0], y: r[1], width: Math.max(1, r[2] - r[0]), height: Math.max(1, r[3] - r[1]) });
-    const b = d.bounds, w = d.workArea;
-    return { m: [b.x, b.y, b.x + b.width, b.y + b.height], w: [w.x, w.y, w.x + w.width, w.y + w.height] };
+    const box = { x: r[0], y: r[1], width: Math.max(1, r[2] - r[0]), height: Math.max(1, r[3] - r[1]) };
+    const d = screen.getDisplayMatching(screen.screenToDipRect(null, box));
+    const px = (x: Electron.Rectangle): Rect => { const q = screen.dipToScreenRect(null, x); return [q.x, q.y, q.x + q.width, q.y + q.height]; };
+    return { m: px(d.bounds), w: px(d.workArea) };
   }
 
   async foreground(): Promise<Win | null> {
@@ -75,7 +78,16 @@ export class LinuxDesk implements Desk {
     return { hwnd: Number(id), pid: p, path, title: title?.trim() ?? '', r, m: this.monOf(r).m };
   }
 
-  async windows() { return null; }
+  async windows(): Promise<Win[] | null> {
+    if (!(await this.has('wmctrl'))) return null;
+    const out = await run('wmctrl', ['-lpG']);
+    if (out == null) return null;
+    return parseWindows(out).map(w => {
+      let path = ''; try { path = w.pid ? readlinkSync(`/proc/${w.pid}/exe`) : ''; } catch { }
+      const r: Rect = [w.x, w.y, w.x + w.w, w.y + w.h];
+      return { hwnd: w.id, pid: w.pid, path, title: w.title, r, m: this.monOf(r).m };
+    }).filter(w => w.r[2] - w.r[0] >= 320 && w.r[3] - w.r[1] >= 200);
+  }
   async monitor(hwnd: number): Promise<Mon | null> {
     if (!(await this.has('xdotool'))) return null;
     const geo = await run('xdotool', ['getwindowgeometry', '--shell', String(Math.trunc(hwnd))]);
@@ -83,7 +95,20 @@ export class LinuxDesk implements Desk {
     const g = (k: string) => Number(geo.match(new RegExp(`^${k}=(-?\\d+)`, 'm'))?.[1] ?? 0);
     return this.monOf([g('X'), g('Y'), g('X') + g('WIDTH'), g('Y') + g('HEIGHT')]);
   }
-  async place() { return null; }
+  async place(hwnd: number, r: Rect) {
+    if (!(await this.has('xdotool'))) return null;
+    const id = String(Math.trunc(hwnd)), hex = `0x${Math.trunc(hwnd).toString(16)}`, wm = await this.has('wmctrl');
+    const full = await this.isFull(hwnd);
+    if (full && wm) await run('wmctrl', ['-i', '-r', hex, '-b', 'remove,fullscreen']);
+    await run('xdotool', ['windowmove', id, String(r[0]), String(r[1])]);
+    await run('xdotool', ['windowsize', id, String(r[2] - r[0]), String(r[3] - r[1])]);
+    if (full && wm) await run('wmctrl', ['-i', '-r', hex, '-b', 'add,fullscreen']);
+    return true;
+  }
+
+  private async isFull(hwnd: number) {
+    return /_NET_WM_STATE_FULLSCREEN/.test((await run('xprop', ['-id', String(Math.trunc(hwnd)), '_NET_WM_STATE'])) ?? '');
+  }
 
   async front(hwnd: number) {
     const id = String(Math.trunc(hwnd));
@@ -92,17 +117,25 @@ export class LinuxDesk implements Desk {
     return null;
   }
 
-  async shot(file: string) {
+  private async capture() {
     if (this.wayland) { this.err = 'sessão Wayland: o sistema não deixa capturar a tela sem pedir'; return null; }
     const fg = await this.foreground();
     const d = fg ? screen.getDisplayMatching({ x: fg.r[0], y: fg.r[1], width: Math.max(1, fg.r[2] - fg.r[0]), height: Math.max(1, fg.r[3] - fg.r[1]) }) : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const size = { width: Math.round(d.size.width * d.scaleFactor), height: Math.round(d.size.height * d.scaleFactor) };
     const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: size });
     const src = sources.find(s => s.display_id === String(d.id)) ?? sources[0];
-    if (!src || src.thumbnail.isEmpty()) return null;
-    writeFileSync(file, src.thumbnail.toPNG());
+    if (!src || src.thumbnail.isEmpty()) { this.err = 'a captura da tela veio vazia'; return null; }
     const b = d.bounds;
-    return { m: [b.x, b.y, b.x + b.width, b.y + b.height] as Rect };
+    return { img: src.thumbnail, m: [b.x, b.y, b.x + b.width, b.y + b.height] as Rect };
+  }
+
+  async grab() { return (await this.capture())?.img ?? null; }
+
+  async shot(file: string) {
+    const c = await this.capture();
+    if (!c) return null;
+    writeFileSync(file, c.img.toPNG());
+    return { m: c.m };
   }
 
   async beep(file: string) {
@@ -116,10 +149,10 @@ export class LinuxDesk implements Desk {
   async xinput(cb: PadFeed) {
     const scan = () => {
       let names: string[] = [];
-      try { names = readdirSync('/sys/class/input').filter(n => /^event\d+$/.test(n)); } catch { return; }
+      try { names = readdirSync(this.sys).filter(n => /^event\d+$/.test(n)); } catch { return; }
       const live = new Set<string>();
       for (const n of names) {
-        const sys = `/sys/class/input/${n}/device`;
+        const sys = `${this.sys}/${n}/device`;
         let caps = '';
         try { caps = readFileSync(`${sys}/capabilities/key`, 'utf8'); } catch { continue; }
         if (!hasBit(caps, 0x130)) continue;
@@ -129,7 +162,7 @@ export class LinuxDesk implements Desk {
         const id = `${read('name') || 'Controle'} (STANDARD GAMEPAD Vendor: ${read('id/vendor')} Product: ${read('id/product')})`;
         const slot = Number(n.slice(5));
         let fd: number;
-        try { fd = openSync(`/dev/input/${n}`, 'r'); } catch (e) {
+        try { fd = openSync(`${this.dev}/${n}`, 'r'); } catch (e) {
           if (!this.denied) { this.denied = true; log('sem permissão para ler o controle em /dev/input:', e instanceof Error ? e.message : e); }
           continue;
         }
@@ -150,7 +183,7 @@ export class LinuxDesk implements Desk {
       }
       for (const [n, d] of this.devs) if (!live.has(n)) { d.stream.destroy(); this.devs.delete(n); }
     };
-    if (!existsSync('/sys/class/input')) return false;
+    if (!existsSync(this.sys)) return false;
     scan();
     if (!this.timer) this.timer = setInterval(scan, 3000);
     return true;
@@ -163,3 +196,13 @@ export class LinuxDesk implements Desk {
   }
 }
 
+
+export function parseWindows(out: string) {
+  const L: { id: number; pid: number; x: number; y: number; w: number; h: number; title: string }[] = [];
+  for (const line of out.split(/\r?\n/)) {
+    const f = line.match(/^(0x[0-9a-f]+)\s+(-?\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)\s+(\d+)\s+(\d+)\s+\S+\s*(.*)$/i);
+    if (!f || f[2] === '-1') continue;
+    L.push({ id: parseInt(f[1]!, 16), pid: Number(f[3]), x: Number(f[4]), y: Number(f[5]), w: Number(f[6]), h: Number(f[7]), title: f[8]!.trim() });
+  }
+  return L;
+}

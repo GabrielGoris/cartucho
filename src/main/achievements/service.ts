@@ -11,7 +11,7 @@ import { absUrl } from '../catalog';
 import { type Adapter, type AdapterContext, adapterById, adapterForDir } from './adapters';
 import type { Unlock } from './saves';
 import { tt } from '@shared/i18n';
-import { steamManifest } from '../steam';
+import { steamManifest, windowsAppData } from '../steam';
 
 const ADAPTER_CONSOLE: Record<string, ConsoleId> = { 'unleashed-recomp': 'x360', 'marathon-recomp': 'x360', sonic3air: 'other', rsdkv4: 'other' };
 
@@ -52,7 +52,10 @@ export class AchievementService {
       playMs: r.play_ms ?? 0, lastPlayed: r.last_played ?? null, running: this.isRunning(r.id), missing: !existsSync(r.install_dir),
     };
   }
-  private ctx(r: GameRow): AdapterContext { return { installDir: r.install_dir, appData: this.appData, title: r.title }; }
+  private ctx(r: GameRow): AdapterContext {
+    const appData = process.platform === 'linux' ? windowsAppData(r.install_dir, r.exe) ?? this.appData : this.appData;
+    return { installDir: r.install_dir, appData, title: r.title };
+  }
 
   listGames(): InstalledGame[] {
     return (this.db.prepare(`${GAME_SQL} ORDER BY g.title`).all() as GameRow[]).map(r => this.toGame(r));

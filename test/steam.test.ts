@@ -60,3 +60,27 @@ describe('controle no Linux', () => {
     expect(bindsFor(all, 'Outro (Vendor: 1234 Product: 5678)').shot).toEqual(['Home', 'RB']);
   });
 });
+
+import { parseWindows } from '../src/main/linux';
+
+describe('janelas no Linux', () => {
+  it('lê a lista de janelas do wmctrl com posição e tamanho', () => {
+    const L = parseWindows('0x01e00003  0 4242   100 120 1200 700 pc Jogo Falso\n0x01e00009 -1 99 0 0 1920 30 pc Painel');
+    expect(L).toEqual([{ id: 0x01e00003, pid: 4242, x: 100, y: 120, w: 1200, h: 700, title: 'Jogo Falso' }]);
+  });
+});
+
+import { windowsAppData } from '../src/main/steam';
+
+describe('saves de jogos do Windows no Linux', () => {
+  it('acha a pasta AppData do prefixo do Proton', () => {
+    const lib = join(mkdtempSync(join(tmpdir(), 'steam-')), 'steamapps');
+    const dir = join(lib, 'common', 'Unleashed');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(lib, 'appmanifest_99.acf'), '"AppState"\n{\n\t"appid"\t\t"99"\n\t"name"\t\t"Unleashed"\n\t"installdir"\t\t"Unleashed"\n}\n');
+    const roaming = join(lib, 'compatdata', '99', 'pfx', 'drive_c', 'users', 'steamuser', 'AppData', 'Roaming');
+    mkdirSync(roaming, { recursive: true });
+    expect(windowsAppData(dir, join(dir, 'UnleashedRecomp.exe'))).toBe(roaming);
+    expect(windowsAppData(dir, join(dir, 'unleashed'))).toBeNull();
+  });
+});

@@ -220,7 +220,7 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
             <span><span className="t">{tt('Pasta dos jogos')}</span><span className="d">{tt('Onde o Cartucho instala o que você baixa. Jogos já instalados ficam onde estão.')}</span></span>
             <span className="c"><span className="st-pick"><b style={{ minWidth: 0, maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{portsDir.data ?? '…'}</b>›</span></span>
           </button>
-            {bg.data && !LINUX && bgRow('screen', tt('Abrir o jogo na tela do Cartucho'), tt('Com mais de um monitor, o jogo vai para a tela onde o Cartucho está. Jogos em tela cheia exclusiva podem ignorar.'))}
+            {bg.data && bgRow('screen', tt('Abrir o jogo na tela do Cartucho'), tt('Com mais de um monitor, o jogo vai para a tela onde o Cartucho está. Jogos em tela cheia exclusiva podem ignorar.'))}
             {bg.data && bgRow('track', tt('Contar jogos abertos fora do Cartucho'), tt('Com o Cartucho aberto (ou na bandeja), o tempo conta mesmo se você abrir o jogo pelo .exe ou por um atalho.'))}
             {getLang() === 'pt' && row('translate')}
           <button className="st-r" data-hf onClick={() => artRefresh.mutate()} disabled={artRefresh.isPending}>

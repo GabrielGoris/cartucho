@@ -2,6 +2,7 @@ import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { log } from './log';
+import type { NativeImage } from 'electron';
 
 export type Rect = [number, number, number, number];
 export interface Win { hwnd: number; pid: number; path: string; title: string; r: Rect; m: Rect }
@@ -17,6 +18,7 @@ export interface Desk {
   shot(file: string): Promise<{ m: Rect } | null>;
   beep(file: string): Promise<boolean | null>;
   xinput(cb: PadFeed): Promise<boolean | null>;
+  grab?(): Promise<NativeImage | null>;
   stop(): void;
 }
 
