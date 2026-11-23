@@ -1,4 +1,8 @@
 export const EN: Record<string, string> = {
+  "TESTE DO CONTROLE": "CONTROLLER TEST",
+  "{0} botões · layout padrão": "{0} buttons · standard layout",
+  "{0} botões · layout genérico": "{0} buttons · generic layout",
+  "Aperte os botões do controle: cada um que o Windows mostra para os programas acende aqui, e só esses podem ser usados. Alguns controles escondem os botões extras no modo Xbox (XInput); no 8BitDo Ultimate 2, por exemplo, L4/R4 e as palhetas de trás só aparecem no modo Bluetooth (DInput).": "Press the controller's buttons: each one Windows shows to programs lights up here, and only those can be used. Some controllers hide their extra buttons in Xbox (XInput) mode; on the 8BitDo Ultimate 2, for example, L4/R4 and the back paddles only show up in Bluetooth (DInput) mode.",
   "Aperte no controle o botão que você quer para esta ação. Botões extras do controle também valem.": "Press the button you want for this action on the controller. Extra controller buttons work too.",
   "Esc no teclado cancela.": "Esc on the keyboard cancels.",
   "Esse botão é fixo: o direcional navega e o Home volta para o palco.": "That button is fixed: the D-pad navigates and Home goes back to the stage.",

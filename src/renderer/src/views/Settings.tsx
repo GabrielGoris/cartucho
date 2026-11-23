@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSubscription } from '@trpc/tanstack-react-query';
 import { useState } from 'react';
 import { useTRPC } from '../trpc';
-import { BindChips, buttonOf, Glyph, PAD_NAMES, PhysGlyph, rebind, recordButtons, resetPadMap, SETUP_STEPS, tokensOf, usePad, type Key } from '../lib/input';
+import { BindChips, buttonOf, Glyph, PAD_NAMES, PadTester, PhysGlyph, rebind, recordButtons, resetPadMap, SETUP_STEPS, tokensOf, usePad, type Key } from '../lib/input';
 import { BIND_NAMES } from './GlobalUI';
 import { PALETTES, paletteById } from '../lib/palettes';
 import { setSettings, useSettings, type Settings as S } from '../lib/settings';
@@ -186,6 +186,11 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
           </>}
           {tab === 'Controle' && <>
             {row('pad')}
+          {pad && <>
+            <div className="st-sec">{tt('TESTE DO CONTROLE')}</div>
+            <PadTester />
+            <p className="st-note">{tt('Aperte os botões do controle: cada um que o Windows mostra para os programas acende aqui, e só esses podem ser usados. Alguns controles escondem os botões extras no modo Xbox (XInput); no 8BitDo Ultimate 2, por exemplo, L4/R4 e as palhetas de trás só aparecem no modo Bluetooth (DInput).')}</p>
+          </>}
           <div className="st-sec">{tt('BOTÕES DO CARTUCHO')}</div>
           {!pad && <p className="st-note">{tt('Conecte um controle e aperte qualquer botão nele para trocar os botões.')}</p>}
           {SETUP_STEPS.map(([k, name, hint]) => (

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { getSettings, useSettings } from './settings';
 
 import { keyMapFor as mapFor, type Key, type PadMap } from '@shared/padmap';
@@ -156,6 +156,28 @@ export function BindChips({ bind, pad }: { bind: string[]; pad?: PadLike | null 
   const cur = usePad(), p = pad === undefined ? cur : pad;
   return <span className="bind">{bind.map((t, i) => <span key={t} className="bind-k">{i > 0 && <i>+</i>}<PhysGlyph i={indexOfToken(p, t)} pad={p} /></span>)}</span>;
 }
+export function PadTester() {
+  const p = usePad();
+  const [on, setOn] = useState<{ n: number; down: number[] }>({ n: 0, down: [] });
+  useEffect(() => {
+    let last = '';
+    const t = setInterval(() => {
+      const q = pads().find(x => x.index === connected?.index) ?? pads()[0];
+      const b = q ? btns(q) : [];
+      const v = { n: b.length, down: b.flatMap((x, i) => (x ? [i] : [])) }, k = JSON.stringify(v);
+      if (k !== last) { last = k; setOn(v); }
+    }, 50);
+    return () => clearInterval(t);
+  }, []);
+  if (!p) return null;
+  return (
+    <div className="pad-test">
+      <div className="pad-test-h"><b>{p.id.replace(/\s*\(.*$/, '') || tt('Controle')}</b><span>{p.mapping === 'standard' ? tt('{0} botões · layout padrão', { 0: on.n }) : tt('{0} botões · layout genérico', { 0: on.n })}</span></div>
+      <div className="pad-test-b">{Array.from({ length: on.n }, (_, i) => <span key={i} className={on.down.includes(i) ? 'on' : ''}><PhysGlyph i={i} pad={p} /></span>)}</div>
+    </div>
+  );
+}
+
 export function IdxChips({ idx, pad }: { idx: number[]; pad: PadLike | null }) {
   return <span className="bind">{idx.map((n, i) => <span key={n} className="bind-k">{i > 0 && <i>+</i>}<PhysGlyph i={n} pad={pad} /></span>)}</span>;
 }
