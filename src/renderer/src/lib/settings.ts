@@ -6,7 +6,8 @@ export interface Settings {
   flicker: boolean;
   frame: boolean;
   glow: boolean;
-  pixel: boolean;
+  /** Palco em baixa resolução. Chave nova: a antiga ("pixel", ligada) nunca chegou a valer, então todo mundo começa com o palco liso. */
+  pixelStage: boolean;
   blur: boolean;
   snd: boolean;
   vol: number;
@@ -23,7 +24,7 @@ export interface Settings {
   avatar: string;
   lang: 'auto' | 'pt' | 'en';
 }
-export const DEFAULTS: Settings = { pal: 'neon', crtLvl: 30, flicker: true, frame: true, glow: true, pixel: true, blur: true, snd: true, vol: 70, bootSnd: true, pad: 'auto', boot: true, start: 'act', reduce: false, hidden: [], picked: false, translate: true, xmbTheme: {}, name: '', avatar: 'acc', lang: 'auto' };
+export const DEFAULTS: Settings = { pal: 'neon', crtLvl: 30, flicker: true, frame: true, glow: true, pixelStage: false, blur: true, snd: true, vol: 70, bootSnd: true, pad: 'auto', boot: true, start: 'act', reduce: false, hidden: [], picked: false, translate: true, xmbTheme: {}, name: '', avatar: 'acc', lang: 'auto' };
 
 const KEY = 'cartucho.set';
 let state: Settings = (() => { try { const s = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; if (typeof s.xmbTheme !== 'object' || !s.xmbTheme) s.xmbTheme = {}; return s; } catch { return { ...DEFAULTS }; } })();

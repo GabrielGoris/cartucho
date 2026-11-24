@@ -28,7 +28,7 @@ const ROWS: Record<string, Row> = Object.fromEntries(([
   { k: 'flicker', t: tt('Tremulação'), d: tt('A TV pisca de leve de vez em quando.'), kind: 'sw' },
   { k: 'frame', t: tt('Moldura de TV'), d: tt('Cantos arredondados em volta da tela.'), kind: 'sw' },
   { k: 'glow', t: tt('Brilho neon'), d: tt('Brilho em volta dos textos e botões.'), kind: 'sw' },
-  { k: 'pixel', t: tt('Palco pixelado'), d: tt('Os consoles em baixa resolução, como num jogo antigo.'), kind: 'sw' },
+  { k: 'pixelStage', t: tt('Palco pixelado'), d: tt('Os consoles em baixa resolução, como num jogo antigo.'), kind: 'sw' },
   { k: 'blur', t: tt('Desfocar o palco na Home'), d: tt('O palco fica desfocado atrás do Início.'), kind: 'sw' },
   { k: 'reduce', t: tt('Menos movimento'), d: tt('Sem animações nem tremulação.'), kind: 'sw' },
   { k: 'snd', t: tt('Sons da interface'), d: tt('Bipes ao mover e confirmar.'), kind: 'sw' },
@@ -206,7 +206,7 @@ export function Settings({ onClose, onPickConsoles, onSupport }: { onClose: () =
             {row('flicker')}
             {row('frame')}
             {row('glow')}
-            {row('pixel')}
+            {row('pixelStage')}
             {row('blur')}
             {row('reduce')}
           </>}

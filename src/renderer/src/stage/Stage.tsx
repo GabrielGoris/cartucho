@@ -68,7 +68,7 @@ export function Stage(p: Props) {
         flat
         gl={{ antialias: false, powerPreference: 'high-performance' }}
         camera={{ fov: 36, near: 0.1, far: 80, position: geometry(p.list.length).CAM_HOME.toArray() }}
-        // Mesma conta do efeito no Scene: sem isso o Canvas abria com a resolução padrão e o "Palco pixelado" só valia depois de remontar.
+        // A resolução vem daqui: o Canvas reaplica o dpr a cada render e desfazia o que o Scene ajustasse.
         dpr={p.pixel ? Math.min(1, 520 / Math.max(1, window.innerWidth)) : Math.min(2, window.devicePixelRatio || 1)}
         frameloop={p.mode === 'hidden' ? 'never' : 'always'}
         aria-label={tt('Consoles em 3D girando num palco')}
