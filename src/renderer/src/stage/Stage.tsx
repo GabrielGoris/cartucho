@@ -27,13 +27,27 @@ interface Props {
   pixel: boolean;
   onSelect: (i: number) => void;
   onEnter: (i: number) => void;
+  /** Jogo aberto e o Cartucho em segundo plano: depois de um tempo o palco sai da placa de vídeo para liberar memória. */
+  sleep?: boolean;
 }
+
+/** Quanto tempo de jogo aberto até soltar o palco (voltar rápido de um jogo não recarrega nada). */
+const SLEEP_AFTER_MS = 20_000;
 
 export function Stage(p: Props) {
   const [gen, setGen] = useState(0);
   const live = useRef<HTMLCanvasElement | null>(null);
   const retry = useRef(0);
   useEffect(() => () => { live.current = null; clearTimeout(retry.current); }, []);
+  // Os modelos ficam guardados na memória do programa; o que sai é a cópia na placa de vídeo
+  // (em placa integrada, isso também é RAM). Ao voltar, o palco é montado de novo na hora.
+  const [asleep, setAsleep] = useState(false);
+  useEffect(() => {
+    if (!p.sleep) { setAsleep(false); return; }
+    const t = window.setTimeout(() => { live.current = null; clearTimeout(retry.current); setAsleep(true); }, SLEEP_AFTER_MS);
+    return () => clearTimeout(t);
+  }, [p.sleep]);
+  if (asleep) return <div className={`stage stage-${p.mode}`} />;
   return (
     <div className={`stage stage-${p.mode}`} onWheel={e => { if (p.mode === 'stage') p.onSelect(p.sel + (e.deltaY > 0 ? 1 : -1)); }}>
       <Canvas

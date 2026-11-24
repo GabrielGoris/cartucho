@@ -161,7 +161,7 @@ export function App() {
     <>
     <TitleBar ctx={inside ? CONSOLES.find(c => c.id === inside.id)?.name ?? null : all ? tt('Todos os jogos') : null} onMenu={() => { sfx.play('ok'); setMenu(true); }} />
     <div id="tv" className={tvClass} style={{ ['--crt' as string]: s.crtLvl / 100 }}>
-      <Stage list={list} sel={sel} mode={stageMode} zoom={zoom} palette={palette} pixel={s.pixel} onSelect={i => { sfx.play('move'); setSel(i); }} onEnter={i => enterConsole(list[i]!.id)} />
+      <Stage list={list} sel={sel} mode={stageMode} zoom={zoom} palette={palette} pixel={s.pixel} sleep={gameOpen && !winFocus} onSelect={i => { sfx.play('move'); setSel(i); }} onEnter={i => enterConsole(list[i]!.id)} />
       {all && !inside && <AllGames onBack={closeAll} />}
       {!inside && !all && (
 <Select active={!booting && !settingsOpen && !askPicker && !menu && !gov} list={list} page={page} setPage={setPage} sel={sel} setSel={setSel}
