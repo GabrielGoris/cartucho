@@ -15,14 +15,17 @@ export function Platina({ e, onClose }: { e: CompleteEvent; onClose: () => void 
     const t = window.setTimeout(() => close.current(), 8000);
     return () => clearTimeout(t);
   }, []);
-  useKeys(() => { close.current(); return true; });
+  // No primeiro segundo os botões não fecham: o botão usado para voltar ao Cartucho (Home, o do controle) chegaria aqui.
+  const t0 = useRef(performance.now());
+  const ready = () => performance.now() - t0.current > 1000;
+  useKeys(() => { if (ready()) close.current(); return true; });
   // Confete: posições e cores sorteadas uma vez (sem animação quando "reduzir movimento" está ligado).
   const bits = useMemo(() => reduceMotion() ? [] : Array.from({ length: 70 }, (_, i) => ({
     left: Math.random() * 100, delay: Math.random() * 1.2, dur: 2.4 + Math.random() * 2.2, rot: Math.random() * 720 - 360,
     drift: Math.random() * 30 - 15, hue: [45, 50, 38, 330, 190][i % 5], w: 6 + Math.random() * 7,
   })), []);
   return (
-    <div className="plat" onClick={() => close.current()} role="dialog" aria-label={tt('100% das conquistas')}>
+    <div className="plat" onClick={() => { if (ready()) close.current(); }} role="dialog" aria-label={tt('100% das conquistas')}>
       <div className="plat-conf" aria-hidden>
         {bits.map((b, i) => (
           <i key={i} style={{ left: `${b.left}%`, width: b.w, height: b.w * 0.45, background: `hsl(${b.hue} 95% 60%)`, animationDelay: `${b.delay}s`, animationDuration: `${b.dur}s`,

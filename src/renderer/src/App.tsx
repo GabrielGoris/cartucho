@@ -127,6 +127,9 @@ export function App() {
   // 100% das conquistas: entra na fila e aparece quando o Cartucho está na frente (durante o jogo, o aviso dourado já saiu por cima dele).
   const [plats, setPlats] = useState<CompleteEvent[]>([]);
   useSubscription(trpc.achievements.onComplete.subscriptionOptions(undefined, { onData: (e: CompleteEvent) => setPlats(q => [...q, e]) }));
+  // Começa com o Cartucho na frente; depois de começar, fica até fechar (trocar de janela no meio não some com ela).
+  const [platOn, setPlatOn] = useState(false);
+  useEffect(() => { if (!platOn && plats.length && winFocus && !booting) setPlatOn(true); }, [platOn, plats.length, winFocus, booting]);
   useSubscription(trpc.ports.onProgress.subscriptionOptions(undefined, {
     onData: p => { pushProgress(p); if (p.done) { void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }); void qc.invalidateQueries({ queryKey: trpc.library.summary.queryKey() }); } },
   }));
@@ -187,7 +190,7 @@ export function App() {
       <Suspense fallback={null}>{settingsOpen && <SettingsPart.C onSupport={() => { setSettingsOpen(false); setGov('support'); }} onClose={() => setSettingsOpen(false)} onPickConsoles={() => { setSettingsOpen(false); setPicker(true); }} />}</Suspense>
       <Suspense fallback={null}>{askPicker && <PickerPart.C first={!s.picked} onClose={() => setPicker(false)} />}</Suspense>
       {booting && <Boot summary={summary.data} onDone={() => setBooting(false)} />}
-      {plats[0] && winFocus && !booting && <Platina key={plats[0].gameId + plats[0].at} e={plats[0]} onClose={() => setPlats(q => q.slice(1))} />}
+      {platOn && plats[0] && <Platina key={plats[0].gameId + plats[0].at} e={plats[0]} onClose={() => { setPlatOn(false); setPlats(q => q.slice(1)); }} />}
 
       {(gameOpen || away != null) && <button className="playing" onClick={back}>▶ {Object.values(playing).join(', ') || away ? tt('JOGANDO {g}', { g: (Object.values(playing).join(', ') || away || '').toUpperCase() }) : tt('JOGO ABERTO')}<span className="pl-k"><Glyph a="home" />{tt('voltar para o jogo')}</span></button>}
       <div className="toasts">
