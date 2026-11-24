@@ -96,7 +96,7 @@ export interface GameAchievements {
 
 /** Todas as conquistas de um jogo desbloqueadas (a lista é conhecida): a comemoração dos 100%. */
 export interface CompleteEvent { gameId: string; gameTitle: string; console: ConsoleId; platformName: string | null; coverUrl: string | null; total: number; at: number }
-export interface UnlockEvent { gameId: string; gameTitle: string; achId: number; name: string; at: number; description?: string; icon?: string | null; points?: number | null }
+export interface UnlockEvent { gameId: string; gameTitle: string; achId: number; name: string; at: number; description?: string; icon?: string | null; points?: number | null; /** % dos jogadores que têm (quando a origem publica). */ rarity?: number | null }
 
 export interface RecentUnlock { gameId: string; gameTitle: string; achId: number; name: string; points: number | null; at: number; icon?: string | null }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Combos, padKeys, safeName } from '../src/main/ingame';
+import { Combos, padKeys, rarePage, safeName } from '../src/main/ingame';
 import { bindsFor, HOLD, readAllBinds } from '../src/shared/binds';
 import { moveTo, ownedBy, xinputButtons } from '../src/main/win32';
 import { mergeSessions } from '../src/main/play';
@@ -82,5 +82,18 @@ describe('sessões de jogo', () => {
       { g: 'b', s: 31 * m, e: 40 * m },
     ]);
     expect(g.map(x => [x.g, x.ms / m])).toEqual([['a', 55], ['a', 1], ['b', 9]]);
+  });
+});
+
+describe('aviso de conquista rara por cima do jogo', () => {
+  it('mostra o nome e a porcentagem; texto da conquista não vira HTML', () => {
+    const h = rarePage('<b>Mestre</b> & cia', 'CONQUISTA RARA · 2,4% DOS JOGADORES', null);
+    expect(h).toContain('&lt;b&gt;Mestre&lt;/b&gt; &amp; cia');
+    expect(h).toContain('CONQUISTA RARA · 2,4% DOS JOGADORES');
+    expect(h).toContain('💎');
+  });
+  it('usa o ícone só quando é uma imagem embutida', () => {
+    expect(rarePage('A', 'B', 'data:image/png;base64,iVBORw0KGgo=')).toContain('<img src="data:image/png;base64,iVBORw0KGgo=">');
+    expect(rarePage('A', 'B', 'https://exemplo.com/x.png" onerror="x')).not.toContain('<img');
   });
 });

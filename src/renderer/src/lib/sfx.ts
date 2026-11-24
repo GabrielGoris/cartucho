@@ -55,6 +55,15 @@ export const sfx = {
     tone(1760, 0.6, 'sine', v * 0.5, 0.3);
     tone(2637, 0.5, 'sine', v * 0.25, 0.38);
   },
+  /** Conquista rara: as notas da conquista, mais altas, e um brilho de cristal descendo e subindo. */
+  rare() {
+    initAudio();
+    const type: OscillatorType = profile === 'square' ? 'square' : profile === 'tri' ? 'triangle' : 'sine';
+    const v = type === 'square' ? 0.018 : type === 'triangle' ? 0.045 : 0.04;
+    arp([784, 1047, 1568, 2093], type, v, 0.08, 0.3);
+    tone(2637, 0.9, 'sine', v * 0.45, 0.34);
+    [3951, 3136, 3520, 4699, 5274].forEach((f, i) => tone(f, 0.35, 'sine', v * 0.2, 0.5 + i * 0.07));
+  },
   /** 100% das conquistas: fanfarra subindo, acorde segurado e brilhos no alto. */
   platinum() {
     initAudio();

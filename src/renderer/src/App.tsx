@@ -9,6 +9,7 @@ import { getSettings, reduceMotion, setSettings, useSettings } from './lib/setti
 import { applyPalette, paletteById, PALETTES } from './lib/palettes';
 import { Glyph, setGlobalKeys, setShortcutHandler } from './lib/input';
 import { getLang, tt } from '@shared/i18n';
+import { fmtPct, isRare } from '@shared/rarity';
 import { useConfirmReq } from './lib/dialogs';
 import { BindRecHost, CartuchoMenu, ConfirmHost, PickerHost, PlatformHost, DownloadAskHost } from './views/GlobalUI';
 import { AllGamesPart, ConsoleViewPart, MePart, PickerPart, RadarPart, SettingsPart, StagePart, SupportPart, preloadAll } from './lazy';
@@ -51,7 +52,7 @@ export function App() {
   const [gov, setGov] = useState<null | 'radar' | 'me' | 'support'>(null);
   const confirmReq = useConfirmReq();
   const [tvAnim, setTvAnim] = useState<'' | 'off' | 'on'>('');
-  type Toast = { k: string; n: string; g: string; icon?: string | null; ach?: boolean; out?: boolean };
+  type Toast = { k: string; n: string; g: string; icon?: string | null; ach?: boolean; rare?: boolean; out?: boolean };
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [playing, setPlaying] = useState<Record<string, string>>({});
   const dropToast = (t: Toast) => { setToasts(x => x.map(y => (y === t ? { ...y, out: true } : y))); setTimeout(() => setToasts(x => x.filter(y => y !== t && !(y.out && y.n === t.n && y.g === t.g))), 320); };
@@ -122,7 +123,11 @@ export function App() {
   }), [booting, picker]);
 
   useSubscription(trpc.achievements.onUnlock.subscriptionOptions(undefined, {
-    onData: (e: UnlockEvent) => { sfx.achievement(); toast({ k: tt('CONQUISTA DESBLOQUEADA'), n: e.name, g: e.gameTitle, icon: e.icon ?? null, ach: true }); },
+    onData: (e: UnlockEvent) => {
+      // Rara (menos de 5% dos jogadores): outro som e o aviso em roxo e ciano, com a porcentagem.
+      if (isRare(e.rarity)) { sfx.rare(); toast({ k: tt('CONQUISTA RARA · {0}% DOS JOGADORES', { 0: fmtPct(e.rarity) }), n: e.name, g: e.gameTitle, icon: e.icon ?? null, ach: true, rare: true }); return; }
+      sfx.achievement(); toast({ k: tt('CONQUISTA DESBLOQUEADA'), n: e.name, g: e.gameTitle, icon: e.icon ?? null, ach: true });
+    },
   }));
   // 100% das conquistas: entra na fila e aparece quando o Cartucho está na frente (durante o jogo, o aviso dourado já saiu por cima dele).
   const [plats, setPlats] = useState<CompleteEvent[]>([]);
@@ -195,8 +200,8 @@ export function App() {
       {(gameOpen || away != null) && <button className="playing" onClick={back}>▶ {Object.values(playing).join(', ') || away ? tt('JOGANDO {g}', { g: (Object.values(playing).join(', ') || away || '').toUpperCase() }) : tt('JOGO ABERTO')}<span className="pl-k"><Glyph a="home" />{tt('voltar para o jogo')}</span></button>}
       <div className="toasts">
         {toasts.map((t, i) => t.ach ? (
-          <button key={i} className={`toast ach ${t.out ? 'out' : ''}`} onClick={() => dropToast(t)}>
-            <span className="toast-ic">{t.icon ? <img src={t.icon} alt="" /> : <i>★</i>}</span>
+          <button key={i} className={`toast ach ${t.rare ? 'rare' : ''} ${t.out ? 'out' : ''}`} onClick={() => dropToast(t)}>
+            <span className="toast-ic">{t.icon ? <img src={t.icon} alt="" /> : <i>{t.rare ? '◆' : '★'}</i>}</span>
             <span className="toast-b"><span className="toast-k">{t.k}</span><span className="toast-n">{t.n}</span><span className="toast-g">{t.g}</span></span>
           </button>
         ) : (

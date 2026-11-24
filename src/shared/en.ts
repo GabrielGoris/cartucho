@@ -1054,4 +1054,10 @@ export const EN: Record<string, string> = {
   "Total: cerca de {0}. Fica guardado e só baixa uma vez.": "Total: about {0}. It's kept, so it only downloads once.",
   "Fica guardado e só baixa uma vez.": "It's kept, so it only downloads once.",
   "Sempre baixar sem perguntar": "Always download without asking",
+  "Jogados recentemente": "Recently played",
+  "Coleção": "Collection",
+  "jogados recentemente": "recently played",
+  "coleção": "collection",
+  "Jogado recentemente": "Recently played",
+  "CONQUISTA RARA · {0}% DOS JOGADORES": "RARE ACHIEVEMENT · {0}% OF PLAYERS",
 };

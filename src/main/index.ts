@@ -26,6 +26,7 @@ import { Background, playArg, startHidden } from './background';
 import { Updater } from './updater';
 import { initLog, log } from './log';
 import { getLang, pickLang, setLang, tt } from '@shared/i18n';
+import { fmtPct, isRare } from '@shared/rarity';
 import { setAchNet } from './achievements/net';
 import { GogAccount } from './gog';
 
@@ -136,6 +137,8 @@ void app.whenReady().then(async () => {
   });
   player.events.on('play', e => { if (!e.running) setTimeout(() => void ach.refreshRemote(e.gameId), 4000); });
   // 100% durante o jogo: o aviso aparece por cima dele (a comemoração completa espera o Cartucho voltar).
+  // Conquista rara (menos de 5% dos jogadores) com o jogo aberto: aviso próprio por cima do jogo.
+  ach.events.on('unlock', e => { if (isRare(e.rarity) && player.isRunning(e.gameId)) ingame.rare(e.name, tt('CONQUISTA RARA · {0}% DOS JOGADORES', { 0: fmtPct(e.rarity) }), e.icon ?? null); });
   ach.events.on('complete', e => { if (player.isRunning(e.gameId)) ingame.celebrate(e.gameTitle, tt('100% · TODAS AS {0} CONQUISTAS', { 0: e.total })); });
   player.events.on('play', e => log(`jogo ${e.running ? 'aberto' : 'fechado'}:`, e.title, e.sessionMs ? `${Math.round(e.sessionMs / 60000)} min` : ''));
   const gh = createGitHub({ fetch: ((url, init) => net.fetch(url, init as RequestInit)) as Fetch, ...(process.env.CARTUCHO_GITHUB_API ? { api: process.env.CARTUCHO_GITHUB_API } : {}) });

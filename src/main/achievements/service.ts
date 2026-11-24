@@ -298,13 +298,14 @@ export class AchievementService {
       this.events.emit('changed', id);
       if (!opts.silent) {
         const def = this.db.prepare('SELECT name, description, points, image FROM achievement_def WHERE game_id = ? AND ach_id = ?');
+        const rare = await this.rarityFor(id, fresh.some(a => { const at = unlocks!.find(u => u.id === a)?.at; return at == null || now - at <= 15 * 60_000; }));
         for (const achId of fresh) {
           // Conquistas antigas que aparecem agora (importadas) entram caladas; só avisa o que acabou de acontecer.
           const at = unlocks.find(u => u.id === achId)?.at ?? null;
           if (at != null && now - at > 15 * 60_000) continue;
           const d = def.get(id, achId) as { name: string; description: string; points: number | null; image: Uint8Array | null } | undefined;
           this.events.emit('unlock', { gameId: id, gameTitle: r.title, achId, name: d?.name ?? tt('Conquista #{0}', { 0: achId }), description: d?.description ?? '', points: d?.points ?? null,
-            icon: d?.image ? `data:${imgType(d.image)};base64,${Buffer.from(d.image).toString('base64')}` : null, at: at ?? now });
+            icon: d?.image ? `data:${imgType(d.image)};base64,${Buffer.from(d.image).toString('base64')}` : null, at: at ?? now, rarity: rare[achId] ?? null });
           announced = true;
         }
       }
@@ -358,6 +359,16 @@ export class AchievementService {
     try { const v = validar(JSON.parse(kvGet(this.db, 'ach.indice') ?? 'null')); if (v?.jogos.length) usarIndice(v); } catch { }
     const novo = await Promise.race([atualizarIndice(), sleep(8000).then(() => null)]).catch(() => null);
     if (novo?.jogos.length) kvSet(this.db, 'ach.indice', JSON.stringify(novo));
+  }
+  /** Porcentagens guardadas; sem nenhuma ainda e com conquista para avisar, tenta buscar agora (até 4 s). */
+  private async rarityFor(id: string, announcing: boolean): Promise<Record<string, number>> {
+    const read = () => { try { return JSON.parse(kvGet(this.db, `ach.rarity.${id}`) ?? '{}') as Record<string, number>; } catch { return {}; } };
+    let m = read();
+    if (announcing && !Object.keys(m).length && adapterById(this.row(id).adapter)?.rarity) {
+      await Promise.race([this.syncRarity(id), sleep(4000)]);
+      m = read();
+    }
+    return m;
   }
   /** Busca a porcentagem de jogadores de cada conquista (quando a origem publica) e guarda. */
   async syncRarity(id: string) {

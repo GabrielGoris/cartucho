@@ -108,6 +108,15 @@ Os textos saem em português quando o jogo tem; senão em inglês; senão no idi
 - **XEX2** sem criptografia, com compressão "nenhuma" ou "básica": é o que o UnleashedRecomp grava em `patched/`.
 - **Imagem descriptografada do MarathonRecomp**: cabeçalho LE `0xDECDECDE`, `base`, `entry`, `resource_offset`, `resource_size` (36 bytes), seguido da imagem crua.
 
+## Conquistas raras
+
+Quando a origem publica a porcentagem de jogadores de cada conquista (Steam, GOG e o Recompia), o Cartucho guarda esses números e os atualiza a cada 3 dias. Uma conquista que menos de 5% dos jogadores têm é **rara**:
+
+- **No Cartucho:** o aviso sai em roxo e ciano, com a porcentagem e um som próprio.
+- **Por cima do jogo:** se o jogo está aberto, aparece um aviso próprio, com o ícone da conquista. As conquistas comuns não aparecem por cima do jogo.
+
+Se a porcentagem ainda não estiver guardada quando a conquista sai, o Cartucho tenta buscá-la na hora, esperando no máximo 4 segundos. Sem porcentagem, a conquista é avisada como uma conquista comum.
+
 ## Desinstalar, remover e reinstalar
 
 - **Desinstalar** apaga os arquivos do jogo, mas ele continua na biblioteca como "não instalado", com o tempo de jogo, as sessões e as conquistas. Antes de apagar, o Cartucho anota como reconhecer o jogo depois (`match_keys`): o appid da Steam (do `appmanifest` ou do crack), o id da GOG e o nome do `.exe` (menos os genéricos, como `Game.exe` ou `UnityCrashHandler64.exe`).

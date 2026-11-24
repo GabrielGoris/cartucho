@@ -538,3 +538,10 @@ body.has-tb .web-ov { top: 36px; }
 @keyframes platGlow { 50% { box-shadow: 0 0 0 3px #ffe58a, 0 0 70px rgba(255,210,90,.85); } }
 @keyframes platFall { 0% { opacity: 1; transform: translate(0, 0) rotate(0); } 100% { opacity: .9; transform: translate(var(--drift), 108vh) rotate(var(--rot)); } }
 .reduce .plat-box, .reduce .plat-pct, .reduce .plat-rays, .reduce .plat-cover { animation: none; }
+/* Conquista rara: roxo e ciano, borda brilhando e o brilho passando duas vezes. */
+.toast.ach.rare { width: 430px; border-color: #7ff3ff; background: linear-gradient(135deg, #1c0b3a, #0a0618 60%, #0b2133); box-shadow: 0 0 34px rgba(150,110,255,.55), 0 0 0 1px rgba(180,140,255,.5) inset; }
+.toast.ach.rare::after { background: linear-gradient(100deg, transparent 30%, rgba(190,240,255,.45) 50%, transparent 70%); animation: achShine 1.2s .35s ease-out 2; }
+.toast.ach.rare .toast-k { background: linear-gradient(90deg, #b48cff, #7ff3ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.toast.ach.rare .toast-ic { background: rgba(127,243,255,.12); box-shadow: 0 0 0 2px #b48cff, 0 0 16px rgba(180,140,255,.8); }
+.toast.ach.rare .toast-ic i { color: #7ff3ff; }
+#tv.reduce .toast.ach.rare::after { animation: none; }

@@ -15,6 +15,7 @@ import type { DOpt } from './Discover';
 import type { GameAchievements as GameAchievementsData } from '@shared/types';
 import { WineDialog } from './WineDialog';
 import { getLang, tt } from '@shared/i18n';
+import { fmtPct, isRare } from '@shared/rarity';
 
 type Zone = 'meta' | 'score' | 'acts' | 'shots' | 'text' | 'side';
 const MAIN = new Set(['update', 'ach', 'install', 'add', 'reinstall', 'relink', 'remove']);
@@ -313,7 +314,7 @@ function GameAchievements({ d }: { d: GameAchievementsData }) {
   const row = (a: GameAchievementsData['list'][number]) => (
     <div key={a.id} className={`gv-ach ${a.unlockedAt == null ? 'off' : ''}`}>
       <span className="gv-achic">{a.icon ? <img src={a.icon} alt="" loading="lazy" /> : <i>★</i>}</span>
-      <span className="gv-acht"><b>{a.name}</b>{a.description && <span>{a.description}</span>}{(a.unlockedAt != null || a.rarity != null) && <small>{[a.unlockedAt != null ? fmtDay(a.unlockedAt) : null, a.points ? String(a.points) : null].filter(Boolean).join(' · ')}{a.rarity != null && <em className={a.rarity < 10 ? 'rare' : ''}>{a.unlockedAt != null ? ' · ' : ''}{tt('{0}% dos jogadores', { 0: fmtPct(a.rarity) })}</em>}</small>}</span>
+      <span className="gv-acht"><b>{a.name}</b>{a.description && <span>{a.description}</span>}{(a.unlockedAt != null || a.rarity != null) && <small>{[a.unlockedAt != null ? fmtDay(a.unlockedAt) : null, a.points ? String(a.points) : null].filter(Boolean).join(' · ')}{a.rarity != null && <em className={isRare(a.rarity) ? 'rare' : ''}>{a.unlockedAt != null ? ' · ' : ''}{tt('{0}% dos jogadores', { 0: fmtPct(a.rarity) })}</em>}</small>}</span>
     </div>
   );
   return (
@@ -332,5 +333,4 @@ function GameAchievements({ d }: { d: GameAchievementsData }) {
     </>
   );
 }
-const fmtPct = (n: number) => n.toLocaleString(getLang() === 'en' ? 'en-US' : 'pt-BR', { maximumFractionDigits: n < 1 ? 1 : n < 10 ? 1 : 0 });
 const fmtDay = (ms: number) => new Date(ms).toLocaleDateString(getLang() === 'en' ? 'en-US' : 'pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });

@@ -96,6 +96,25 @@ span{display:block;font-size:15px;opacity:.9;margin-top:3px;white-space:nowrap;o
 @keyframes pop{from{transform:scale(.2) rotate(-25deg);opacity:0}}
 </style><div class="t"><div class="tr">🏆</div><div><b>${esc(label)}</b><span>${esc(title)}</span></div></div>`;
 
+/** Conquista rara por cima do jogo: roxo e ciano, com o ícone da conquista e brilhos. */
+export const rarePage = (name: string, label: string, icon: string | null) => `<!doctype html><meta charset="utf-8"><style>
+html,body{margin:0;background:transparent;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif}
+.t{position:absolute;inset:8px;display:flex;align-items:center;gap:16px;padding:12px 22px 12px 12px;border-radius:16px;overflow:hidden;
+background:linear-gradient(135deg,#1c0b3a,#0a0618 60%,#0b2133);border:2px solid #7ff3ff;box-shadow:0 0 26px rgba(150,110,255,.6),0 10px 30px rgba(0,0,0,.6);color:#fff;
+animation:in .45s cubic-bezier(.2,.9,.3,1.3),out .4s ease-in 4.6s forwards}
+.t::after{content:'';position:absolute;top:0;bottom:0;width:60px;left:-80px;background:linear-gradient(90deg,transparent,rgba(190,240,255,.5),transparent);transform:skewX(-20deg);animation:shine 1.6s ease-in-out .5s 2}
+.ic{position:relative;width:76px;height:76px;flex:none;border-radius:12px;display:grid;place-items:center;font-size:44px;background:rgba(127,243,255,.12);box-shadow:0 0 0 2px #b48cff,0 0 18px rgba(180,140,255,.8);animation:pop .6s cubic-bezier(.2,.9,.3,1.6) .15s both}
+.ic img{width:100%;height:100%;border-radius:12px;object-fit:cover}
+.s{position:absolute;color:#bff8ff;font-size:16px;animation:tw 1.4s ease-in-out infinite;text-shadow:0 0 8px #7ff3ff}
+b{display:block;font-size:16px;letter-spacing:.5px;white-space:nowrap;background:linear-gradient(90deg,#b48cff,#7ff3ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+span.n{display:block;font-size:17px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
+@keyframes in{from{transform:translateY(40px) scale(.9);opacity:0}}
+@keyframes out{to{transform:translateY(20px);opacity:0}}
+@keyframes shine{to{left:110%}}
+@keyframes pop{from{transform:scale(.2) rotate(-25deg);opacity:0}}
+@keyframes tw{50%{opacity:.15;transform:scale(.6)}}
+</style><div class="t"><div class="ic">${icon && /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(icon) ? `<img src="${icon}">` : '💎'}<i class="s" style="left:-8px;top:-8px">✦</i><i class="s" style="right:-10px;top:20px;animation-delay:.5s">✦</i><i class="s" style="left:30px;bottom:-12px;animation-delay:.9s">✦</i></div><div><b>${esc(label)}</b><span class="n">${esc(name)}</span></div></div>`;
+
 export interface InGameDeps {
   root: string;
   w32: Desk;
@@ -341,7 +360,12 @@ export class InGame {
     try { this.toast(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()), null, title, label, true); } catch { }
   }
 
-  private toast(d: Display, img: NativeImage | null, title: string, label: string, gold = false) {
+  /** Conquista rara destravada durante o jogo: aviso próprio por cima dele (as comuns não aparecem por cima). */
+  rare(name: string, label: string, icon: string | null) {
+    try { this.toast(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()), null, name, label, true, rarePage(name, label, icon)); } catch { }
+  }
+
+  private toast(d: Display, img: NativeImage | null, title: string, label: string, gold = false, page?: string) {
     const W = gold ? 520 : 460, H = gold ? 120 : 112, a = d.workArea;
     const w = new BrowserWindow({
       width: W, height: H, x: Math.round(a.x + (a.width - W) / 2), y: a.y + a.height - H - 48, frame: false, transparent: true, resizable: false, movable: false,
@@ -362,7 +386,7 @@ export class InGame {
     w.once('ready-to-show', show);
     w.webContents.once('did-finish-load', () => setTimeout(show, 50));
     setTimeout(() => { if (!shown) { log('aviso da captura demorou para abrir'); show(); } }, 1500);
-    void w.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(toastPage(thumb, title, label, gold))}`);
+    void w.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(page ?? toastPage(thumb, title, label, gold))}`);
     if (img) void this.d.w32.beep(this.shutter());
   }
 
