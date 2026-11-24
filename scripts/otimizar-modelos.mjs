@@ -24,7 +24,7 @@ for (const f of readdirSync(dir).filter(x => x.endsWith('.glb'))) {
   let mudou = false, pxAntes = 0, pxDepois = 0;
   for (const tex of doc.getRoot().listTextures()) {
     const img = tex.getImage(), size = tex.getSize();
-    if (!img || !size) continue;
+    if (!img || !size || tex.getMimeType() === 'image/ktx2') continue; // já comprimida (comprimir-texturas.mjs)
     const [w, h] = size;
     const s = Math.min(1, MAX_SIDE / Math.max(w, h), Math.sqrt(MAX_AREA / (w * h)));
     pxAntes += w * h;

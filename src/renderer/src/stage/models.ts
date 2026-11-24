@@ -5,11 +5,19 @@
  */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { CONSOLES, stageSize, type StageConsole } from './consoles';
 
 export interface StageModel { object: THREE.Object3D; mixer: THREE.AnimationMixer | null }
 
 const loader = new GLTFLoader();
+// As texturas vêm já no formato das placas de PC (KTX2 com BC7, compactado com zstd): na placa de vídeo
+// ocupam 4x menos que uma imagem comum e não precisam de decodificador (scripts/comprimir-texturas.mjs).
+// O KTX2Loader só precisa saber o que a placa aceita, então espera o palco criar o WebGL.
+const ktx2 = new KTX2Loader();
+let ktxReady!: () => void;
+const ktxReadyP = new Promise<void>(r => { ktxReady = r; });
+export function initStageLoader(gl: THREE.WebGLRenderer) { ktx2.detectSupport(gl); loader.setKTX2Loader(ktx2); ktxReady(); }
 const cache = new Map<string, Promise<StageModel>>();
 const waiting = new Map<string, { resolve: (m: StageModel) => void; reject: (e: unknown) => void; tries: number }>();
 let active = 0;
@@ -48,6 +56,7 @@ export function loadStageModel(c: StageConsole): Promise<StageModel> {
 
 async function loadNow(c: StageConsole): Promise<StageModel> {
   const [file, rotY, tiltX, emissive, minRough] = c.model;
+  await ktxReadyP;
   const res = await loader.loadAsync(`models/${file}`);
   const o = res.scene; o.updateMatrixWorld(true);
   const size = new THREE.Vector3();
@@ -109,7 +118,10 @@ async function loadNow(c: StageConsole): Promise<StageModel> {
  */
 function freeAfterUpload(o: THREE.Object3D) {
   const free = function (this: THREE.BufferAttribute) { (this as unknown as { array: null }).array = null; };
-  const close = (t: THREE.Texture) => { (t.source.data as { close?: () => void } | null)?.close?.(); };
+  const close = (t: THREE.Texture) => {
+    (t.source.data as { close?: () => void } | null)?.close?.();
+    if ((t as THREE.CompressedTexture).isCompressedTexture) (t as THREE.CompressedTexture).mipmaps = [];
+  };
   o.traverse(x => {
     const m = x as THREE.Mesh; if (!m.isMesh) return;
     const g = m.geometry;

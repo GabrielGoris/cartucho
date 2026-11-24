@@ -4,7 +4,7 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { Palette } from '../lib/palettes';
 import { stageSize, type StageConsole } from './consoles';
-import { loadStageModel, releaseStageModels, setModelFocus, type StageModel } from './models';
+import { initStageLoader, loadStageModel, releaseStageModels, setModelFocus, type StageModel } from './models';
 import { tt } from '@shared/i18n';
 
 const PAD_Y = 0.026, PAD_TOP = PAD_Y + 0.04;
@@ -53,6 +53,7 @@ export function Stage(p: Props) {
       <Canvas
         key={gen}
         onCreated={({ gl }) => {
+          initStageLoader(gl);
           const el = gl.domElement;
           live.current = el;
           el.addEventListener('webglcontextlost', ev => {
