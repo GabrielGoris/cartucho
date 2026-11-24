@@ -1,33 +1,15 @@
-## Cartucho 1.4.1
+## Cartucho 1.4.2
 
-### Conquistas de PC
+### Mais jogos com conquistas
 
-- **Steam**: o Cartucho lê as conquistas dos jogos da Steam direto dos arquivos que a própria Steam guarda no PC, sem login. Se a Steam ainda não tem a lista de um jogo, dá para colocar uma chave da API da Steam em Configurações > Jogos.
-- **Emuladores de Steam**: lê as conquistas gravadas pelo Goldberg, pelo fork GSE, pelo CODEX e pelo RUNE.
-- **GOG**: entre na sua conta em Configurações > Jogos e as conquistas dos jogos da GOG aparecem.
-- **Recomps**: além dos que já eram lidos, o Cartucho procura os arquivos de conquistas e troféus que vários recomps e ports gravam sozinhos.
-- O Cartucho só lê: nada é enviado para a Steam nem para a GOG.
+- **Recomps sem leitor próprio**: o Cartucho procura sozinho, nas pastas do jogo e do usuário, os arquivos onde o recomp guarda conquistas e troféus, a lista com os nomes e os ícones.
+- **Índice de conquistas**: uma lista dos recomps do catálogo que gravam conquistas, com onde procurar em cada um. Ela é atualizada toda semana, sem precisar de versão nova do Cartucho.
+- **Recomps de Xbox 360 feitos com o rexglue**: conquistas e lista lidas direto dos arquivos do kit.
+- **Pokémon Pokopia (Recompia)**: as conquistas do mod Community Achievements, com nomes e imagens.
+- **Crack da TENOKE**: lista completa em português e desbloqueios com data.
+- **Jogos da Steam sem lista no PC** (inclusive cracks que não trazem a lista): nomes, descrições e ícones em português pela página pública de conquistas da Steam, sem precisar de chave.
 
-### Página do jogo
+### Na página do jogo
 
-- As conquistas aparecem ao lado do tempo de jogo, com a lista que rola sozinha. O atalho ao lado do ano leva direto para elas, também pelo controle.
-- Tempo de jogo, sessões, média por sessão e o gráfico dos últimos 14 dias em todos os consoles.
-- **Desinstalar** em todos os consoles: jogos baixados pelo Cartucho apagam só o que veio no download; jogos da Steam abrem a desinstalação da Steam; os outros vão para a Lixeira.
-- A nota da crítica abre dentro do Cartucho, como o tempo para zerar.
-
-### Avisos de conquista
-
-- Quando você desbloqueia uma conquista, o aviso sobe com uma animação e um som baixinho, no timbre dos sons da interface.
-- Conquistas antigas que o Cartucho encontra pela primeira vez entram sem aviso.
-- As conquistas recentes do perfil funcionam como notificações: dá para apagar uma a uma ou todas, e elas somem sozinhas depois de 14 dias.
-
-### Teclado, mouse e palco
-
-- O Cartucho percebe na hora se você está no teclado ou no controle e mostra as teclas certas, inclusive no aviso de jogo aberto (Home volta para o jogo).
-- As teclas do teclado podem ser trocadas em Configurações > Controle.
-- Durante o jogo, **Home** chama o Cartucho e **Print Screen** tira a captura.
-- O palco 3D pode ser arrastado com o mouse.
-
-### Correções
-
-- Depois de fechar uma página aberta dentro do Cartucho, o teclado e o controle voltam a funcionar.
+- Cada conquista mostra quantos por cento dos jogadores a desbloquearam, como na Steam. As raras ficam em destaque.
+- Quando não há lista do jogo, aparece "N desbloqueadas", sem um total inventado, e os nomes internos viram nomes legíveis.
