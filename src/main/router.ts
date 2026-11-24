@@ -394,13 +394,25 @@ export function createRouter(deps: RouterDeps) {
         const dir = await pick(tt('Onde está {0} agora?', { 0: ach.getGame(input.id).title }), ['openDirectory']);
         return dir ? ach.relocate(input.id, dir) : null;
       }),
-      remove: t.procedure.input(z.object({ id: z.string(), deletePrefix: z.boolean().optional() })).mutation(({ input }) => { ach.removeGame(input.id); if (input.deletePrefix) deletePrefix(input.id); }),
+      /** O que "apagar tudo" levaria junto: pastas de saves e conquistas do crack fora da pasta do jogo. */
+      removePlan: t.procedure.input(z.object({ id: z.string() })).query(({ input }) => ({ saves: ach.saveDirs(input.id) })),
+      /** keep: só some da biblioteca (volta com o histórico se instalar de novo). Senão apaga o histórico; saves: manda as pastas do crack para a Lixeira. */
+      remove: t.procedure.input(z.object({ id: z.string(), deletePrefix: z.boolean().optional(), keep: z.boolean().optional(), saves: z.boolean().optional() })).mutation(async ({ input }) => {
+        if (input.keep) return ach.hideGame(input.id);
+        if (input.saves) for (const d of ach.saveDirs(input.id)) {
+          try { await shell.trashItem(d); }
+          catch (e) { throw new Error(tt('Não deu para mandar {0} para a Lixeira: {1}', { 0: d, 1: e instanceof Error ? e.message : String(e) })); }
+        }
+        ach.removeGame(input.id);
+        if (input.deletePrefix) deletePrefix(input.id);
+      }),
       uninstallPlan: t.procedure.input(z.object({ id: z.string() })).query(({ input }) => planFor(input.id)),
       uninstall: t.procedure.input(z.object({ id: z.string(), deletePrefix: z.boolean().optional() })).mutation(async ({ input }) => {
         const g = ach.getGame(input.id);
         if (g.running) throw new Error(tt('Feche o jogo antes.'));
         const plan = planFor(input.id);
         if (plan.kind === 'blocked') throw new Error(plan.reason);
+        ach.rememberKeys(input.id);
         if (plan.kind === 'managed') await ports.uninstall(input.id);
         else {
           if (plan.kind === 'steam') await shell.openExternal(`steam://uninstall/${plan.appid}`);
@@ -408,7 +420,7 @@ export function createRouter(deps: RouterDeps) {
             try { await shell.trashItem(plan.path); }
             catch (e) { throw new Error(/EBUSY|EPERM|in use|em uso/i.test(String(e)) ? tt('Um arquivo está em uso. Feche o jogo e tente de novo.') : tt('Não deu para mandar para a Lixeira: {0}', { 0: e instanceof Error ? e.message : String(e) })); }
           }
-          ach.removeGame(input.id);
+          ach.markUninstalled(input.id);
           db.prepare('DELETE FROM kv WHERE key = ?').run(`upd.${input.id}`);
         }
         if (input.deletePrefix) deletePrefix(input.id);

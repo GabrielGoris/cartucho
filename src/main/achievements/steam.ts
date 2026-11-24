@@ -288,6 +288,15 @@ function localSaveDirs(settings: string[]) {
   }
   return out;
 }
+/** Pastas (que existem) onde os emuladores de Steam guardam conquistas e saves de um appid, fora da pasta do jogo. */
+export function crackSaveDirs(appData: string, appid: string): string[] {
+  const pub = publicDocs({ appData, installDir: '', title: '' });
+  return [
+    join(appData, 'GSE Saves', appid), join(appData, 'Goldberg SteamEmu Saves', appid),
+    join(pub, 'Steam', 'CODEX', appid), join(appData, 'Steam', 'CODEX', appid), join(pub, 'Steam', 'RUNE', appid),
+  ].filter(d => existsSync(d));
+}
+
 export function crackFiles(ctx: AdapterContext, info: CrackInfo) {
   const { appid } = info, pub = publicDocs(ctx);
   return [

@@ -100,6 +100,11 @@ const MIGRATIONS: string[] = [
   ALTER TABLE radar_event ADD COLUMN dismissed INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE radar_event ADD COLUMN seen_at INTEGER;
   `,
+  `
+  ALTER TABLE installed_game ADD COLUMN uninstalled_at INTEGER;   -- desinstalado: fica na biblioteca com tempo e conquistas
+  ALTER TABLE installed_game ADD COLUMN match_keys TEXT;           -- jeitos de reconhecer o jogo de novo: ["steam:123", "gog:9", "exe:jogo.exe"]
+  ALTER TABLE installed_game ADD COLUMN hidden_at INTEGER;         -- tirado da biblioteca guardando o histórico (volta se instalar de novo)
+  `,
 ];
 
 export function openDb(file: string): DB {

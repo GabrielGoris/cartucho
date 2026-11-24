@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { semArquivos, tileClick } from '@shared/gameclick';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AchievementView, ConsoleId, PlayStats, RadarEvent } from '@shared/types';
 import { isSelfInstall, SELF_INSTALL_NOTE, STATUS_LABEL } from '@shared/consoles';
@@ -157,7 +158,7 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   const playLine = (g: HubGame) => {
     const i = g.installed;
     if (!i) return g.isNew ? tt('Novo no catálogo · não instalado') : tt('Não instalado');
-    if (i.missing) return tt('Pasta do jogo não encontrada');
+    if (i.missing) return i.uninstalled ? tt('Não instalado') : tt('Pasta do jogo não encontrada');
     if (i.running) return tt('Jogando agora');
     return i.playMs ? tt('{0} jogadas', { 0: fmtPlay(i.playMs) }) + (i.lastPlayed ? ` · ${ago(i.lastPlayed)}` : '') : tt('Ainda não jogado');
   };
@@ -215,8 +216,9 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     const L: Opt[] = [];
     if (inst?.missing) {
       if (x.catalog?.repo && !self) L.push({ k: 'reinstall', l: tt('Instalar de novo'), ic: 'dl' });
-      L.push({ k: 'relink', l: tt('Procurar a pasta'), ic: 'folder' });
-      L.push({ k: 'remove', l: tt('Tirar da biblioteca'), ic: 'stop' });
+      L.push({ k: 'relink', l: inst.uninstalled ? tt('Já instalei de novo: mostrar a pasta') : tt('Procurar a pasta'), ic: 'folder' });
+      if (inst.adapter) L.push({ k: 'ach', l: tt('Conquistas'), ic: 'medal' });
+      L.push({ k: 'remove', l: tt('Remover da biblioteca'), ic: 'stop' });
     } else if (inst) {
       L.push(inst.running ? { k: 'play', l: tt('Voltar para o jogo'), ic: 'play' } : inst.exe ? { k: 'play', l: tt('Jogar'), ic: 'play' } : { k: 'exe', l: tt('Escolher o .exe'), ic: 'folder' });
       if (inst.running) L.push({ k: 'quit', l: tt('Fechar o jogo'), ic: 'stop' });
@@ -224,7 +226,7 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       if (inst.adapter) L.push({ k: 'ach', l: tt('Conquistas'), ic: 'medal' });
       L.push({ k: 'folder', l: tt('Abrir pasta'), ic: 'folder' });
       if (inst.exe) L.push({ k: 'exe', l: tt('Escolher o .exe'), ic: 'folder' });
-      if (!inst.running) L.push({ k: 'uninstall', l: tt('Desinstalar'), ic: 'trash' }, { k: 'remove', l: tt('Tirar da biblioteca'), ic: 'stop' });
+      if (!inst.running) L.push({ k: 'uninstall', l: tt('Desinstalar'), ic: 'trash' }, { k: 'remove', l: tt('Remover da biblioteca'), ic: 'stop' });
     } else {
       if (x.repo && !self) L.push({ k: 'install', l: tt('Instalar'), ic: 'dl' });
       L.push({ k: 'add', l: self ? tt('Já instalei: adicionar pasta') : tt('Escolher pasta'), ic: 'folder' });
@@ -241,6 +243,7 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     set(x => ({ ...x, dir: ci > x.ci ? 'down' : 'up', ci, opt: false, list: false, li: 0, ii: ii == null ? x.ii : x.ii.map((v, j) => (j === ci ? ii : v)) }));
   };
   const openGame = (x: HubGame) => { up({ game: x.key, opt: false, zone: 'gacts', ai: 0, gs: 0 }); };
+  const openPage = (x: HubGame) => { sfx.play('ok'); up({ opt: false }); openGame(x); };
 
   const run = (k: string, x: HubGame) => {
     up({ opt: false });
@@ -259,7 +262,7 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     if (k === 'reinstall') { act.reinstall(x); return show(tt('Baixando {0} de novo… o tempo de jogo continua', { 0: x.repo })); }
     if (k === 'relink') { act.relink(x); return show(tt('Escolha onde o jogo está agora')); }
     if (k === 'uninstall') { void act.uninstall(x).then(r => { if (!r) return; up({ game: null }); show(uninstallMsg(r, x.title)); }); return; }
-    if (k === 'remove') { act.remove(x); up({ game: null }); return show(tt('{0} saiu da biblioteca · nenhum arquivo foi apagado', { 0: x.title })); }
+    if (k === 'remove') { void act.remove(x).then(ok => { if (!ok) return; up({ game: null }); show(tt('{0} saiu da biblioteca', { 0: x.title })); }); return; }
     if (k === 'update') { act.update(x); return show(tt('Atualizando para {0}… configurações e saves ficam', { 0: x.update?.latest?.tag })); }
     if (k === 'ach') { up({ game: null }); return goCat(3, Math.max(0, lib.indexOf(x))); }
     if (k === 'folder') return openFolder.mutate({ id: x.installed!.id });
@@ -271,7 +274,7 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   const enter = () => {
     if (st.opt && g) { const o = options(g)[st.oi]; if (o) run(o.k, g); return; }
     switch (it.kind) {
-      case 'game': if (it.f) { feed.done(it.f); if (g) { sfx.play('ok'); openGame(g); } return; } if (g) run(primaryOf(g).k, g); return;
+      case 'game': if (it.f) { feed.done(it.f); if (g) { sfx.play('ok'); openGame(g); } return; } if (g && semArquivos(g)) return openPage(g); if (g) run(primaryOf(g).k, g); return;
       case 'search': sfx.play('ok'); searchRef.current?.focus(); return;
       case 'disc': sfx.play('ok'); if (it.key === 'search') focusSearch(); else setDisc(true); return;
       case 'empty': if (cat === 'games' && data.catalog.length) goCat(1); return;
@@ -360,7 +363,11 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
                 return (
                   <button key={x.key} className={`p3-it ${on ? 'on' : ''} ${x.g?.installed?.missing ? 'missing' : ''}`} aria-label={x.t}
                     style={{ transform: `translate(${px}px, ${py}px) scale(${sc})`, opacity: d < -2 || d > 4 ? 0 : d < 0 ? 0.4 : on ? 1 : 0.8 }}
-                    onClick={() => { if (on) enter(); else { sfx.play('move'); up({ opt: false, list: false, ii: st.ii.map((v, j) => (j === st.ci ? i : v)) }); } }}>
+                    onClick={e => {
+                      const sel1 = () => { if (!on) { sfx.play('move'); up({ opt: false, list: false, ii: st.ii.map((v, j) => (j === st.ci ? i : v)) }); } };
+                      if (x.kind === 'game' && x.g && !x.f) return tileClick(e, x.g, { select: sel1, page: () => { sfx.play('ok'); openGame(x.g!); }, play: () => run('play', x.g!) });
+                      if (on) enter(); else sel1();
+                    }}>
                     <div className={`p3-gl ${x.g ? '' : 'icon'}`}>{x.g ? <Art g={x.g} v="square" /> : <Ic n={x.ic ?? 'info'} />}</div>
                     {off && <span className="dl"><Ic n="dl" /></span>}
                     {x.g?.installed?.running && <span className="dl run"><Ic n="play" /></span>}

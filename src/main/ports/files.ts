@@ -47,6 +47,16 @@ export async function sha256File(file: string) {
   return h.digest('hex');
 }
 
+/**
+ * Lê a saída do MpCmdRun. Só é ameaça quando ele diz que achou uma: o código 2 sozinho também sai quando
+ * o Defender está desligado ou outro antivírus tomou o lugar dele ("Failed with hr = 0x800106BA").
+ */
+export function defenderVerdict(code: number | null, out: string): 'clean' | 'threat' | 'skipped' {
+  if (/found\s+([1-9]\d*)\s+threats?/i.test(out) || /LIST OF DETECTED THREATS|^\s*Threat\s+:/im.test(out)) return 'threat';
+  if (code === 0 && !/failed with hr/i.test(out)) return 'clean';
+  return 'skipped';
+}
+
 export function defenderScan(file: string): Promise<'clean' | 'skipped'> {
   const exe = join(process.env.ProgramFiles || 'C:\\Program Files', 'Windows Defender', 'MpCmdRun.exe');
   if (process.platform !== 'win32' || !existsSync(exe)) return Promise.resolve('skipped');
@@ -54,11 +64,13 @@ export function defenderScan(file: string): Promise<'clean' | 'skipped'> {
     const p = spawn(exe, ['-Scan', '-ScanType', '3', '-File', file, '-DisableRemediation'], { windowsHide: true });
     let out = '';
     p.stdout.on('data', d => (out += d));
+    p.stderr.on('data', d => (out += d));
     p.on('error', () => ok('skipped'));
     p.on('close', code => {
-      if (code === 0) return ok('clean');
-      if (code === 2 || (/threat/i.test(out) && !/no threats/i.test(out))) return fail(new Error(tt('O Windows Defender acusou o download. Nada foi instalado.')));
-      ok('skipped');
+      const v = defenderVerdict(code, out);
+      if (v === 'threat') return fail(new Error(tt('O Windows Defender acusou o download. Nada foi instalado.')));
+      if (v === 'skipped') console.log(`[defender] não deu para verificar (código ${code}): ${out.trim().split(/\r?\n/).pop() ?? ''}`);
+      ok(v);
     });
   });
 }

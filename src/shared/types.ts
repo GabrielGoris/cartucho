@@ -62,6 +62,8 @@ export interface InstalledGame {
   lastPlayed: number | null;
   running: boolean;
   missing: boolean;
+  /** Desinstalado pelo Cartucho: continua na biblioteca com tempo de jogo e conquistas. */
+  uninstalled: boolean;
 }
 
 export interface InstalledRelease { tag: string; assetId: number; date: string | null; uploader: string | null }

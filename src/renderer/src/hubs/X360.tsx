@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { semArquivos, tileClick } from '@shared/gameclick';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConsoleId, PlayStats, RadarEvent } from '@shared/types';
 import { isSelfInstall, SELF_INSTALL_NOTE, STATUS_LABEL } from '@shared/consoles';
@@ -102,7 +103,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
         g1 ? { x: 0, y: 0, w: 300, h: 230, g: g1, cap: g1.title, sub: g1.installed?.playMs ? fmtPlay(g1.installed.playMs) : tt('ainda não jogado') }
           : { x: 0, y: 0, w: 300, h: 230, cls: 'grey', cap: tt('descobrir recomps'), sub: plural(data.catalog.length, tt('jogo'), tt('jogos')), go: 'cat' },
         { x: 0, y: 240, w: 300, h: 230, cls: 'acc', quick: lib.slice(0, 3), cap: tt('meus jogos'), sub: plural(lib.length, tt('instalado'), tt('instalados')), go: 'games' },
-        g0 ? { x: 310, y: 0, w: 630, h: 470, g: g0, big: true, cap: g0.title, sub: g0.installed?.missing ? tt('pasta do jogo não encontrada') : g0.installed?.playMs ? tt('{0} jogadas · continuar de onde parou', { 0: fmtPlay(g0.installed.playMs) }) : tt('ainda não jogado') }
+        g0 ? { x: 310, y: 0, w: 630, h: 470, g: g0, big: true, cap: g0.title, sub: g0.installed?.missing ? (g0.installed?.uninstalled ? tt('não instalado') : tt('pasta do jogo não encontrada')) : g0.installed?.playMs ? tt('{0} jogadas · continuar de onde parou', { 0: fmtPlay(g0.installed.playMs) }) : tt('ainda não jogado') }
           : { x: 310, y: 0, w: 630, h: 470, cls: 'grey', big: true, cap: data.catalog.length ? tt('nada instalado ainda') : tt('nenhum recomp ainda'), sub: data.catalog.length ? tt('abra descobrir para instalar') : tt('o radar avisa quando aparecer'), go: 'cat' },
         { x: 950, y: 0, w: 300, h: 230, cls: 'grey', txt: <><b>{F.length}</b>{F[0] ? `${F[0].title} · ${FEED[F[0].kind]}` : tt('nada novo por aqui')}</>, cap: tt('novidades'), go: 'news' },
         { x: 950, y: 240, w: 300, h: 230, cls: 'dark', txt: <><b>{achGot}/{achTot}</b>{tt('conquistas neste console')}</>, bar: achTot ? achGot / achTot : 0, cap: tt('conquistas'), go: 'ach' },
@@ -112,7 +113,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
       const L = tk === 'games' ? lib : found, pg = Math.floor(st.fi / PER);
       return L.slice(pg * PER, pg * PER + PER).map((g, j) => ({
         x: (j % 5) * 254, y: Math.floor(j / 5) * 240, w: 244, h: 230, g, idx: pg * PER + j, cap: g.title,
-        sub: tk === 'cat' ? `${g.status ? STATUS_LABEL[g.status].toLowerCase() : ''}${g.installed ? ' · instalado' : ''}` : g.installed?.missing ? tt('pasta não encontrada') : g.installed?.playMs ? fmtPlay(g.installed.playMs) : tt('ainda não jogado'),
+        sub: tk === 'cat' ? `${g.status ? STATUS_LABEL[g.status].toLowerCase() : ''}${g.installed ? ' · instalado' : ''}` : g.installed?.missing ? (g.installed?.uninstalled ? tt('não instalado') : tt('pasta não encontrada')) : g.installed?.playMs ? fmtPlay(g.installed.playMs) : tt('ainda não jogado'),
         tag: g.update?.updateAvailable && !self ? tt('versão nova') : g.isNew ? tt('novo') : undefined, tagCls: g.isNew ? 'new' : '',
         cls: tk === 'cat' && !g.installed ? 'off' : g.installed?.missing ? 'off' : '',
       }));
@@ -149,8 +150,9 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
     const L: Opt[] = [];
     if (inst?.missing) {
       if (x.catalog?.repo && !self) L.push({ k: 'reinstall', l: tt('Instalar de novo'), ic: 'dl' });
-      L.push({ k: 'relink', l: tt('Procurar a pasta'), ic: 'folder' });
-      L.push({ k: 'remove', l: tt('Tirar da biblioteca'), ic: 'stop' });
+      L.push({ k: 'relink', l: inst.uninstalled ? tt('Já instalei de novo: mostrar a pasta') : tt('Procurar a pasta'), ic: 'folder' });
+      if (inst.adapter) L.push({ k: 'ach', l: tt('Conquistas'), ic: 'medal' });
+      L.push({ k: 'remove', l: tt('Remover da biblioteca'), ic: 'stop' });
     } else if (inst) {
       L.push(inst.running ? { k: 'play', l: tt('Voltar para o jogo'), ic: 'play' } : inst.exe ? { k: 'play', l: tt('Jogar'), ic: 'play' } : { k: 'exe', l: tt('Escolher o .exe'), ic: 'folder' });
       if (inst.running) L.push({ k: 'quit', l: tt('Fechar o jogo'), ic: 'stop' });
@@ -159,7 +161,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
       L.push({ k: 'time', l: tt('Tempo de jogo'), ic: 'clock' });
       L.push({ k: 'folder', l: tt('Abrir pasta'), ic: 'folder' });
       if (inst.exe) L.push({ k: 'exe', l: tt('Escolher o .exe'), ic: 'folder' });
-      if (!inst.running) L.push({ k: 'uninstall', l: tt('Desinstalar'), ic: 'trash' }, { k: 'remove', l: tt('Tirar da biblioteca'), ic: 'stop' });
+      if (!inst.running) L.push({ k: 'uninstall', l: tt('Desinstalar'), ic: 'trash' }, { k: 'remove', l: tt('Remover da biblioteca'), ic: 'stop' });
     } else {
       if (x.repo && !self) L.push({ k: 'install', l: tt('Instalar'), ic: 'dl' });
       L.push({ k: 'add', l: self ? tt('Já instalei: adicionar pasta') : tt('Escolher pasta'), ic: 'folder' });
@@ -176,6 +178,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
     set(x => ({ ...x, tab: n, dir: n > x.tab ? 1 : -1, fi: k === 'home' ? 2 : 0, li: 0, menu: false, zone: x.zone === 'tabs' && !extra.zone ? 'tabs' : k === 'ach' || k === 'time' || k === 'cfg' ? 'list' : 'tiles', ...extra }));
   };
   const openGame = (x: HubGame) => { up({ game: x.key, menu: false, zone: 'gacts', ai: 0, gs: 0 }); };
+  const openPage = (x: HubGame) => { sfx.play('ok'); up({ menu: false }); openGame(x); };
 
   const run = (k: string, x: HubGame) => {
     up({ menu: false });
@@ -194,7 +197,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
     if (k === 'reinstall') { act.reinstall(x); return show(tt('Baixando {0} de novo… o tempo de jogo continua', { 0: x.repo })); }
     if (k === 'relink') { act.relink(x); return show(tt('Escolha onde o jogo está agora')); }
     if (k === 'uninstall') { void act.uninstall(x).then(r => { if (!r) return; up({ game: null }); show(uninstallMsg(r, x.title)); }); return; }
-    if (k === 'remove') { act.remove(x); up({ game: null }); return show(tt('{0} saiu da biblioteca · nenhum arquivo foi apagado', { 0: x.title })); }
+    if (k === 'remove') { void act.remove(x).then(ok => { if (!ok) return; up({ game: null }); show(tt('{0} saiu da biblioteca', { 0: x.title })); }); return; }
     if (k === 'update') { act.update(x); return show(tt('Atualizando para {0}… configurações e saves ficam', { 0: x.update?.latest?.tag })); }
     if (k === 'ach') { up({ game: null }); return goTab(4, { zone: 'list', li: Math.max(0, lib.indexOf(x)) }); }
     if (k === 'time') { up({ game: null }); return goTab(5, { zone: 'list', li: Math.max(0, byPlay.indexOf(x) + 1) }); }
@@ -211,7 +214,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
       if (!cur) return;
       if (cur.go) { sfx.play('ok'); return goTab(TABS.findIndex(t => t[0] === cur.go), { zone: cur.go === 'ach' ? 'list' : 'tiles' }); }
       if (cur.feed) { feed.done(cur.feed); if (cur.g) { sfx.play('ok'); openGame(cur.g); } return; }
-      if (cur.g) { if (tk === 'cat') { sfx.play('ok'); return openGame(cur.g); } return run(primaryOf(cur.g).k, cur.g); }
+      if (cur.g) { if (semArquivos(cur.g)) return openPage(cur.g); if (tk === 'cat') { sfx.play('ok'); return openGame(cur.g); } return run(primaryOf(cur.g).k, cur.g); }
       return;
     }
     if (tk === 'cfg' && row) {
@@ -281,7 +284,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
   const hints: Hint[] = st.menu ? [['ok', tt('Selecionar')], ['back', tt('Fechar')]]
     : !tiles ? [['ok', tt('Selecionar')], ['back', tt('Voltar')], ['rb', tt('Abas')]]
     : tk === 'news' && cur?.feed ? [['ok', tt('Ver jogo')], ['x', tt('Dispensar')], ['y', tt('Limpar tudo')], ['back', tt('Voltar')]]
-    : cur?.g ? [['ok', tk === 'cat' || cur.feed ? tt('Ver jogo') : primaryOf(cur.g).l], ['x', tt('Opções')], ['y', tt('Buscar')], ['back', st.tab ? tt('Voltar') : tt('Sair')]]
+    : cur?.g ? [['ok', semArquivos(cur.g) ? tt('Página do jogo') : tk === 'cat' || cur.feed ? tt('Ver jogo') : primaryOf(cur.g).l], ['x', tt('Opções')], ['y', tt('Buscar')], ['back', st.tab ? tt('Voltar') : tt('Sair')]]
     : [['ok', tt('Selecionar')], ['y', tt('Buscar')], ['back', st.tab ? tt('Voltar') : tt('Sair')]];
   const tabsRef = useRef<HTMLElement>(null);
   const [shift, setShift] = useState(0);
@@ -314,7 +317,11 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
                 <div className={`x3-pg ${st.dir < 0 ? 'back' : ''}`} key={`${tk}-${Math.floor(st.fi / per)}`}>
                   {tiles.length ? tiles.map((t, j) => (
                     <button key={`${t.cap}-${j}`} className={`xt ${t.cls ?? ''} ${st.zone === 'tiles' && j === loc ? 'on' : ''}`} style={{ left: t.x, top: t.y, width: t.w, height: t.h }}
-                      onClick={() => { if (st.zone === 'tiles' && j === loc) enter(); else mv2(j); }}>
+                      onClick={e => {
+                        const x = t.g;
+                        if (x && !t.go && !t.feed) return tileClick(e, x, { select: () => { if (st.zone !== 'tiles' || j !== loc) mv2(j); }, page: () => { sfx.play('ok'); openGame(x); }, play: () => run('play', x) });
+                        if (st.zone === 'tiles' && j === loc) enter(); else mv2(j);
+                      }}>
                       {t.g && <Art g={t.g} v={t.big || t.w > 300 ? 'wide' : 'square'} />}
                       {t.quick && <div className="mini">{t.quick.map(q => <span key={q.key}><Art g={q} v="square" /></span>)}</div>}
                       {t.txt && <div className="txt">{t.txt}</div>}

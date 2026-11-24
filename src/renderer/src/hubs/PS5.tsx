@@ -1,5 +1,6 @@
 import { useProfile } from '../lib/profile';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { semArquivos, tileClick } from '@shared/gameclick';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConsoleId } from '@shared/types';
 import { isSelfInstall, STATUS_LABEL } from '@shared/consoles';
@@ -81,8 +82,9 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     const L: Opt[] = [];
     if (inst?.missing) {
       if (x.catalog?.repo && !self) L.push({ k: 'reinstall', l: tt('Instalar de novo'), ic: 'dl' });
-      L.push({ k: 'relink', l: tt('Procurar a pasta'), ic: 'folder' });
-      L.push({ k: 'remove', l: tt('Tirar da biblioteca'), ic: 'stop' });
+      L.push({ k: 'relink', l: inst.uninstalled ? tt('Já instalei de novo: mostrar a pasta') : tt('Procurar a pasta'), ic: 'folder' });
+      if (inst.adapter) L.push({ k: 'ach', l: tt('Conquistas'), ic: 'medal' });
+      L.push({ k: 'remove', l: tt('Remover da biblioteca'), ic: 'stop' });
     } else if (inst) {
       L.push(inst.running ? { k: 'play', l: tt('Voltar para o jogo'), ic: 'play' } : inst.exe ? { k: 'play', l: tt('Jogar'), ic: 'play' } : { k: 'exe', l: tt('Escolher o .exe'), ic: 'folder' });
       if (inst.running) L.push({ k: 'quit', l: tt('Fechar o jogo'), ic: 'stop' });
@@ -90,7 +92,7 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       if (inst.adapter) L.push({ k: 'ach', l: tt('Conquistas'), ic: 'medal' });
       L.push({ k: 'folder', l: tt('Abrir pasta'), ic: 'folder' });
       if (inst.exe) L.push({ k: 'exe', l: tt('Escolher o .exe'), ic: 'folder' });
-      if (!inst.running) L.push({ k: 'uninstall', l: tt('Desinstalar'), ic: 'trash' }, { k: 'remove', l: tt('Tirar da biblioteca'), ic: 'stop' });
+      if (!inst.running) L.push({ k: 'uninstall', l: tt('Desinstalar'), ic: 'trash' }, { k: 'remove', l: tt('Remover da biblioteca'), ic: 'stop' });
     } else {
       if (x.repo && !self) L.push({ k: 'install', l: tt('Instalar'), ic: 'dl' });
       L.push({ k: 'add', l: self ? tt('Já instalei: adicionar pasta') : tt('Escolher pasta'), ic: 'folder' });
@@ -117,7 +119,7 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     if (k === 'reinstall') { act.reinstall(x); return show(tt('Baixando {0} de novo… o tempo de jogo continua', { 0: x.repo })); }
     if (k === 'relink') { act.relink(x); return show(tt('Escolha onde o jogo está agora')); }
     if (k === 'uninstall') { void act.uninstall(x).then(r => { if (!r) return; if (st.page === 'game') up({ page: st.from?.page ?? 'home', zone: st.from?.zone ?? 'row', game: null, from: null }); show(uninstallMsg(r, x.title)); }); return; }
-    if (k === 'remove') { act.remove(x); if (st.page === 'game') up({ page: st.from?.page ?? 'home', zone: st.from?.zone ?? 'row', game: null, from: null }); return show(tt('{0} saiu da biblioteca · nenhum arquivo foi apagado', { 0: x.title })); }
+    if (k === 'remove') { void act.remove(x).then(ok => { if (!ok) return; if (st.page === 'game') up({ page: st.from?.page ?? 'home', zone: st.from?.zone ?? 'row', game: null, from: null }); show(tt('{0} saiu da biblioteca', { 0: x.title })); }); return; }
     if (k === 'update') { act.update(x); return show(tt('Atualizando para {0}… configurações e saves ficam', { 0: x.update?.latest?.tag })); }
     if (k === 'ach') { up({ page: 'ach', zone: 'side', gi: Math.max(0, achGames.indexOf(x)), si: 0 }); return; }
     if (k === 'folder') return openFolder.mutate({ id: x.installed!.id });
@@ -127,6 +129,7 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     if (k === 'off') return onBack();
   };
   const primaryOf = (x: HubGame) => options(x, false)[0]!;
+  const openPage = (x: HubGame) => { sfx.play('ok'); setMenu(null); openGame(x); };
   const openGame = (x: HubGame) => { setMenu(null); up({ page: 'game', game: x.key, from: { page: st.page, zone: st.zone, si: st.si }, zone: 'gacts', ai: 0, si: 0 }); };
   const gameOpts = game ? options(game, false) : [];
 
@@ -151,6 +154,7 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
         if (st.ci === 3 && g.update?.updateAvailable && !self) return run('update', g);
         return sfx.play('move');
       }
+      if (semArquivos(g)) return openPage(g);
       return run(primaryOf(g).k, g);
     }
     if (p === 'ach') { if (z === 'side' && achList.length) { sfx.play('move'); up({ zone: 'main', si: 0 }); } return; }
@@ -211,7 +215,7 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   }, !(st.page === 'cat' || st.page === 'game'));
 
   const hints: Hint[] = menu ? [['ok', tt('Confirmar')], ['back', tt('Fechar')]]
-    : st.page === 'home' && st.zone === 'row' && g ? [['ok', primaryOf(g).l], ['x', tt('Opções')]]
+    : st.page === 'home' && st.zone === 'row' && g ? [['ok', !semArquivos(g) ? primaryOf(g).l : tt('Página do jogo')], ['x', tt('Opções')]]
     : st.page === 'news' && data.feed.length ? [['ok', tt('Abrir')], ['x', tt('Dispensar')], ['y', tt('Limpar tudo')], ['back', tt('Voltar')]]
     : [['ok', tt('Confirmar')], ['back', tt('Voltar')]];
   const H = ({ className }: { className: string }) => <div className={className}>{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>;
@@ -230,7 +234,11 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
         {st.page === 'home' ? (
           <Home c={c.name} g={g} row={row} st={st} self={self} clock={clock} feedCount={data.feed.length} catCount={data.catalog.length}
             primary={g ? primaryOf(g).l : tt('Descobrir')} feed={g ? data.feed.find(f => f.gameId === g.catalog?.id) ?? null : null}
-            onTile={i => { if (st.zone === 'row' && st.idx === i) enter(); else { sfx.play('move'); setMenu(null); up({ zone: 'row', idx: i }); } }}
+            onTile={(i, e) => {
+              const x = row[i];
+              if (e && x) return tileClick(e, x, { select: () => { setMenu(null); if (st.zone !== 'row' || st.idx !== i) { sfx.play('move'); up({ zone: 'row', idx: i }); } }, page: () => openGame(x), play: () => run('play', x) });
+              if (st.zone === 'row' && st.idx === i) enter(); else { sfx.play('move'); setMenu(null); up({ zone: 'row', idx: i }); }
+            }}
             onTop={j => { up({ zone: 'top', di: j }); top(j); }}
             onAct={j => { if (st.zone === 'acts' && st.ai === j) enter(); else { sfx.play('move'); up({ zone: 'acts', ai: j }); } }}
             onCard={j => { if (st.zone === 'cards' && st.ci === j) enter(); else { sfx.play('move'); up({ zone: 'cards', ci: j }); } }}
@@ -311,7 +319,7 @@ function PortsDir() {
 function Home({ c, g, row, st, self, clock, feedCount, catCount, primary, feed, onTile, onTop, onAct, onCard, hints, menu }: {
   c: string; g: HubGame | null; row: HubGame[]; st: St; self: boolean; clock: string; feedCount: number; catCount: number; primary: string;
   feed: { kind: 'new' | 'upd' | 'up'; detail: string; at: number } | null;
-  onTile: (i: number) => void; onTop: (j: number) => void; onAct: (j: number) => void; onCard: (j: number) => void; hints: ReactNode; menu: ReactNode;
+  onTile: (i: number, e?: MouseEvent) => void; onTop: (j: number) => void; onAct: (j: number) => void; onCard: (j: number) => void; hints: ReactNode; menu: ReactNode;
 }) {
   const me = useProfile();
   const z = st.zone, i = st.idx, n = row.length;
@@ -333,7 +341,7 @@ function Home({ c, g, row, st, self, clock, feedCount, catCount, primary, feed, 
       </div>
       <div className="p5-row" style={{ transform: `translateX(-${Math.max(0, i - 2) * 126}px)` }}>
         {row.map((x, k) => (
-          <button key={x.key} className={`p5-t ${k === i ? 'on' : ''} ${x.installed?.missing ? 'missing' : ''}`} aria-label={x.title} onClick={() => onTile(k)}>
+          <button key={x.key} className={`p5-t ${k === i ? 'on' : ''} ${x.installed?.missing ? 'missing' : ''}`} aria-label={x.title} onClick={e => onTile(k, e)}>
             <Art g={x} v="square" />
             {x.installed?.running && <span className="run"><Ic n="play" /></span>}
             {k === i && z === 'row' && <span className="p5-lab">{x.title}</span>}
@@ -348,7 +356,7 @@ function Home({ c, g, row, st, self, clock, feedCount, catCount, primary, feed, 
           <h1>{g.title}</h1>
           <p>
             {g.status ? `${STATUS_LABEL[g.status]} · ` : ''}
-            {g.installed?.missing ? tt('pasta do jogo não encontrada') : g.installed?.running ? tt('jogando agora') : g.installed?.playMs ? tt('{0} jogadas{1}', { 0: fmtPlay(g.installed.playMs), 1: g.installed.lastPlayed ? tt(' · última vez {0}', { 0: ago(g.installed.lastPlayed) }) : '' }) : tt('ainda não jogado')}
+            {g.installed?.missing ? (g.installed?.uninstalled ? tt('não instalado') : tt('pasta do jogo não encontrada')) : g.installed?.running ? tt('jogando agora') : g.installed?.playMs ? tt('{0} jogadas{1}', { 0: fmtPlay(g.installed.playMs), 1: g.installed.lastPlayed ? tt(' · última vez {0}', { 0: ago(g.installed.lastPlayed) }) : '' }) : tt('ainda não jogado')}
           </p>
           {p && <p className="prog">{p.error ?? `${p.stage}${p.pct > 0 && p.pct < 1 ? ` · ${Math.round(p.pct * 100)}%` : ''}`}</p>}
           <div className="p5-acts">

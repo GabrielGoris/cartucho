@@ -5,7 +5,6 @@ import { CONSOLE_NAME, isSelfInstall, SELF_INSTALL_NOTE, STATUS_LABEL } from '@s
 import { useTRPC } from '../trpc';
 import { Hints } from '../lib/input';
 import { useSpatialNav } from '../lib/spatial';
-import { askConfirm } from '../lib/dialogs';
 import { useProgress } from '../lib/progress';
 import { ago, fmtDate, fmtPlay, fmtSize, plural } from '../lib/format';
 import { sfx } from '../lib/sfx';
@@ -13,10 +12,9 @@ import { GameArt } from '../components/GameArt';
 import { Bars } from '../components/Bars';
 import { ProgressBar } from '../components/ProgressBar';
 import { WineDialog } from '../components/WineDialog';
-import { useAskDeletePrefix } from '../lib/wine';
 import { Translated } from '../components/Translated';
 import { tt } from '@shared/i18n';
-import { useHubActions, type HubGame } from '../hubs/data';
+import { useHubActions, useRemoveGame, type HubGame } from '../hubs/data';
 
 const gh = (repo: string) => window.open(`https://github.com/${repo}`, '_blank');
 const LINUX = navigator.userAgent.includes('Linux');
@@ -34,12 +32,11 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
   const recheck = useMutation({ mutationFn: () => qc.fetchQuery(trpc.ports.checkUpdate.queryOptions({ id, force: true }, { staleTime: 0 })), onSuccess: d => qc.setQueryData(trpc.ports.checkUpdate.queryKey({ id }), d) });
   const chooseExe = useMutation(trpc.games.chooseExe.mutationOptions({ onSuccess: refresh }));
   const openFolder = useMutation(trpc.games.openFolder.mutationOptions());
-  const remove = useMutation(trpc.games.remove.mutationOptions({ onSuccess: () => { void qc.invalidateQueries(); onBack(); } }));
+  const removeAsk = useRemoveGame();
   const uninstall = useMutation(trpc.ports.uninstall.mutationOptions({ onSuccess: () => { void qc.invalidateQueries(); onBack(); } }));
   const progress = useProgress(id);
   const [more, setMore] = useState(false);
   const [wineOpen, setWineOpen] = useState(false);
-  const askPrefix = useAskDeletePrefix();
   const relink = useMutation(trpc.games.relink.mutationOptions({ onSuccess: refresh }));
   const reinstall = useMutation(trpc.ports.install.mutationOptions({ onSuccess: refresh }));
   const hub = useHubActions();
@@ -67,12 +64,14 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
           <h1>{g.title}</h1>
           <p className="dim">{g.playMs ? tt('{0} jogadas', { 0: fmtPlay(g.playMs) }) : tt('Ainda não jogado pelo Cartucho')}{g.lastPlayed ? ` · ${ago(g.lastPlayed)}` : ''}{a && a.total ? tt(' · {0}/{1} conquistas', { 0: a.unlocked, 1: a.total }) : ''}</p>
 
-          {g.missing && <p className="warn">{tt('A pasta do jogo não foi encontrada em {0}. {1} O tempo de jogo e as conquistas ficam guardados.', { 0: g.installDir, 1: canReinstall ? tt('Instale de novo ou mostre onde ele está agora.') : tt('Mostre onde ele está agora.') })}</p>}
+          {g.missing && <p className="warn">{g.uninstalled
+            ? tt('Desinstalado. O tempo de jogo e as conquistas ficam guardados; se você instalar de novo, o Cartucho reconhece o jogo e continua de onde parou.')
+            : tt('A pasta do jogo não foi encontrada em {0}. {1} O tempo de jogo e as conquistas ficam guardados.', { 0: g.installDir, 1: canReinstall ? tt('Instale de novo ou mostre onde ele está agora.') : tt('Mostre onde ele está agora.') })}</p>}
           {g.missing ? (
             <div className="hm-btns">
               {canReinstall && <button className="hm-go" data-hf data-main disabled={reinstall.isPending || !!progress} onClick={() => { sfx.play('ok'); reinstall.mutate({ catalogId: g.catalogId! }); }}>{tt('⬇ INSTALAR DE NOVO')}</button>}
-              <button className={`hm-go ${canReinstall ? 'ghost' : ''}`} data-hf data-main={canReinstall ? undefined : true} disabled={relink.isPending} onClick={() => relink.mutate({ id })}>{tt('PROCURAR A PASTA')}</button>
-              <button className="hm-go ghost" data-hf onClick={() => { void askConfirm({ title: tt('Tirar {0} da biblioteca? Nenhum arquivo é apagado.', { 0: g.title }), ok: tt('Remover'), danger: true }).then(async y => { if (y) remove.mutate({ id, deletePrefix: await askPrefix(id, g.title) }); }); }}>{tt('TIRAR DA BIBLIOTECA')}</button>
+              <button className={`hm-go ${canReinstall ? 'ghost' : ''}`} data-hf data-main={canReinstall ? undefined : true} disabled={relink.isPending} onClick={() => relink.mutate({ id })}>{g.uninstalled ? tt('JÁ INSTALEI: MOSTRAR A PASTA') : tt('PROCURAR A PASTA')}</button>
+              <button className="hm-go ghost" data-hf onClick={() => { void removeAsk(g, g.title).then(ok => { if (ok) onBack(); }); }}>{tt('REMOVER DA BIBLIOTECA')}</button>
             </div>
           ) : (
           <div className="hm-btns">
@@ -94,7 +93,7 @@ export function GamePage({ id, active, onBack, onAchievements }: { id: string; a
               {isWindowsProgram && <button className="btn" data-hf onClick={() => setWineOpen(o => !o)}>{tt('Opções do Wine')}</button>}
               {g.sourceRepo && <button className="btn" data-hf onClick={() => gh(g.sourceRepo!)}>{tt('Projeto no GitHub')}</button>}
               {!g.running && <button className="btn danger" data-hf onClick={() => { void hub.uninstall({ installed: g, title: g.title } as HubGame).then(r => { if (r) onBack(); }); }}>{tt('Desinstalar')}</button>}
-              <button className="btn" data-hf onClick={() => { void askConfirm({ title: tt('Tirar {0} da biblioteca? Nenhum arquivo é apagado.', { 0: g.title }), ok: tt('Remover'), danger: true }).then(async y => { if (y) remove.mutate({ id, deletePrefix: await askPrefix(id, g.title) }); }); }}>{tt('Remover da biblioteca')}</button>
+              <button className="btn" data-hf onClick={() => { void removeAsk(g, g.title).then(ok => { if (ok) onBack(); }); }}>{tt('Remover da biblioteca')}</button>
             </div>
           )}
 

@@ -1,15 +1,17 @@
-## Cartucho 1.4.2
+## Cartucho 1.5.0
 
-### Mais jogos com conquistas
+### Biblioteca que não esquece
 
-- **Recomps sem leitor próprio**: o Cartucho procura sozinho, nas pastas do jogo e do usuário, os arquivos onde o recomp guarda conquistas e troféus, a lista com os nomes e os ícones.
-- **Índice de conquistas**: uma lista dos recomps do catálogo que gravam conquistas, com onde procurar em cada um. Ela é atualizada toda semana, sem precisar de versão nova do Cartucho.
-- **Recomps de Xbox 360 feitos com o rexglue**: conquistas e lista lidas direto dos arquivos do kit.
-- **Pokémon Pokopia (Recompia)**: as conquistas do mod Community Achievements, com nomes e imagens.
-- **Crack da TENOKE**: lista completa em português e desbloqueios com data.
-- **Jogos da Steam sem lista no PC** (inclusive cracks que não trazem a lista): nomes, descrições e ícones em português pela página pública de conquistas da Steam, sem precisar de chave.
+- **Desinstalar não apaga mais o histórico**: o jogo continua na biblioteca como "Não instalado", com o tempo de jogo, os gráficos e as conquistas.
+- **Reinstalou, voltou**: instalando de novo (pelo catálogo, mostrando a pasta ou adicionando o jogo), o Cartucho reconhece o jogo pelo appid da Steam ou do crack, pelo id da GOG ou pelo nome do .exe e continua de onde parou. O "Instalar de novo" do catálogo reaproveita a mesma pasta e os saves que ficaram nela.
+- **Remover da biblioteca pergunta o que fazer**: *Só tirar da biblioteca* (some da lista, mas tudo fica guardado e volta se o jogo for instalado de novo) ou *Apagar tudo* (apaga o tempo de jogo e as conquistas e manda para a Lixeira as pastas de saves e conquistas do crack que o Cartucho conhece).
 
-### Na página do jogo
+### Mais fácil de usar
 
-- Cada conquista mostra quantos por cento dos jogadores a desbloquearam, como na Steam. As raras ficam em destaque.
-- Quando não há lista do jogo, aparece "N desbloqueadas", sem um total inventado, e os nomes internos viram nomes legíveis.
+- **Clique nos jogos**: um clique abre a página do jogo, dois cliques jogam. Jogo desinstalado abre a página, que mostra só a ação principal e o resto em "Mais opções".
+- **Descobrir** rola com a rodinha do mouse.
+
+### Correções
+
+- A instalação não acusa mais o Windows Defender quando ele está desligado ou quando outro antivírus está no lugar dele.
+- O selo "INSTALADO" não aparece mais em jogo desinstalado.

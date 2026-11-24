@@ -17,8 +17,9 @@ export function useGameMenu({ show, onInfo, onAch, onRemoved }: { show: (t: stri
     const L: DOpt[] = [];
     if (inst?.missing) {
       if (x.catalog?.repo && !self) L.push({ k: 'reinstall', l: tt('Instalar de novo') });
-      L.push({ k: 'relink', l: tt('Procurar a pasta') });
-      L.push({ k: 'remove', l: tt('Tirar da biblioteca') });
+      L.push({ k: 'relink', l: inst.uninstalled ? tt('Já instalei de novo: mostrar a pasta') : tt('Procurar a pasta') });
+      if (inst.adapter && onAch) L.push({ k: 'ach', l: tt('Conquistas') });
+      L.push({ k: 'remove', l: tt('Remover da biblioteca') });
     } else if (inst) {
       L.push(inst.running ? { k: 'play', l: tt('Voltar para o jogo') } : inst.exe ? { k: 'play', l: tt('Jogar') } : { k: 'exe', l: tt('Escolher o .exe') });
       if (inst.running) L.push({ k: 'quit', l: tt('Fechar o jogo') });
@@ -26,7 +27,7 @@ export function useGameMenu({ show, onInfo, onAch, onRemoved }: { show: (t: stri
       if (inst.adapter && onAch) L.push({ k: 'ach', l: tt('Conquistas') });
       L.push({ k: 'folder', l: tt('Abrir pasta') });
       if (inst.exe) L.push({ k: 'exe', l: tt('Trocar o .exe') });
-      if (!inst.running) L.push({ k: 'uninstall', l: tt('Desinstalar') }, { k: 'remove', l: tt('Tirar da biblioteca') });
+      if (!inst.running) L.push({ k: 'uninstall', l: tt('Desinstalar') }, { k: 'remove', l: tt('Remover da biblioteca') });
     } else {
       if (x.repo && !self) L.push({ k: 'install', l: tt('Instalar') });
       L.push({ k: 'add', l: self ? tt('Já instalei: adicionar pasta') : tt('Escolher pasta') });
@@ -52,7 +53,7 @@ export function useGameMenu({ show, onInfo, onAch, onRemoved }: { show: (t: stri
     if (k === 'reinstall') { act.reinstall(x); return show(tt('Baixando {0} de novo…', { 0: x.repo })); }
     if (k === 'relink') { act.relink(x); return show(tt('Escolha onde o jogo está agora')); }
     if (k === 'uninstall') { void act.uninstall(x).then(r => { if (!r) return; onRemoved?.(); show(uninstallMsg(r, x.title)); }); return; }
-    if (k === 'remove') { act.remove(x); onRemoved?.(); return show(tt('Jogo tirado da biblioteca · nenhum arquivo apagado')); }
+    if (k === 'remove') { void act.remove(x).then(ok => { if (!ok) return; onRemoved?.(); show(tt('{0} saiu da biblioteca', { 0: x.title })); }); return; }
     if (k === 'update') { act.update(x); return show(tt('Atualizando para {0}…', { 0: x.update?.latest?.tag })); }
     if (k === 'ach') return onAch?.(x);
     if (k === 'folder') return openFolder.mutate({ id: x.installed!.id });

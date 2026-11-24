@@ -4,7 +4,7 @@ import type { CatalogGame, ConsoleId, InstalledGame, PlayStatus, RadarEvent, Upd
 import { useTRPC } from '../trpc';
 import { useProgress } from '../lib/progress';
 import { isSelfInstall } from '@shared/consoles';
-import { askConfirm } from '../lib/dialogs';
+import { askChoice, askConfirm } from '../lib/dialogs';
 import { sfx } from '../lib/sfx';
 import { useAskDeletePrefix } from '../lib/wine';
 import { tt } from '@shared/i18n';
@@ -32,9 +32,10 @@ export function useHubData(scope: ConsoleId | readonly ConsoleId[] | null) {
   const games = useQuery(trpc.games.list.queryOptions());
   const cat = useQuery(trpc.catalog.list.queryOptions(set == null ? undefined : set.size === 1 ? { console: [...set][0]! } : { consoles: [...set] }));
   const radar = useQuery(trpc.catalog.radar.queryOptions());
-  const mine = useMemo(() => (games.data ?? []).filter(g => (!set || set.has(g.console)) && !g.missing), [games.data, set]);
-  const updates = useQueries({ queries: mine.filter(g => g.sourceRepo).map(g => ({ ...trpc.ports.checkUpdate.queryOptions({ id: g.id }), staleTime: 5 * 60_000 })) });
-  const updById = new Map(mine.filter(g => g.sourceRepo).map((g, i) => [g.id, updates[i]?.data ?? null]));
+  // Desinstalados (e pastas que sumiram) continuam na biblioteca, com tempo de jogo e conquistas; vão para o fim da lista.
+  const mine = useMemo(() => (games.data ?? []).filter(g => !set || set.has(g.console)), [games.data, set]);
+  const updates = useQueries({ queries: mine.filter(g => g.sourceRepo && !g.missing).map(g => ({ ...trpc.ports.checkUpdate.queryOptions({ id: g.id }), staleTime: 5 * 60_000 })) });
+  const updById = new Map(mine.filter(g => g.sourceRepo && !g.missing).map((g, i) => [g.id, updates[i]?.data ?? null]));
 
   return useMemo(() => {
     const feed: RadarEvent[] = (radar.data ?? []).filter(e => !set || set.has(e.console));
@@ -44,7 +45,7 @@ export function useHubData(scope: ConsoleId | readonly ConsoleId[] | null) {
       const c = g.catalogId ? byCat.get(g.catalogId) ?? null : null;
       return { key: g.id, title: g.title, coverUrl: g.coverUrl ?? c?.coverUrl ?? null, status: c?.status ?? null, installed: g, catalog: c,
         isNew: !!c && fresh.has(c.id), update: updById.get(g.id) ?? null, repo: g.sourceRepo ?? c?.repo ?? null, console: g.console, platformName: c?.platformName ?? null };
-    }).sort((a, b) => (b.installed!.lastPlayed ?? b.installed!.addedAt) - (a.installed!.lastPlayed ?? a.installed!.addedAt));
+    }).sort((a, b) => Number(a.installed!.missing) - Number(b.installed!.missing) || (b.installed!.lastPlayed ?? b.installed!.addedAt) - (a.installed!.lastPlayed ?? a.installed!.addedAt));
     const have = new Set(mine.map(g => g.catalogId).filter(Boolean));
     const notInstalled: HubGame[] = (cat.data ?? []).filter(c => !have.has(c.id)).map(c => ({
       key: c.id, title: c.title, coverUrl: c.coverUrl, status: c.status, installed: null, catalog: c, isNew: fresh.has(c.id), update: null, repo: c.repo,
@@ -63,6 +64,32 @@ export function useHubData(scope: ConsoleId | readonly ConsoleId[] | null) {
   }, [mine, cat.data, radar.data, set, cat.isLoading, games.isLoading, updates.map(u => u.dataUpdatedAt).join()]);
 }
 
+/** Pergunta: só tirar da biblioteca (guarda o histórico e volta se instalar de novo) ou apagar tudo. Devolve se tirou. */
+export function useRemoveGame() {
+  const trpc = useTRPC(), qc = useQueryClient();
+  const remove = useMutation(trpc.games.remove.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
+  const askPrefix = useAskDeletePrefix();
+  return async (inst: InstalledGame, title: string): Promise<boolean> => {
+    let saves: string[] = [];
+    try { saves = (await qc.fetchQuery(trpc.games.removePlan.queryOptions({ id: inst.id }, { staleTime: 0 }))).saves; } catch { }
+    const files = inst.missing ? '' : tt(' Os arquivos do jogo não são apagados.');
+    const all = saves.length
+      ? tt('Apagar tudo: apaga o tempo de jogo e as conquistas do Cartucho e manda para a Lixeira as pastas de saves e conquistas do crack:\n{0}', { 0: saves.join('\n') })
+      : tt('Apagar tudo: apaga o tempo de jogo e as conquistas do Cartucho. Saves que o jogo guarda em outro lugar ficam onde estão.');
+    const r = await askChoice({
+      title: tt('Remover {0} da biblioteca?', { 0: title }),
+      text: `${tt('Só tirar: o jogo some da biblioteca, mas o tempo de jogo e as conquistas ficam guardados e voltam se você instalar de novo.')}\n\n${all}${files}`,
+      alt: tt('Só tirar da biblioteca'), ok: tt('Apagar tudo'), cancel: tt('Cancelar'), danger: true,
+    });
+    if (!r) return false;
+    try {
+      if (r === 'alt') await remove.mutateAsync({ id: inst.id, keep: true });
+      else await remove.mutateAsync({ id: inst.id, saves: saves.length > 0, deletePrefix: await askPrefix(inst.id, title) });
+    } catch { return false; }
+    return true;
+  };
+}
+
 export function useHubActions() {
   const trpc = useTRPC(), qc = useQueryClient();
   const refresh = () => { void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }); void qc.invalidateQueries({ queryKey: trpc.library.summary.queryKey() }); };
@@ -78,6 +105,9 @@ export function useHubActions() {
   const askPrefix = useAskDeletePrefix();
   const checkAll = useMutation({ mutationFn: async (ids: string[]) => { await Promise.all(ids.map(id => qc.fetchQuery(trpc.ports.checkUpdate.queryOptions({ id, force: true }, { staleTime: 0 })))); await qc.invalidateQueries({ queryKey: trpc.ports.checkUpdate.pathKey() }); } });
   const error = play.error ?? install.error ?? update.error ?? quit.error ?? add.error ?? relink.error ?? remove.error ?? uninstall.error;
+
+  const removeAsk = useRemoveGame();
+  const removeFlow = (g: HubGame) => (g.installed ? removeAsk(g.installed, g.title) : Promise.resolve(false));
 
   return {
     error: error?.message ?? null,
@@ -96,7 +126,7 @@ export function useHubActions() {
     quit: (g: HubGame) => { if (g.installed) quit.mutate({ id: g.installed.id }); },
     update: (g: HubGame) => { if (g.installed && !isSelfInstall(g.console)) update.mutate({ id: g.installed.id }); },
     relink: (g: HubGame) => { if (g.installed) relink.mutate({ id: g.installed.id }); },
-    remove: async (g: HubGame) => { if (g.installed) remove.mutate({ id: g.installed.id, deletePrefix: await askPrefix(g.installed.id, g.title) }); },
+    remove: removeFlow,
     /** Pergunta e desinstala. Devolve o que aconteceu, ou null se a pessoa desistiu ou deu erro. */
     uninstall: async (g: HubGame): Promise<'done' | 'steam' | 'removed' | null> => {
       const inst = g.installed; if (!inst) return null;
@@ -104,15 +134,16 @@ export function useHubActions() {
       let plan;
       try { plan = await qc.fetchQuery(trpc.games.uninstallPlan.queryOptions({ id: inst.id }, { staleTime: 0 })); } catch { return null; }
       if (plan.kind === 'blocked') {
-        const y = await askConfirm({ title: tt('O Cartucho não vai apagar {0}', { 0: g.title }), text: tt('{0} Se quiser, ele só sai da biblioteca e os arquivos ficam.', { 0: plan.reason }), ok: tt('Tirar da biblioteca'), cancel: tt('Cancelar') });
+        const y = await askConfirm({ title: tt('O Cartucho não vai apagar {0}', { 0: g.title }), text: tt('{0} Se quiser, ele só sai da biblioteca e os arquivos ficam.', { 0: plan.reason }), ok: tt('Continuar'), cancel: tt('Cancelar') });
         if (!y) return null;
-        remove.mutate({ id: inst.id, deletePrefix: await askPrefix(inst.id, g.title) });
-        return 'removed';
+        return await removeFlow(g) ? 'removed' : null;
       }
-      const text = plan.kind === 'managed' ? tt('Os arquivos que vieram no download são apagados. Saves e configurações que você mudou ficam na pasta.')
-        : plan.kind === 'steam' ? tt('A Steam vai abrir e pedir para confirmar. O jogo sai da biblioteca do Cartucho.')
+      const kept = tt('O jogo continua na biblioteca com o tempo de jogo e as conquistas; se instalar de novo, o Cartucho reconhece.');
+      const what = plan.kind === 'managed' ? tt('Os arquivos que vieram no download são apagados. Saves e configurações que você mudou ficam na pasta.')
+        : plan.kind === 'steam' ? tt('A Steam vai abrir e pedir para confirmar.')
         : plan.kind === 'folder' ? tt('A pasta {0} vai para a Lixeira com tudo o que tem dentro, inclusive saves guardados nela. Dá para recuperar pela Lixeira.', { 0: plan.path })
         : tt('O arquivo {0} vai para a Lixeira. Dá para recuperar por lá.', { 0: plan.path });
+      const text = `${what}\n\n${kept}`;
       if (!await askConfirm({ title: tt('Desinstalar {0}?', { 0: g.title }), text, ok: tt('Desinstalar'), cancel: tt('Manter'), danger: true })) return null;
       try { await uninstall.mutateAsync({ id: inst.id, deletePrefix: await askPrefix(inst.id, g.title) }); } catch { return null; }
       return plan.kind === 'steam' ? 'steam' : 'done';
@@ -126,7 +157,7 @@ export function useHubActions() {
 }
 
 export const uninstallMsg = (r: 'done' | 'steam' | 'removed', title: string) =>
-  r === 'steam' ? tt('Confirme na Steam para desinstalar {0}', { 0: title }) : r === 'removed' ? tt('{0} saiu da biblioteca · nenhum arquivo foi apagado', { 0: title }) : tt('{0} desinstalado', { 0: title });
+  r === 'steam' ? tt('Confirme na Steam para desinstalar {0}', { 0: title }) : r === 'removed' ? tt('{0} saiu da biblioteca', { 0: title }) : tt('{0} desinstalado · continua na biblioteca', { 0: title });
 
 export const useGameProgress = (g: HubGame | null | undefined) => {
   const a = useProgress(g?.installed?.id), b = useProgress(g?.catalog?.id);

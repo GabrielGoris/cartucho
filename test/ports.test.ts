@@ -119,7 +119,11 @@ describe('instalar, atualizar e desinstalar', () => {
     expect(existsSync(g.exe!)).toBe(false);
     expect(readFileSync(join(g.installDir, 'save.dat'), 'utf8')).toBe('meu save');
     expect(readFileSync(join(g.installDir, 'config.ini'), 'utf8')).toBe('minha config');
-    expect(ach.listGames()).toEqual([]);
+    // Continua na biblioteca como não instalado, e instalar de novo reaproveita a mesma pasta e entrada (o save fica).
+    expect(ach.listGames()).toEqual([expect.objectContaining({ id: g.id, missing: true, uninstalled: true })]);
+    const again = await ports.install('dono/MeuRecomp', { catalogId: g.catalogId! });
+    expect(again).toMatchObject({ id: g.id, installDir: g.installDir, missing: false, uninstalled: false });
+    expect(readFileSync(join(g.installDir, 'save.dat'), 'utf8')).toBe('meu save');
   }, 15_000);
 
   it('pasta apagada por fora: o jogo fica como "não encontrado" e instalar de novo reaproveita a mesma entrada', async () => {
@@ -238,5 +242,17 @@ describe.skipIf(process.platform === 'win32')('jogar e contar o tempo', () => {
     const db = openDb(':memory:'), ach = new AchievementService(db, tmp());
     const g = await ach.addGame(tmp());
     await expect(new Player(db, ach, async () => '').play(g.id)).rejects.toThrow(/Escolher o .exe/);
+  });
+});
+
+describe('verificação do Windows Defender', async () => {
+  const { defenderVerdict } = await import('../src/main/ports/files');
+  it('só acusa quando o Defender diz que achou ameaça', () => {
+    expect(defenderVerdict(0, 'Scan starting...\r\nScan finished.\r\nScanning C:\\t\\a.zip found no threats.\r\n')).toBe('clean');
+    expect(defenderVerdict(2, 'Scanning C:\\t\\a.zip found 1 threats.\r\n<===LIST OF DETECTED THREATS===>\r\nThreat                  : Virus:DOS/EICAR_Test_File\r\n')).toBe('threat');
+    // Defender desligado ou trocado por outro antivírus: também sai com 2, mas não é ameaça.
+    expect(defenderVerdict(2, 'CmdTool: Failed with hr = 0x800106BA. Check C:\\Users\\x\\AppData\\Local\\Temp\\MpCmdRun.log for more information')).toBe('skipped');
+    expect(defenderVerdict(2, '')).toBe('skipped');
+    expect(defenderVerdict(0, 'CmdTool: Failed with hr = 0x80508023.')).toBe('skipped');
   });
 });

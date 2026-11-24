@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, type ReactNode, type WheelEvent } from 'react';
 import { STATUS_LABEL, SELF_INSTALL_NOTE } from '@shared/consoles';
 import { Glyph, useKeys, type Key } from '../lib/input';
 import { sfx } from '../lib/sfx';
@@ -101,6 +101,24 @@ export function Discover({ theme, cname, games: all, extra: allExtra = [], self,
   const chips = [...FILTERS.map(f => f[0]), 'sort'] as const;
   const opts = g ? options(g) : [];
   const mv = (p: Partial<DState>) => { sfx.play('move'); up(p); };
+  // Rodinha do mouse: anda uma fileira por vez (na prateleira, para os lados com Shift ou trackpad).
+  const wheelAt = useRef(0);
+  const onWheel = (e: WheelEvent) => {
+    if (!total || st.menu) return;
+    const vert = Math.abs(e.deltaY) >= Math.abs(e.deltaX) && !e.shiftKey;
+    const d = Math.sign(vert ? e.deltaY : e.deltaX || e.deltaY);
+    const now = performance.now();
+    if (!d || now - wheelAt.current < 70) return;
+    wheelAt.current = now;
+    if (shelves) {
+      const row = Math.min(st.row, rows.length - 1);
+      if (vert) { const r = Math.max(0, Math.min(rows.length - 1, row + d)); if (r !== row || st.zone !== 'body') mv({ zone: 'body', row: r, col: Math.min(st.col, rows[r]!.items.length - 1) }); }
+      else { const c = Math.max(0, Math.min(list.length - 1, st.col + d)); if (c !== st.col || st.zone !== 'body') mv({ zone: 'body', col: c }); }
+      return;
+    }
+    const last = Math.floor((list.length - 1) / COLS), r = Math.max(0, Math.min(last, st.row + d));
+    if (r !== st.row || st.zone !== 'body') mv({ zone: 'body', row: r, col: Math.min(st.col, list.length - 1 - r * COLS) });
+  };
   const focusSearch = () => { up({ zone: 'search' }); setTimeout(() => searchRef.current?.focus(), 30); };
   const pickChip = (i: number) => {
     const c = chips[i]!;
@@ -177,7 +195,7 @@ export function Discover({ theme, cname, games: all, extra: allExtra = [], self,
   const card = (x: HubGame, on: boolean, click: () => void) => (
     <button key={x.key} className={`dsc-c ${on ? 'on' : ''} ${x.installed ? 'inst' : ''}`} onClick={click}>
       <span className="cv-w"><GameArt title={x.title} console={x.console} platformName={x.platformName} fallback={x.coverUrl} variant="cover" />
-        {x.isNew && <span className="b new">{tt('NOVO')}</span>}{x.installed && <span className="b inst">{tt('INSTALADO')}</span>}</span>
+        {x.isNew && <span className="b new">{tt('NOVO')}</span>}{x.installed && !x.installed.missing && <span className="b inst">{tt('INSTALADO')}</span>}</span>
       <span className="t">{x.title}</span>
     </button>
   );
@@ -212,7 +230,7 @@ export function Discover({ theme, cname, games: all, extra: allExtra = [], self,
           ))}
         </div>
       )}
-      <div className="dsc-body" ref={bodyRef}>
+      <div className="dsc-body" ref={bodyRef} onWheel={onWheel}>
         {shelves ? (
           <div className="dsc-in" style={{ transform: `translateY(-${rowTop * ROW_H}px)` }}>
             {rows.map((r, ri) => {
@@ -276,7 +294,7 @@ function Detail({ g, self }: { g: HubGame; self: boolean }) {
         {ttb && <span className="pill ttb" title={tt('Tempo para zerar, média de jogadores no IGDB.com')}>{Math.floor(ttb)}h{ttb % 1 ? '30' : ''}</span>}
         {g.status && <span className={`pill ${g.status}`}>{STATUS_LABEL[g.status]}</span>}
         {g.isNew && <span className="pill new">{tt('Novo')}</span>}
-        {i && <span className="pill inst">{i.missing ? tt('Pasta não encontrada') : i.playMs ? tt('{0} jogadas', { 0: fmtPlay(i.playMs) }) : tt('Instalado')}</span>}
+        {i && <span className="pill inst">{i.missing ? (i.uninstalled ? tt('Não instalado') : tt('Pasta não encontrada')) : i.playMs ? tt('{0} jogadas', { 0: fmtPlay(i.playMs) }) : tt('Instalado')}</span>}
       </div>
       {needs.text && <p className="needs"><b>{tt('Precisa:')}</b> {needs.text}</p>}
       {self && !i && <p className="needs">{SELF_INSTALL_NOTE}</p>}

@@ -12,6 +12,8 @@ import { type Adapter, type AdapterContext, adapterById, adapterForDir } from '.
 import type { Unlock } from './saves';
 import { humanize } from './discover';
 import { atualizarIndice, entradaDo, indiceAdapter, usarIndice, validar } from './indice';
+import { crackSaveDirs, scanCrack } from './steam';
+import { gogProductId } from './gog';
 import { tt } from '@shared/i18n';
 import { steamManifest, windowsAppData } from '../steam';
 import { readPatch } from '../wine/config';
@@ -21,6 +23,7 @@ const ADAPTER_CONSOLE: Record<string, ConsoleId> = { 'unleashed-recomp': 'x360',
 type GameRow = {
   id: string; catalog_id: string | null; title: string; console: string; install_dir: string; adapter: string | null; added_at: number; cover_url: string | null; platform_name: string | null;
   exe: string | null; version: string | null; source_repo: string | null; managed: number; play_ms: number; last_played: number | null; catalog_repo?: string | null;
+  uninstalled_at?: number | null; match_keys?: string | null; hidden_at?: number | null;
 };
 export interface AddExtra { catalogId?: string | null; title?: string; console?: string; exe?: string | null; sourceRepo?: string | null; release?: InstalledRelease | null; managed?: boolean; manifest?: Record<string, number> | null }
 const GAME_SQL = `SELECT g.*, c.cover_url, c.platform_name, c.repo catalog_repo,
@@ -31,6 +34,20 @@ const imgType = (b: Uint8Array) => (b[0] === 0xff && b[1] === 0xd8 ? 'image/jpeg
 export const FEED_DAYS = 14;
 /** Conquistas que só se conhece pelo desbloqueio (sem a lista do jogo) ficam com sort a partir daqui. */
 const AUTO_SORT = 100_000;
+/** Nomes de .exe comuns demais para reconhecer um jogo sozinhos. */
+const GENERIC_EXE = /^(game|launcher|start|play|setup|unins\d*|unitycrashhandler(32|64)?|crashreportclient|ue4prereqsetup.*|dxsetup|vc_?redist.*|notification_helper)\.exe$/i;
+/** Jeitos de reconhecer o mesmo jogo numa pasta nova: appid da Steam (legítimo ou de crack), id da GOG, nome do .exe. */
+export function matchKeys(dir: string, exe: string | null): string[] {
+  const out: string[] = [];
+  try { const a = steamManifest(dir, exe)?.appid ?? scanCrack(dir)?.appid; if (a) out.push(`steam:${a}`); } catch { }
+  try { const g = gogProductId(dir); if (g) out.push(`gog:${g}`); } catch { }
+  const name = exe?.split(/[\\/]/).pop()?.toLowerCase();
+  if (name && /\.exe$/.test(name) && !GENERIC_EXE.test(name)) out.push(`exe:${name}`);
+  return out;
+}
+const keysOf = (r: { match_keys?: string | null }) => { try { return JSON.parse(r.match_keys ?? '[]') as string[]; } catch { return []; } };
+/** Sem os arquivos do jogo: a pasta sumiu, ou foi desinstalado e o programa não está mais lá (o Cartucho deixa saves na pasta). */
+const isGone = (r: { install_dir: string; exe: string | null; uninstalled_at?: number | null }) => !existsSync(r.install_dir) || (!!r.uninstalled_at && (!r.exe || !existsSync(r.exe)));
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -56,7 +73,7 @@ export class AchievementService {
       id: r.id, title: r.title, console: r.console as ConsoleId, platformName: r.platform_name ?? null, installDir: r.install_dir, adapter: r.adapter, adapterLabel: adapter?.label ?? null,
       catalogId: r.catalog_id, coverUrl: absUrl(r.cover_url), addedAt: r.added_at, achievements: counts,
       exe: r.exe, sourceRepo: isSelfInstall(r.console) ? null : r.source_repo, version: r.version, managed: !!r.managed,
-      playMs: r.play_ms ?? 0, lastPlayed: r.last_played ?? null, running: this.isRunning(r.id), missing: !existsSync(r.install_dir),
+      playMs: r.play_ms ?? 0, lastPlayed: r.last_played ?? null, running: this.isRunning(r.id), ...((gone: boolean) => ({ missing: gone, uninstalled: gone && !!r.uninstalled_at }))(isGone(r)),
     };
   }
   private ctx(r: GameRow): AdapterContext {
@@ -65,7 +82,7 @@ export class AchievementService {
   }
 
   listGames(): InstalledGame[] {
-    return (this.db.prepare(`${GAME_SQL} ORDER BY g.title`).all() as GameRow[]).map(r => this.toGame(r));
+    return (this.db.prepare(`${GAME_SQL} WHERE g.hidden_at IS NULL ORDER BY g.title`).all() as GameRow[]).map(r => this.toGame(r));
   }
   getGame(id: string) { return this.toGame(this.row(id)); }
   internals(id: string) {
@@ -109,10 +126,22 @@ export class AchievementService {
     let exe = p.exe ?? null;
     if (!exe) try { exe = findGameExe(dir) ?? guessProgram(dir, r.source_repo); } catch { exe = null; }
     this.unwatch(id);
-    this.db.prepare('UPDATE installed_game SET install_dir = ?, exe = ? WHERE id = ?').run(dir, exe, id);
+    const back = !!r.uninstalled_at || !!r.hidden_at;
+    const keys = [...new Set([...matchKeys(dir, exe), ...keysOf(r)])];
+    this.db.prepare('UPDATE installed_game SET install_dir = ?, exe = ?, uninstalled_at = NULL, hidden_at = NULL, match_keys = ? WHERE id = ?').run(dir, exe, JSON.stringify(keys), id);
     if (p.managed !== undefined) this.db.prepare('UPDATE installed_game SET managed = ? WHERE id = ?').run(p.managed ? 1 : 0, id);
+    // Voltou depois de desinstalado: o crack pode ser outro, então confere de novo qual leitor de conquistas serve.
+    const found = back ? this.pickAdapter(dir, r.source_repo ?? r.catalog_repo ?? null) : null;
+    if (found && found.id !== r.adapter) this.db.prepare('UPDATE installed_game SET adapter = ? WHERE id = ?').run(found.id, id);
     this.patchGame(id, { ...(p.release !== undefined ? { release: p.release } : {}), ...(p.manifest !== undefined ? { manifest: p.manifest } : {}) });
-    if (r.adapter) this.watch(id);
+    if (found ?? adapterById(r.adapter)) {
+      if (back) void (async () => {
+        if (!this.db.prepare('SELECT 1 FROM achievement_def WHERE game_id = ? AND sort < ? LIMIT 1').get(id, AUTO_SORT)) await this.syncDefinitions(id);
+        await this.syncUnlocks(id, { silent: true }).catch(() => {});
+        this.events.emit('changed', id);
+      })();
+      this.watch(id);
+    }
     return this.toGame(this.row(id));
   }
 
@@ -120,9 +149,19 @@ export class AchievementService {
     dir = resolve(dir);
     const dup = this.db.prepare('SELECT id, title, catalog_id FROM installed_game WHERE install_dir = ?').get(dir) as { id: string; title: string; catalog_id: string | null } | undefined;
     if (dup && extra.catalogId && dup.catalog_id !== extra.catalogId) throw new Error(tt('Essa pasta já é de {0}. Escolha outra pasta, ou troque a pasta de {1} antes.', { 0: dup.title, 1: dup.title }));
-    if (dup) return this.toGame(this.row(dup.id));
-    const lost = extra.catalogId ? (this.db.prepare('SELECT id, install_dir FROM installed_game WHERE catalog_id = ?').all(extra.catalogId) as { id: string; install_dir: string }[]).find(x => !existsSync(x.install_dir)) : undefined;
-    if (lost) return this.relocate(lost.id, dir, { exe: extra.exe, release: extra.release, manifest: extra.manifest, managed: extra.managed });
+    const again = { exe: extra.exe, release: extra.release, manifest: extra.manifest, managed: extra.managed };
+    if (dup) return this.db.prepare('SELECT 1 FROM installed_game WHERE id = ? AND (uninstalled_at IS NOT NULL OR hidden_at IS NOT NULL)').get(dup.id) ? this.relocate(dup.id, dir, again) : this.toGame(this.row(dup.id));
+    const lost = extra.catalogId ? (this.db.prepare('SELECT id, install_dir, exe, uninstalled_at, hidden_at FROM installed_game WHERE catalog_id = ?').all(extra.catalogId) as GameRow[]).find(x => isGone(x) || !!x.hidden_at) : undefined;
+    if (lost) return this.relocate(lost.id, dir, again);
+    // Reinstalado (ou achado em outra pasta): reconhece pelo appid, id da GOG ou nome do .exe e continua de onde parou.
+    let exe0 = extra.exe ?? null;
+    if (!exe0) try { exe0 = findGameExe(dir); } catch { }
+    const keys = new Set(matchKeys(dir, exe0));
+    if (keys.size && !extra.catalogId) {
+      const old = (this.db.prepare('SELECT id, install_dir, exe, uninstalled_at, match_keys, hidden_at FROM installed_game WHERE match_keys IS NOT NULL ORDER BY uninstalled_at DESC').all() as GameRow[])
+        .find(x => (isGone(x) || !!x.hidden_at) && keysOf(x).some(k => keys.has(k)));
+      if (old) return this.relocate(old.id, dir, again);
+    }
     let adapter = adapterForDir(dir);
     const cat = extra.catalogId
       ? this.db.prepare('SELECT id, title, console, repo FROM catalog_game WHERE id = ?').get(extra.catalogId) as { id: string; title: string; console: string; repo: string | null } | undefined
@@ -132,18 +171,55 @@ export class AchievementService {
     // O índice de conquistas manda quando o projeto está nele (e nenhum leitor específico reconheceu a pasta).
     if ((!adapter || adapter.id === 'recomp-local') && entradaDo(extra.sourceRepo ?? cat?.repo)) adapter = indiceAdapter;
     const id = randomUUID();
+    const keyList = matchKeys(dir, exe);
     this.db.prepare(`INSERT INTO installed_game (id, catalog_id, title, console, install_dir, adapter, added_at, exe, source_repo, release_json, version, managed, manifest_json)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       id, cat?.id ?? null, extra.title ?? cat?.title ?? adapter?.label ?? steamManifest(dir, exe)?.name ?? basename(dir),
       extra.console ?? cat?.console ?? (adapter ? ADAPTER_CONSOLE[adapter.id] : 'other') ?? 'other', dir, adapter?.id ?? null, Date.now(),
       exe, extra.sourceRepo ?? cat?.repo ?? null, extra.release ? JSON.stringify(extra.release) : null, extra.release?.tag ?? null,
       extra.managed ? 1 : 0, extra.manifest ? JSON.stringify(extra.manifest) : null);
+    if (keyList.length) this.db.prepare('UPDATE installed_game SET match_keys = ? WHERE id = ?').run(JSON.stringify(keyList), id);
     if (adapter) {
       await this.syncDefinitions(id);
       await this.syncUnlocks(id, { silent: true });
       this.watch(id);
     }
     return this.toGame(this.row(id));
+  }
+
+  private pickAdapter(dir: string, repo: string | null): Adapter | null {
+    let a: Adapter | null = null;
+    try { a = adapterForDir(dir); } catch { }
+    if ((!a || a.id === 'recomp-local') && entradaDo(repo)) a = indiceAdapter;
+    return a;
+  }
+
+  /** Anota como reconhecer o jogo depois (chamar antes de apagar os arquivos: o appid some junto com eles). */
+  rememberKeys(id: string) {
+    const r = this.row(id);
+    const keys = [...new Set([...keysOf(r), ...(existsSync(r.install_dir) ? matchKeys(r.install_dir, r.exe) : [])])];
+    this.db.prepare('UPDATE installed_game SET match_keys = ? WHERE id = ?').run(keys.length ? JSON.stringify(keys) : null, id);
+  }
+  /** Desinstalado: sai do disco mas fica na biblioteca, com tempo de jogo e conquistas. */
+  markUninstalled(id: string) {
+    this.unwatch(id);
+    this.db.prepare('UPDATE installed_game SET uninstalled_at = ? WHERE id = ?').run(Date.now(), id);
+    this.events.emit('changed', id);
+  }
+  /** Some da biblioteca guardando tudo; volta com o histórico se o jogo for instalado (ou adicionado) de novo. */
+  hideGame(id: string) {
+    this.rememberKeys(id);
+    this.unwatch(id);
+    this.db.prepare('UPDATE installed_game SET hidden_at = ? WHERE id = ?').run(Date.now(), id);
+    this.events.emit('changed', id);
+  }
+  /** Pastas de saves e conquistas do crack que existem fora da pasta do jogo (as que "apagar tudo" manda para a Lixeira). */
+  saveDirs(id: string): string[] {
+    const r = this.row(id);
+    const ids = new Set(keysOf(r).filter(k => k.startsWith('steam:')).map(k => k.slice(6)));
+    if (existsSync(r.install_dir)) { try { const a = scanCrack(r.install_dir)?.appid; if (a) ids.add(a); } catch { } }
+    const appData = this.ctx(r).appData;
+    return [...ids].flatMap(a => crackSaveDirs(appData, a));
   }
 
   removeGame(id: string) {

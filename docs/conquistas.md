@@ -108,6 +108,14 @@ Os textos saem em português quando o jogo tem; senão em inglês; senão no idi
 - **XEX2** sem criptografia, com compressão "nenhuma" ou "básica": é o que o UnleashedRecomp grava em `patched/`.
 - **Imagem descriptografada do MarathonRecomp**: cabeçalho LE `0xDECDECDE`, `base`, `entry`, `resource_offset`, `resource_size` (36 bytes), seguido da imagem crua.
 
+## Desinstalar, remover e reinstalar
+
+- **Desinstalar** apaga os arquivos do jogo, mas ele continua na biblioteca como "não instalado", com o tempo de jogo, as sessões e as conquistas. Antes de apagar, o Cartucho anota como reconhecer o jogo depois (`match_keys`): o appid da Steam (do `appmanifest` ou do crack), o id da GOG e o nome do `.exe` (menos os genéricos, como `Game.exe` ou `UnityCrashHandler64.exe`).
+- **Reinstalar** volta para a mesma entrada: pelo catálogo (o "Instalar de novo" reaproveita até a mesma pasta, com os saves que ficaram nela), por "Já instalei de novo: mostrar a pasta" ou ao adicionar a pasta nova, que é reconhecida pelas chaves acima. Como o crack pode ser outro, o leitor de conquistas é escolhido de novo; as conquistas só se somam, nunca somem.
+- **Remover da biblioteca** pergunta o que fazer:
+  - *Só tirar da biblioteca*: o jogo some da lista, mas tudo fica guardado (`hidden_at`) e volta se ele for instalado ou adicionado de novo.
+  - *Apagar tudo*: apaga o tempo de jogo e as conquistas do Cartucho e manda para a Lixeira as pastas de saves e conquistas do crack que ele conhece fora da pasta do jogo (`GSE Saves`, `Goldberg SteamEmu Saves`, `CODEX` e `RUNE`). Saves que o jogo guarda em outros lugares não são mexidos.
+
 ## Limitações conhecidas
 
 - **XEX do disco**: vem criptografado e com compressão LZX, e o Cartucho não lê. Usamos o executável que o recomp gerou na instalação. Se a pasta `patched/` ou `decrypted/` não existir, a tela mostra o erro e os desbloqueios continuam sendo lidos (sem nome).

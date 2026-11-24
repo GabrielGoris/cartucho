@@ -390,7 +390,8 @@ body.pal-light .stage-behind { filter: blur(8px) brightness(.85) saturate(.6); }
 .gl-box p { margin: 0 0 14px; font-size: 20px; color: var(--dim); }
 .gl-dl { margin: 0 0 14px; padding: 0 0 0 22px; font-size: 20px; line-height: 1.5; }
 .gl-dl span { color: var(--dim); margin-left: 10px; }
-.gl-btns { display: flex; gap: 14px; justify-content: flex-end; margin-top: 18px; }
+.gl-btns { display: flex; flex-wrap: wrap; gap: 14px; justify-content: flex-end; margin-top: 18px; }
+.gl-box p { white-space: pre-line; }
 .gl-plat { width: min(900px, 92%); }
 .gl-plats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 6px; }
 .gl-plats .btn { display: flex; align-items: center; gap: 10px; justify-content: flex-start; min-width: 0; padding: 12px 14px; font-family: var(--font-body); font-size: 18px; letter-spacing: 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

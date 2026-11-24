@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { semArquivos, tileClick } from '@shared/gameclick';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AchievementView, ConsoleId, PlayStats, RadarEvent } from '@shared/types';
 import { isSelfInstall, STATUS_LABEL } from '@shared/consoles';
@@ -104,8 +105,9 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
     const L: Opt[] = [];
     if (inst?.missing) {
       if (x.catalog?.repo && !self) L.push({ k: 'reinstall', l: tt('Instalar de novo'), ic: 'dl' });
-      L.push({ k: 'relink', l: tt('Procurar a pasta'), ic: 'folder' });
-      L.push({ k: 'remove', l: tt('Tirar da biblioteca'), ic: 'stop' });
+      L.push({ k: 'relink', l: inst.uninstalled ? tt('Já instalei de novo: mostrar a pasta') : tt('Procurar a pasta'), ic: 'folder' });
+      if (inst.adapter) L.push({ k: 'ach', l: tt('Conquistas'), ic: 'medal' });
+      L.push({ k: 'remove', l: tt('Remover da biblioteca'), ic: 'stop' });
     } else if (inst) {
       L.push(inst.running ? { k: 'play', l: tt('Voltar para o jogo'), ic: 'play' } : inst.exe ? { k: 'play', l: tt('Jogar'), ic: 'play' } : { k: 'exe', l: tt('Escolher o .exe'), ic: 'folder' });
       if (inst.running) L.push({ k: 'quit', l: tt('Fechar o jogo'), ic: 'stop' });
@@ -113,7 +115,7 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
       if (inst.adapter) L.push({ k: 'ach', l: tt('Conquistas'), ic: 'medal' });
       L.push({ k: 'folder', l: tt('Abrir pasta'), ic: 'folder' });
       if (inst.exe) L.push({ k: 'exe', l: tt('Escolher o .exe'), ic: 'folder' });
-      if (!inst.running) L.push({ k: 'uninstall', l: tt('Desinstalar'), ic: 'trash' }, { k: 'remove', l: tt('Tirar da biblioteca'), ic: 'stop' });
+      if (!inst.running) L.push({ k: 'uninstall', l: tt('Desinstalar'), ic: 'trash' }, { k: 'remove', l: tt('Remover da biblioteca'), ic: 'stop' });
     } else {
       if (x.repo && !self) L.push({ k: 'install', l: tt('Instalar'), ic: 'dl' });
       L.push({ k: 'add', l: self ? tt('Já instalei: adicionar pasta') : tt('Escolher pasta'), ic: 'folder' });
@@ -124,6 +126,7 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
   };
   const gameOpts = game ? options(game) : [];
   const openGame = (x: HubGame) => { up({ game: x.key, menu: false, zone: 'gacts', ai: 0, gs: 0 }); };
+  const openPage = (x: HubGame) => { sfx.play('ok'); up({ menu: false }); openGame(x); };
   const goSec = (i: number, extra: Partial<St> = {}) => { sfx.play('move'); set(x => ({ ...x, si: i, fi: 0, li: 0, menu: false, game: null, ...extra })); };
 
   const run = (k: string, x: HubGame) => {
@@ -143,7 +146,7 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
     if (k === 'reinstall') { act.reinstall(x); return show(tt('Baixando {0} de novo… o tempo de jogo continua', { 0: x.repo })); }
     if (k === 'relink') { act.relink(x); return show(tt('Escolha onde o jogo está agora')); }
     if (k === 'uninstall') { void act.uninstall(x).then(r => { if (!r) return; up({ game: null }); show(uninstallMsg(r, x.title)); }); return; }
-    if (k === 'remove') { act.remove(x); up({ game: null }); return show(tt('{0} saiu da biblioteca · nenhum arquivo foi apagado', { 0: x.title })); }
+    if (k === 'remove') { void act.remove(x).then(ok => { if (!ok) return; up({ game: null }); show(tt('{0} saiu da biblioteca', { 0: x.title })); }); return; }
     if (k === 'update') { act.update(x); return show(tt('Atualizando para {0}… configurações e saves ficam', { 0: x.update?.latest?.tag })); }
     if (k === 'ach') return goSec(3, { zone: 'main', li: Math.max(0, lib.indexOf(x)) });
     if (k === 'folder') return openFolder.mutate({ id: x.installed!.id });
@@ -156,7 +159,7 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
     if (st.menu && cur) { const o = options(cur)[st.mi]; if (o) run(o.k, cur); return; }
     if (st.zone === 'tabs') { sfx.play('ok'); return up({ zone: 'main' }); }
     if (st.zone === 'search') { sfx.play('ok'); searchRef.current?.focus(); return; }
-    if (sec === 'lib' || sec === 'cat') { if (cur) { sfx.play('ok'); openGame(cur); } return; }
+    if (sec === 'lib' || sec === 'cat') { if (cur && semArquivos(cur)) return openPage(cur); if (cur) { sfx.play('ok'); openGame(cur); } return; }
     if (!row) return;
     if (sec === 'cfg') {
       sfx.play('ok');
@@ -257,10 +260,10 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
                   {grid.length ? (
                     <div className="pc-grid">{grid.map((x, j) => (
                       <button key={x.key} className={`pc-cap ${st.zone === 'main' && j === st.fi ? 'on' : ''} ${x.installed ? '' : 'ghost'} ${x.installed?.missing ? 'missing' : ''}`}
-                        onClick={() => { if (st.zone === 'main' && st.fi === j) enter(); else { sfx.play('move'); up({ zone: 'main', fi: j }); } }}>
+                        onClick={e => tileClick(e, x, { select: () => { if (st.zone !== 'main' || st.fi !== j) { sfx.play('move'); up({ zone: 'main', fi: j }); } }, page: () => { sfx.play('ok'); openGame(x); }, play: () => run('play', x) })}>
                         <span className="cv-w"><Art g={x} v="cover" />{x.isNew && <span className="pc-tag new">{tt('NOVO')}</span>}{x.installed?.running && <span className="run"><Ic n="play" /></span>}</span>
                         <span className="t">{x.title}</span>
-                        <span className="s">{x.installed ? (x.installed.missing ? tt('pasta não encontrada') : fmtPlay(x.installed.playMs) || tt('não jogado')) : x.status ? STATUS_LABEL[x.status] : ''}</span>
+                        <span className="s">{x.installed ? (x.installed.missing ? (x.installed.uninstalled ? tt('não instalado') : tt('pasta não encontrada')) : fmtPlay(x.installed.playMs) || tt('não jogado')) : x.status ? STATUS_LABEL[x.status] : ''}</span>
                       </button>
                     ))}</div>
                   ) : <div className="pc-empty">{q ? tt('Nada encontrado para “{0}”.', { 0: q }) : sec === 'lib' ? tt('Nenhum jogo instalado. {0} em Descobrir.', { 0: plural(data.catalog.length, tt('jogo'), tt('jogos')) }) : tt('O catálogo ainda não tem nada aqui.')}</div>}

@@ -23,6 +23,7 @@ export function ConfirmHost() {
         {req.text && <p>{req.text}</p>}
         <div className="gl-btns">
           <button className="btn" data-hf data-main onClick={() => { sfx.play('back'); req.resolve(false); }}>{req.cancel ?? tt('Cancelar')}</button>
+          {req.alt && <button className="btn" data-hf onClick={() => { sfx.play('ok'); req.resolve('alt'); }}>{req.alt}</button>}
           <button className={`btn ${req.danger ? 'danger' : 'acc'}`} data-hf onClick={() => { sfx.play('ok'); req.resolve(true); }}>{req.ok ?? tt('Confirmar')}</button>
         </div>
       </div>

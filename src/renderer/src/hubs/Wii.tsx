@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { semArquivos, tileClick } from '@shared/gameclick';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AchievementView, ConsoleId, PlayStats, RadarEvent } from '@shared/types';
 import { isSelfInstall, STATUS_LABEL } from '@shared/consoles';
@@ -115,8 +116,8 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     const L: Opt[] = [];
     if (inst?.missing) {
       if (x.catalog?.repo && !self) L.push({ k: 'reinstall', l: tt('Instalar de novo'), ic: 'dl' });
-      L.push({ k: 'relink', l: tt('Procurar a pasta'), ic: 'folder' });
-      L.push({ k: 'remove', l: tt('Tirar da biblioteca'), ic: 'stop' });
+      L.push({ k: 'relink', l: inst.uninstalled ? tt('Já instalei de novo: mostrar a pasta') : tt('Procurar a pasta'), ic: 'folder' });
+      L.push({ k: 'remove', l: tt('Remover da biblioteca'), ic: 'stop' });
     } else if (inst) {
       L.push(inst.running ? { k: 'play', l: tt('Voltar para o jogo'), ic: 'play' } : inst.exe ? { k: 'play', l: tt('Iniciar'), ic: 'play' } : { k: 'exe', l: tt('Escolher o .exe'), ic: 'folder' });
       if (inst.running) L.push({ k: 'quit', l: tt('Fechar o jogo'), ic: 'stop' });
@@ -125,7 +126,7 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       L.push({ k: 'time', l: tt('Tempo de jogo'), ic: 'clock' });
       L.push({ k: 'folder', l: tt('Abrir pasta'), ic: 'folder' });
       if (inst.exe) L.push({ k: 'exe', l: tt('Escolher o .exe'), ic: 'folder' });
-      if (!inst.running) L.push({ k: 'uninstall', l: tt('Desinstalar'), ic: 'trash' }, { k: 'remove', l: tt('Tirar da biblioteca'), ic: 'stop' });
+      if (!inst.running) L.push({ k: 'uninstall', l: tt('Desinstalar'), ic: 'trash' }, { k: 'remove', l: tt('Remover da biblioteca'), ic: 'stop' });
     } else {
       if (x.repo && !self) L.push({ k: 'install', l: tt('Instalar'), ic: 'dl' });
       L.push({ k: 'add', l: self ? tt('Já instalei: adicionar pasta') : tt('Escolher pasta'), ic: 'folder' });
@@ -167,7 +168,7 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     if (k === 'reinstall') { act.reinstall(x); return show(tt('Baixando {0} de novo… o tempo de jogo continua', { 0: x.repo })); }
     if (k === 'relink') { act.relink(x); return show(tt('Escolha onde o jogo está agora')); }
     if (k === 'uninstall') { void act.uninstall(x).then(r => { if (!r) return; up({ view: null, stack: [] }); show(uninstallMsg(r, x.title)); }); return; }
-    if (k === 'remove') { act.remove(x); up({ view: null, stack: [] }); return show(tt('{0} saiu da biblioteca · nenhum arquivo foi apagado', { 0: x.title })); }
+    if (k === 'remove') { void act.remove(x).then(ok => { if (!ok) return; up({ view: null, stack: [] }); show(tt('{0} saiu da biblioteca', { 0: x.title })); }); return; }
     if (k === 'update') { act.update(x); return show(tt('Atualizando para {0}… configurações e saves ficam', { 0: x.update?.latest?.tag })); }
     if (k === 'ach') return open({ kind: 'ach' }, { mi: Math.max(0, lib.indexOf(x)) });
     if (k === 'time') return open({ kind: 'time' }, { mi: Math.max(0, byPlay.indexOf(x) + 1) });
@@ -176,10 +177,12 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     if (k === 'gh') return act.github(x);
   };
   const openChan = (ch: Chan) => { if (ch.g) open({ kind: 'game', key: ch.g.key }); else if (ch.sp) { open({ kind: ch.sp }); } };
+  const openPage = (x: HubGame) => { sfx.play('ok'); open({ kind: 'game', key: x.key }); };
 
   const enter = () => {
     if (!view) {
       if (st.zone === 'bar') { if (st.bi === 0) { sfx.play('back'); return onBack(); } return open({ kind: 'news' }); }
+      if (curChan?.g && semArquivos(curChan.g)) return openPage(curChan.g);
       if (curChan) openChan(curChan);
       return;
     }
@@ -255,7 +258,10 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
               return (
                 <button key={ch.key} className={`wi-ch ${ch.sp ? 'special' : ''} ${on ? 'on' : ''} ${ch.g?.installed?.missing ? 'missing' : ''}`}
                   onMouseEnter={() => { if (!view && (st.zone !== 'grid' || st.ci !== j)) { sfx.play('move'); up({ zone: 'grid', ci: j }); } }}
-                  onClick={() => { up({ zone: 'grid', ci: j }); openChan(ch); }}>
+                  onClick={e => {
+                    if (ch.g) return tileClick(e, ch.g, { select: () => up({ zone: 'grid', ci: j }), page: () => openChan(ch), play: () => run('play', ch.g!) });
+                    up({ zone: 'grid', ci: j }); openChan(ch);
+                  }}>
                   {ch.g ? <><Art g={ch.g} v="wide" /><span className="shine" /><span className="lbl">{ch.g.title}</span></> : <><Ic n={ch.ic!} /><b>{ch.l}</b></>}
                   {ch.g?.installed?.running && <span className="run"><Ic n="play" /></span>}
                   {ch.n ? <span className="n">{ch.n}</span> : null}

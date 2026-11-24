@@ -71,7 +71,8 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
     ...(inst && !g.catalog ? [{ k: '__plat', l: tt('Trocar a plataforma') }] : []),
     ...(caps.length ? [{ k: '__shots', l: tt('Abrir pasta das capturas') }] : []),
   ];
-  const isMain = (o: DOpt, j: number) => j === 0 || (MAIN.has(o.k) && (o.k !== 'remove' || !!inst?.missing));
+  // Desinstalado: só a ação principal aparece; o resto (mostrar a pasta, remover, GitHub…) fica em "Mais opções".
+  const isMain = (o: DOpt, j: number) => j === 0 || (!inst?.missing && MAIN.has(o.k) && o.k !== 'remove');
   const main = opts.filter(isMain), rest = opts.filter((o, j) => !isMain(o, j));
   const shown: DOpt[] = rest.length > 1 ? [...main, { k: '__more', l: tt('Mais opções') }] : [...main, ...rest];
   const [more, setMore] = useState(false);
@@ -212,11 +213,14 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
               </span>
               {g.status && <span className={`pill ${g.status}`}>{STATUS_LABEL[g.status]}</span>}
               {g.isNew && <span className="pill new">{tt('Novo no catálogo')}</span>}
+              {inst?.uninstalled && <span className="pill">{inst.playMs ? tt('Não instalado · {0} jogadas', { 0: fmtPlay(inst.playMs) }) : tt('Não instalado')}</span>}
               {inst && !inst.missing && <span className="pill inst">{inst.running ? tt('Jogando agora') : inst.playMs ? tt('{0} jogadas', { 0: fmtPlay(inst.playMs) }) : (inst.achievements?.unlocked ? tt('Instalado') : tt('Instalado · ainda não jogado'))}</span>}
               {!achs && inst?.achievements?.total ? <span className="pill">{tt('{0}/{1} conquistas', { 0: inst.achievements.unlocked, 1: inst.achievements.total })}</span> : null}
               {g.update?.updateAvailable && !self && <span className="pill new">{tt('Versão {0} disponível', { 0: g.update.latest?.tag })}</span>}
             </div>
-            {inst?.missing && <p className="gv-warn">{tt('A pasta do jogo não foi encontrada em {0}.', { 0: inst.installDir })}</p>}
+            {inst?.missing && <p className="gv-warn">{inst.uninstalled
+              ? tt('Desinstalado. O tempo de jogo e as conquistas ficam guardados; se você instalar de novo, o Cartucho reconhece o jogo e continua de onde parou.')
+              : tt('A pasta do jogo não foi encontrada em {0}.', { 0: inst.installDir })}</p>}
             {p && <div className="gv-prog"><span>{p.error ?? p.stage}</span>{!p.error && p.pct > 0 && p.pct < 1 && <i style={{ width: `${Math.round(p.pct * 100)}%` }} />}</div>}
             {note && <p className="gv-note">{note}</p>}
             <div className="gv-acts">{shown.map((o, j) => (

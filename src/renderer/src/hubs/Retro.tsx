@@ -15,6 +15,7 @@ import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { useFeed, useHubData, type HubGame } from './data';
 import { useGameMenu } from './menu';
+import { semArquivos, tileClick } from '@shared/gameclick';
 import { otherConsoles } from '../stage/consoles';
 import { Obj, SHELLS, shellH, type Kind } from './shells';
 import { tt } from '@shared/i18n';
@@ -109,6 +110,7 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
   const enter = () => {
     if (tk === 'games') {
       if (!g) { sfx.play('ok'); return up({ tab: 1 }); }
+      if (semArquivos(g)) return openGame(g);
       return run(options(g)[0]!.k, g);
     }
     if (!row) return;
@@ -161,13 +163,13 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
   }, !(game || tk === 'disc'));
 
   const hints: Hint[] = tk === 'games'
-    ? (g ? [['ok', options(g)[0]!.l], ['x', tt('Página do jogo')], ['y', tt('Buscar')], ['rb', tt('Seção')], ['back', tt('Sair')]] : [['ok', tt('Descobrir jogos')], ['rb', tt('Seção')], ['back', tt('Sair')]])
+    ? (g ? [['ok', !semArquivos(g) ? options(g)[0]!.l : tt('Página do jogo')], ['x', tt('Página do jogo')], ['y', tt('Buscar')], ['rb', tt('Seção')], ['back', tt('Sair')]] : [['ok', tt('Descobrir jogos')], ['rb', tt('Seção')], ['back', tt('Sair')]])
     : tk === 'news' && rows.length ? [['ok', tt('Ver jogo')], ['x', tt('Dispensar')], ['y', tt('Limpar tudo')], ['rb', tt('Seção')], ['back', tt('Voltar')]]
     : [['ok', tk === 'cfg' ? 'OK' : tk === 'ach' ? (st.achOpen ? tt('Fechar') : tt('Ver lista')) : tt('Abrir')], ['ud', tt('Mover')], ['rb', tt('Seção')], ['back', tt('Voltar')]];
   const H = <div className="rh-ft">{hints.map(([a, t]) => <span key={a + t}><Glyph a={a} />{t}</span>)}</div>;
   const off = Math.max(0, Math.min(st.li - 3, rows.length - VISIBLE));
   const line = (x: HubGame) => id === 'other' ? `${sourceOf(x)} · ${line0(x)}` : line0(x);
-  const line0 = (x: HubGame) => x.installed?.missing ? tt('Pasta não encontrada') : x.installed?.running ? tt('Jogando agora') : x.installed?.playMs ? tt('{0} jogadas', { 0: fmtPlay(x.installed.playMs) }) : tt('Ainda não jogado');
+  const line0 = (x: HubGame) => x.installed?.missing ? (x.installed?.uninstalled ? tt('Não instalado') : tt('Pasta não encontrada')) : x.installed?.running ? tt('Jogando agora') : x.installed?.playMs ? tt('{0} jogadas', { 0: fmtPlay(x.installed.playMs) }) : tt('Ainda não jogado');
 
   const header = (
     <header className="rh-hd">
@@ -187,7 +189,7 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
 
   const item = (x: HubGame, i: number) => (
     <button key={x.key} className={`rg-it ${i === st.idx ? 'on' : ''} ${x.installed?.missing ? 'miss' : ''} ${x.installed?.running ? 'run' : ''}`} aria-label={x.title}
-      onClick={() => { if (i === st.idx) enter(); else { sfx.play('move'); up({ idx: i }); } }}>
+      onClick={e => tileClick(e, x, { select: () => { if (i !== st.idx) { sfx.play('move'); up({ idx: i }); } }, page: () => openGame(x), play: () => run('play', x) })}>
       <Obj kind={kind}><GameArt title={x.title} console={x.console} platformName={x.platformName} fallback={x.coverUrl} variant="cover" /></Obj>
       <span className="rg-t">{x.title}</span>
       <span className="rg-s">{line(x)}</span>

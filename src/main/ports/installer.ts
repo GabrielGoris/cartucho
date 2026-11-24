@@ -54,7 +54,9 @@ export class Ports {
       send({ stage: tt('Copiando para a pasta de jogos…'), pct: 1 });
 
       const base = this.portsDir(); mkdirSync(base, { recursive: true });
-      const used = (f: string) => !!this.db.prepare('SELECT 1 FROM installed_game WHERE lower(install_dir) = lower(?) AND id != ?').get(resolve(f), opts.replace ?? '');
+      // A pasta de um jogo desinstalado do mesmo catálogo é reaproveitada: os saves que ficaram nela continuam valendo.
+      const used = (f: string) => !!this.db.prepare(`SELECT 1 FROM installed_game WHERE lower(install_dir) = lower(?) AND id != ?
+        AND NOT ((uninstalled_at IS NOT NULL OR hidden_at IS NOT NULL) AND catalog_id IS NOT NULL AND catalog_id = ?)`).get(resolve(f), opts.replace ?? '', opts.catalogId ?? '');
       const name = repo.split('/')[1]!.replace(/[<>:"|?*]/g, '');
       let folder = join(base, name);
       for (let n = 2; used(folder); n++) folder = join(base, `${name} ${n}`);
@@ -158,7 +160,7 @@ export class Ports {
     let r;
     try { r = await removeInstalled(g.installDir, manifest); }
     catch (e) { throw new Error(/EBUSY|EPERM/.test((e as NodeJS.ErrnoException).code || '') ? tt('Um arquivo está em uso. Feche o jogo e tente de novo.') : (e as Error).message); }
-    this.games.removeGame(gameId);
+    this.games.markUninstalled(gameId);
     this.db.prepare('DELETE FROM kv WHERE key = ?').run(`upd.${gameId}`);
     return r;
   }
