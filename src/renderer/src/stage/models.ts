@@ -17,7 +17,14 @@ const loader = new GLTFLoader();
 const ktx2 = new KTX2Loader();
 let ktxReady!: () => void;
 const ktxReadyP = new Promise<void>(r => { ktxReady = r; });
-export function initStageLoader(gl: THREE.WebGLRenderer) { ktx2.detectSupport(gl); loader.setKTX2Loader(ktx2); ktxReady(); }
+/** Placa sem BC7 (máquina virtual, driver antigo): as texturas sairiam pretas; sem elas o console fica na cor base. */
+let semBc7 = false;
+export function initStageLoader(gl: THREE.WebGLRenderer) {
+  ktx2.detectSupport(gl); loader.setKTX2Loader(ktx2);
+  semBc7 = !gl.extensions.has('EXT_texture_compression_bptc');
+  if (semBc7) console.warn('[palco] a placa de vídeo não aceita texturas BC7: consoles sem textura');
+  ktxReady();
+}
 const cache = new Map<string, Promise<StageModel>>();
 const waiting = new Map<string, { resolve: (m: StageModel) => void; reject: (e: unknown) => void; tries: number }>();
 let active = 0;
@@ -59,6 +66,15 @@ async function loadNow(c: StageConsole): Promise<StageModel> {
   await ktxReadyP;
   const res = await loader.loadAsync(`models/${file}`);
   const o = res.scene; o.updateMatrixWorld(true);
+  if (semBc7) o.traverse(x => {
+    const m = x as THREE.Mesh; if (!m.isMesh) return;
+    for (const mt of (Array.isArray(m.material) ? m.material : [m.material]) as unknown as Record<string, unknown>[])
+      for (const [k, v] of Object.entries(mt)) if ((v as THREE.CompressedTexture)?.isCompressedTexture) {
+        (v as THREE.Texture).dispose(); mt[k] = null; (mt as unknown as THREE.Material).needsUpdate = true;
+        if (k === 'map') (mt as unknown as THREE.MeshStandardMaterial).color?.set('#6f6f7c');
+        if (k === 'emissiveMap') (mt as unknown as THREE.MeshStandardMaterial).emissive?.set('#000000');
+      }
+  });
   const size = new THREE.Vector3();
 
   // chão/sombra que vem junto do arquivo
