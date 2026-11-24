@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: notas
+  group: dados
   cancel-in-progress: false
 
 jobs:

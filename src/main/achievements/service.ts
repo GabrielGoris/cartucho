@@ -10,6 +10,8 @@ import { type DB, kvGet, kvSet, tx } from '../db';
 import { absUrl } from '../catalog';
 import { type Adapter, type AdapterContext, adapterById, adapterForDir } from './adapters';
 import type { Unlock } from './saves';
+import { humanize } from './discover';
+import { atualizarIndice, entradaDo, indiceAdapter, usarIndice, validar } from './indice';
 import { tt } from '@shared/i18n';
 import { steamManifest, windowsAppData } from '../steam';
 import { readPatch } from '../wine/config';
@@ -18,15 +20,17 @@ const ADAPTER_CONSOLE: Record<string, ConsoleId> = { 'unleashed-recomp': 'x360',
 
 type GameRow = {
   id: string; catalog_id: string | null; title: string; console: string; install_dir: string; adapter: string | null; added_at: number; cover_url: string | null; platform_name: string | null;
-  exe: string | null; version: string | null; source_repo: string | null; managed: number; play_ms: number; last_played: number | null;
+  exe: string | null; version: string | null; source_repo: string | null; managed: number; play_ms: number; last_played: number | null; catalog_repo?: string | null;
 };
 export interface AddExtra { catalogId?: string | null; title?: string; console?: string; exe?: string | null; sourceRepo?: string | null; release?: InstalledRelease | null; managed?: boolean; manifest?: Record<string, number> | null }
-const GAME_SQL = `SELECT g.*, c.cover_url, c.platform_name,
+const GAME_SQL = `SELECT g.*, c.cover_url, c.platform_name, c.repo catalog_repo,
   (SELECT COALESCE(SUM(p.ended_at - p.started_at), 0) FROM play_session p WHERE p.game_id = g.id AND p.ended_at IS NOT NULL) play_ms,
   (SELECT MAX(p.started_at) FROM play_session p WHERE p.game_id = g.id) last_played
   FROM installed_game g LEFT JOIN catalog_game c ON c.id = g.catalog_id`;
 const imgType = (b: Uint8Array) => (b[0] === 0xff && b[1] === 0xd8 ? 'image/jpeg' : b[0] === 0x47 && b[1] === 0x49 ? 'image/gif' : b[0] === 0x52 && b[1] === 0x49 ? 'image/webp' : 'image/png');
 export const FEED_DAYS = 14;
+/** Conquistas que só se conhece pelo desbloqueio (sem a lista do jogo) ficam com sort a partir daqui. */
+const AUTO_SORT = 100_000;
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -57,7 +61,7 @@ export class AchievementService {
   }
   private ctx(r: GameRow): AdapterContext {
     const appData = process.platform === 'linux' ? windowsAppData(r.install_dir, r.exe, r.id, readPatch(this.db, r.id).prefixPath) ?? this.appData : this.appData;
-    return { installDir: r.install_dir, appData, title: r.title };
+    return { installDir: r.install_dir, appData, title: r.title, repo: r.source_repo ?? r.catalog_repo ?? null };
   }
 
   listGames(): InstalledGame[] {
@@ -119,12 +123,14 @@ export class AchievementService {
     if (dup) return this.toGame(this.row(dup.id));
     const lost = extra.catalogId ? (this.db.prepare('SELECT id, install_dir FROM installed_game WHERE catalog_id = ?').all(extra.catalogId) as { id: string; install_dir: string }[]).find(x => !existsSync(x.install_dir)) : undefined;
     if (lost) return this.relocate(lost.id, dir, { exe: extra.exe, release: extra.release, manifest: extra.manifest, managed: extra.managed });
-    const adapter = adapterForDir(dir);
+    let adapter = adapterForDir(dir);
     const cat = extra.catalogId
       ? this.db.prepare('SELECT id, title, console, repo FROM catalog_game WHERE id = ?').get(extra.catalogId) as { id: string; title: string; console: string; repo: string | null } | undefined
       : adapter ? this.matchCatalog(adapter, dir) : null;
     let exe = extra.exe ?? null;
     if (!exe) try { exe = findGameExe(dir) ?? guessProgram(dir, extra.sourceRepo ?? cat?.repo ?? null); } catch { exe = null; }
+    // O índice de conquistas manda quando o projeto está nele (e nenhum leitor específico reconheceu a pasta).
+    if ((!adapter || adapter.id === 'recomp-local') && entradaDo(extra.sourceRepo ?? cat?.repo)) adapter = indiceAdapter;
     const id = randomUUID();
     this.db.prepare(`INSERT INTO installed_game (id, catalog_id, title, console, install_dir, adapter, added_at, exe, source_repo, release_json, version, managed, manifest_json)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
@@ -160,6 +166,7 @@ export class AchievementService {
         defs.list.forEach((a, i) => ins.run(id, a.id, a.name, a.description, a.points, defs.images?.get(a.id) ?? null, i));
       });
       kvSet(this.db, `ach.origin.${id}`, defs.origin);
+      await this.syncRarity(id);
       this.db.prepare('DELETE FROM kv WHERE key = ?').run(`ach.defError.${id}`);
     } catch (e) {
       kvSet(this.db, `ach.defError.${id}`, tt('Não consegui ler a lista de conquistas: {0}', { 0: msg(e) }));
@@ -201,7 +208,7 @@ export class AchievementService {
       for (const u of unlocks!) {
         if (!have.has(u.id)) { ins.run(id, u.id, u.at, now); fresh.push(u.id); }
         else if (have.get(u.id) == null && u.at != null) fix.run(u.at, id, u.id);
-        if (u.name && !known.has(u.id)) { addDef.run(id, u.id, u.name, '', 100_000 + known.size); known.add(u.id); }
+        if (u.name && !known.has(u.id)) { addDef.run(id, u.id, humanize(u.name, n => tt('Conquista {0}', { 0: n })), '', AUTO_SORT + known.size); known.add(u.id); }
       }
     });
 
@@ -245,12 +252,30 @@ export class AchievementService {
   }
   /** Jogos que já estavam na biblioteca ganham leitor quando um novo serve para eles. */
   private detectAdapters() {
-    for (const r of this.db.prepare('SELECT id, install_dir FROM installed_game WHERE adapter IS NULL').all() as { id: string; install_dir: string }[]) {
+    const rows = this.db.prepare(`SELECT g.id, g.install_dir, g.adapter, COALESCE(g.source_repo, c.repo) repo FROM installed_game g LEFT JOIN catalog_game c ON c.id = g.catalog_id
+      WHERE g.adapter IS NULL OR g.adapter IN ('recomp-local', 'indice')`).all() as { id: string; install_dir: string; adapter: string | null; repo: string | null }[];
+    for (const r of rows) {
       if (!existsSync(r.install_dir)) continue;
-      let a: Adapter | null = null;
-      try { a = adapterForDir(r.install_dir); } catch { }
-      if (a) this.db.prepare('UPDATE installed_game SET adapter = ? WHERE id = ?').run(a.id, r.id);
+      let a: Adapter | null = entradaDo(r.repo) ? indiceAdapter : null;
+      if (!a && r.adapter !== 'recomp-local') try { a = adapterForDir(r.install_dir); } catch { }
+      if (!a && r.adapter === 'indice') a = adapterForDir(r.install_dir);
+      if ((a?.id ?? null) !== r.adapter && (a || r.adapter === 'indice')) { this.unwatch(r.id); this.db.prepare('UPDATE installed_game SET adapter = ? WHERE id = ?').run(a?.id ?? null, r.id); }
     }
+  }
+  /** Índice de conquistas: a cópia guardada na hora, a mais nova da internet quando chegar (em até 8 s). */
+  private async loadIndice() {
+    try { const v = validar(JSON.parse(kvGet(this.db, 'ach.indice') ?? 'null')); if (v?.jogos.length) usarIndice(v); } catch { }
+    const novo = await Promise.race([atualizarIndice(), sleep(8000).then(() => null)]).catch(() => null);
+    if (novo?.jogos.length) kvSet(this.db, 'ach.indice', JSON.stringify(novo));
+  }
+  /** Busca a porcentagem de jogadores de cada conquista (quando a origem publica) e guarda. */
+  async syncRarity(id: string) {
+    const r = this.row(id), adapter = adapterById(r.adapter);
+    if (!adapter?.rarity) return;
+    try {
+      const m = await adapter.rarity(this.ctx(r));
+      if (m?.size) { kvSet(this.db, `ach.rarity.${id}`, JSON.stringify(Object.fromEntries([...m].map(([k, v]) => [k, Math.round(v * 10) / 10])))); kvSet(this.db, `ach.rarityAt.${id}`, String(Date.now())); }
+    } catch { }
   }
   /** Relê lista e desbloqueios dos jogos com esses leitores (depois de pôr a chave da Steam ou entrar na GOG). */
   async resyncKind(kinds: string[]) {
@@ -279,10 +304,13 @@ export class AchievementService {
       if (!exe) try { exe = findGameExe(r.install_dir) ?? guessProgram(r.install_dir, r.repo); } catch {  }
       this.db.prepare('UPDATE installed_game SET exe = ?, source_repo = COALESCE(source_repo, ?) WHERE id = ?').run(exe, r.repo, r.id);
     }
+    await this.loadIndice();
     this.detectAdapters();
     for (const g of this.listGames()) {
       if (!g.adapter || g.missing) continue;
-      if (!this.db.prepare('SELECT 1 FROM achievement_def WHERE game_id = ? LIMIT 1').get(g.id)) await this.syncDefinitions(g.id);
+      // Sem a lista do jogo (nenhuma conquista vinda dela, só as conhecidas pelo desbloqueio): tenta buscar de novo.
+      if (adapterById(g.adapter)?.refreshDefs || !this.db.prepare('SELECT 1 FROM achievement_def WHERE game_id = ? AND sort < ? LIMIT 1').get(g.id, AUTO_SORT)) await this.syncDefinitions(g.id);
+      if (Date.now() - Number(kvGet(this.db, `ach.rarityAt.${g.id}`) ?? 0) > 3 * 86400_000) await this.syncRarity(g.id);
       const first = !this.db.prepare('SELECT 1 FROM achievement_unlock WHERE game_id = ? LIMIT 1').get(g.id);
       await this.syncUnlocks(g.id, { silent: first }).catch(() => {});
       this.watch(g.id);
@@ -317,16 +345,18 @@ export class AchievementService {
 
   forGame(id: string): GameAchievements {
     const r = this.row(id), adapter = adapterById(r.adapter);
-    const defs = this.db.prepare('SELECT ach_id, name, description, points, image FROM achievement_def WHERE game_id = ? ORDER BY sort').all(id) as
-      { ach_id: number; name: string; description: string; points: number | null; image: Uint8Array | null }[];
+    const defs = this.db.prepare('SELECT ach_id, name, description, points, image, sort FROM achievement_def WHERE game_id = ? ORDER BY sort').all(id) as
+      { ach_id: number; name: string; description: string; points: number | null; image: Uint8Array | null; sort: number }[];
     const unlocks = new Map((this.db.prepare('SELECT ach_id, COALESCE(unlocked_at, seen_at) at FROM achievement_unlock WHERE game_id = ?').all(id) as { ach_id: number; at: number }[]).map(u => [u.ach_id, u.at]));
+    let rare: Record<string, number> = {};
+    try { rare = JSON.parse(kvGet(this.db, `ach.rarity.${id}`) ?? '{}') as Record<string, number>; } catch { }
     const list = defs.map(d => ({
-      id: d.ach_id, name: d.name, description: d.description, points: d.points, unlockedAt: unlocks.get(d.ach_id) ?? null,
+      id: d.ach_id, name: d.name, description: d.description, points: d.points, unlockedAt: unlocks.get(d.ach_id) ?? null, rarity: rare[d.ach_id] ?? null,
       icon: d.image ? `data:${imgType(d.image)};base64,${Buffer.from(d.image).toString('base64')}` : null,
     }));
     const known = new Set(defs.map(d => d.ach_id));
-    for (const [achId, at] of unlocks) if (!known.has(achId)) list.push({ id: achId, name: tt('Conquista #{0}', { 0: achId }), description: '', points: null, unlockedAt: at, icon: null });
+    for (const [achId, at] of unlocks) if (!known.has(achId)) list.push({ id: achId, name: tt('Conquista #{0}', { 0: achId }), description: '', points: null, unlockedAt: at, icon: null, rarity: null });
     const errors = [kvGet(this.db, `ach.defError.${id}`), kvGet(this.db, `ach.unlockError.${id}`)].filter((e): e is string => !!e);
-    return { game: this.toGame(r), origin: kvGet(this.db, `ach.origin.${id}`), unlockFile: adapter ? adapter.unlockFile(this.ctx(r)) || null : null, errors, list };
+    return { complete: defs.some(d => d.sort < AUTO_SORT), game: this.toGame(r), origin: kvGet(this.db, `ach.origin.${id}`), unlockFile: adapter ? adapter.unlockFile(this.ctx(r)) || null : null, errors, list };
   }
 }

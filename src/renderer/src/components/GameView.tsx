@@ -187,7 +187,7 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
             {logo && art.logo ? <img className="gv-logo" src={art.logo} alt={g.title} /> : <h1>{g.title}</h1>}
             {(meta || achs) && <div className="gv-metarow">{meta && <p className="gv-meta">{meta}</p>}
               {achs && <button className={`gv-achpill ${zone === 'meta' ? 'on' : ''}`} onClick={() => goSide('meta')}>
-                <span className="gv-achpill-ic">★</span>{tt('{0}/{1} conquistas', { 0: achs.list.filter(a => a.unlockedAt != null).length, 1: achs.list.length })}</button>}</div>}
+                <span className="gv-achpill-ic">★</span>{achs.complete ? tt('{0}/{1} conquistas', { 0: achs.list.filter(a => a.unlockedAt != null).length, 1: achs.list.length }) : tt('{0} conquistas', { 0: achs.list.filter(a => a.unlockedAt != null).length })}</button>}</div>}
             <div className="gv-pills">
               {score && (
                 <span className={`pill score ${tone} ${zone === 'score' && topNow === 'score' ? 'on' : ''}`} onClick={openScore}>
@@ -309,15 +309,17 @@ function GameAchievements({ d }: { d: GameAchievementsData }) {
   const row = (a: GameAchievementsData['list'][number]) => (
     <div key={a.id} className={`gv-ach ${a.unlockedAt == null ? 'off' : ''}`}>
       <span className="gv-achic">{a.icon ? <img src={a.icon} alt="" loading="lazy" /> : <i>★</i>}</span>
-      <span className="gv-acht"><b>{a.name}</b>{a.description && <span>{a.description}</span>}{a.unlockedAt != null && <small>{fmtDay(a.unlockedAt)}{a.points ? ` · ${a.points}` : ''}</small>}</span>
+      <span className="gv-acht"><b>{a.name}</b>{a.description && <span>{a.description}</span>}{(a.unlockedAt != null || a.rarity != null) && <small>{[a.unlockedAt != null ? fmtDay(a.unlockedAt) : null, a.points ? String(a.points) : null].filter(Boolean).join(' · ')}{a.rarity != null && <em className={a.rarity < 10 ? 'rare' : ''}>{a.unlockedAt != null ? ' · ' : ''}{tt('{0}% dos jogadores', { 0: fmtPct(a.rarity) })}</em>}</small>}</span>
     </div>
   );
   return (
     <>
       <div className="gv-sidehd">
         <h3>{tt('Conquistas')}</h3>
-        <div className="gv-achsum"><b>{got.length}</b><span>{tt('de {0}', { 0: d.list.length })}</span><em>{pct}%</em></div>
-        {d.list.length > 0 && <div className="gv-achbar"><i style={{ width: `${pct}%` }} /></div>}
+        {d.complete ? <>
+          <div className="gv-achsum"><b>{got.length}</b><span>{tt('de {0}', { 0: d.list.length })}</span><em>{pct}%</em></div>
+          {d.list.length > 0 && <div className="gv-achbar"><i style={{ width: `${pct}%` }} /></div>}
+        </> : <div className="gv-achsum"><b>{got.length}</b><span>{got.length === 1 ? tt('desbloqueada') : tt('desbloqueadas')}</span></div>}
       </div>
       {d.errors.map(e => <p key={e} className="gv-sidenote">{e}</p>)}
       {got.length > 0 && <><h4>{tt('Desbloqueadas')}</h4>{got.map(row)}</>}
@@ -326,4 +328,5 @@ function GameAchievements({ d }: { d: GameAchievementsData }) {
     </>
   );
 }
+const fmtPct = (n: number) => n.toLocaleString(getLang() === 'en' ? 'en-US' : 'pt-BR', { maximumFractionDigits: n < 1 ? 1 : n < 10 ? 1 : 0 });
 const fmtDay = (ms: number) => new Date(ms).toLocaleDateString(getLang() === 'en' ? 'en-US' : 'pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });

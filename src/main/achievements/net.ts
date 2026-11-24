@@ -26,6 +26,14 @@ export async function fetchImages(urls: Map<number, string>, max = 6): Promise<M
   return out;
 }
 
+export async function getText(url: string, headers?: Record<string, string>): Promise<string> {
+  const f = achNet.fetch;
+  if (!f) throw new Error('sem acesso à internet');
+  const r = await f(url, { headers: headers ?? {}, signal: AbortSignal.timeout(20_000) });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return await r.text();
+}
+
 export async function getJson<T>(url: string, headers?: Record<string, string>): Promise<T> {
   const f = achNet.fetch;
   if (!f) throw new Error('sem acesso à internet');

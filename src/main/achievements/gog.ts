@@ -20,7 +20,7 @@ export function gogProductId(dir: string): string | null {
 }
 function subdirs(dir: string) { try { return readdirSync(dir, { withFileTypes: true }).filter(e => e.isDirectory()).slice(0, 40).map(e => join(dir, e.name)); } catch { return []; } }
 
-interface GogItem { achievement_key: string; name: string; description: string; image_url_unlocked?: string; date_unlocked: string | null; visible?: boolean }
+interface GogItem { achievement_key: string; name: string; description: string; image_url_unlocked?: string; date_unlocked: string | null; visible?: boolean; rarity?: number }
 let cache: { pid: string; at: number; items: GogItem[] } | null = null;
 async function items(ctx: AdapterContext): Promise<GogItem[]> {
   const pid = gogProductId(ctx.installDir);
@@ -44,6 +44,7 @@ export const gog: Adapter = {
     const images = await fetchImages(new Map(list.flatMap(a => (a.image_url_unlocked ? [[achId(a.achievement_key), a.image_url_unlocked] as [number, string]] : []))));
     return { list: list.map(a => ({ id: achId(a.achievement_key), name: a.name, description: a.description ?? '', points: null })), images, origin: tt('conta da GOG') };
   },
+  async rarity(ctx) { const l = (await items(ctx)).filter(a => typeof a.rarity === 'number'); return l.length ? new Map(l.map(a => [achId(a.achievement_key), a.rarity!])) : null; },
   unlockFile: () => '',
   readUnlocks: () => [],
   async remote(ctx): Promise<Unlock[]> {

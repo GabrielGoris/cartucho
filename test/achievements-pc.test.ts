@@ -79,3 +79,81 @@ describe('conquistas de PC', () => {
     expect(adapterForDir(dir)?.id).toBe('gog');
   });
 });
+
+import { matchByPercent, parseCommunityPage } from '../src/main/achievements/steam';
+
+describe('lista pública da Steam, sem chave', () => {
+  const html = `<div class="achieveRow "><div class="achieveImgHolder"><img src="https://cdn/a.jpg" width="64"></div>
+    <div class="achieveTxtHolder"><div class="achievePercent">52.3%</div><div class="achieveTxt"><h3>Primeiro &amp; único</h3><h5>Comece o jogo</h5></div></div></div>
+    <div class="achieveRow "><div class="achieveImgHolder"><img src="https://cdn/b.jpg"></div>
+    <div class="achieveTxtHolder"><div class="achievePercent">4.1%</div><div class="achieveTxt"><h3>Zerou</h3><h5></h5></div></div></div>`;
+  it('lê nome, descrição, ícone e porcentagem da página', () => {
+    expect(parseCommunityPage(html)).toEqual([
+      { name: 'Primeiro & único', desc: 'Comece o jogo', icon: 'https://cdn/a.jpg', pct: 52.3 },
+      { name: 'Zerou', desc: '', icon: 'https://cdn/b.jpg', pct: 4.1 },
+    ]);
+  });
+  it('casa os nomes de API pela porcentagem e desiste se não bater', () => {
+    const rows = parseCommunityPage(html);
+    expect(matchByPercent([{ name: 'ACH_END', percent: 4.08 }, { name: 'ACH_START', percent: 52.31 }], rows)?.map(x => [x.api, x.name]))
+      .toEqual([['ACH_START', 'Primeiro & único'], ['ACH_END', 'Zerou']]);
+    expect(matchByPercent([{ name: 'A', percent: 30 }, { name: 'B', percent: 4 }], rows)).toBeNull();
+    expect(matchByPercent([{ name: 'A', percent: 52 }], rows)).toBeNull();
+  });
+});
+
+import { parseTenoke } from '../src/main/achievements/steam';
+
+describe('crack da TENOKE', () => {
+  const ini = '[TENOKE]\r\nid = 2062430 # BALL x PIT\r\n\r\n[ACHIEVEMENTS.complete_graveyards]\r\nicon = "57c5.jpg"\r\nhidden = "0"\r\n\r\n'
+    + '[ACHIEVEMENTS.complete_graveyards.name]\r\nenglish = "BONExYARD"\r\nbrazilian = "PÁTIOxÓSSEO"\r\n\r\n[ACHIEVEMENTS.complete_graveyards.desc]\r\nenglish = "Complete the BONExYARD"\r\nbrazilian = "Conclua o PÁTIOxÓSSEO"\r\n';
+  it('lista do tenoke.ini, em português quando tem', () => {
+    expect(parseTenoke(ini)).toEqual([{ api: 'complete_graveyards', name: 'PÁTIOxÓSSEO', desc: 'Conclua o PÁTIOxÓSSEO', icon: '57c5.jpg' }]);
+  });
+  it('desbloqueios do SteamData/user_stats.ini', () => {
+    const u = '[ACHIEVEMENTS]\r\n"first_evo" = {unlocked = true, time = 1761262906}\r\n"x" = {unlocked = false, time = 0}\r\n';
+    expect(readEmuUnlocks(new TextEncoder().encode(u))).toEqual([{ id: achId('first_evo'), at: 1761262906_000, name: 'first_evo' }]);
+  });
+  it('acha o número do jogo no tenoke.ini, 3 pastas abaixo', () => {
+    const dir = tmp();
+    mkdirSync(join(dir, 'Balls_Data', 'Plugins', 'x86_64'), { recursive: true });
+    writeFileSync(join(dir, 'Balls_Data', 'Plugins', 'x86_64', 'tenoke.ini'), ini);
+    expect(scanCrack(dir)).toMatchObject({ appid: '2062430', tenoke: [join(dir, 'Balls_Data', 'Plugins', 'x86_64', 'tenoke.ini')] });
+    expect(crackFiles({ installDir: dir, appData: dir }, scanCrack(dir)!)).toContain(join(dir, 'SteamData', 'user_stats.ini'));
+  });
+});
+
+import { readFileSync as readFix } from 'node:fs';
+import { parseCommunitySsr } from '../src/main/achievements/steam';
+
+describe('página nova de conquistas da Steam', () => {
+  it('lê nome de API, nome em português, descrição e ícone do JSON embutido', () => {
+    const list = parseCommunitySsr(readFix(join(__dirname, 'fixtures-steam-ssr.html'), 'utf8'));
+    expect(list.map(a => [a.api, a.name])).toEqual([['1', 'O sangue fala'], ['2', 'Inflamável ou não?']]);
+    expect(list[0]!.icon).toMatch(/\.jpg$/);
+    expect(parseCommunitySsr('<html></html>')).toEqual([]);
+  });
+});
+
+import { parseRecompiaHtml, readEarnedTsv, recompiaDir } from '../src/main/achievements/recompia';
+
+describe('Recompia (Pokopia): conquistas da comunidade', () => {
+  it('lê o earned.tsv do mod', () => {
+    expect(readEarnedTsv(new TextEncoder().encode('fresh_start\t1761262906\r\nlixo\nfirst_habitat\t1761263000\n')))
+      .toEqual([{ id: achId('fresh_start'), at: 1761262906_000, name: 'fresh_start' }, { id: achId('first_habitat'), at: 1761263000_000, name: 'first_habitat' }]);
+  });
+  it('acha config/community_achievements e liga o leitor', () => {
+    const dir = tmp();
+    mkdirSync(join(dir, 'game', 'config', 'community_achievements'), { recursive: true });
+    expect(recompiaDir(dir)).toBe(join(dir, 'game', 'config', 'community_achievements'));
+    expect(adapterForDir(dir)?.id).toBe('recompia');
+  });
+});
+
+describe('Recompia: página que o mod gera', () => {
+  it('lê id, nome e descrição de todas, sem o "Earned"', () => {
+    const html = '<ul><li><img src="img/relic_1.png" width="56" height="56" alt=""><div><b>Relic Seeker</b><small>Find a relic. Earned 13 Nov 2026.</small></div></li>'
+      + '<li class="no"><img src="img/dex_25.png" width="56" height="56" alt=""><div><b>Pok&eacute;dex &amp; Co</b><small>Register 25.</small><progress max="25" value="3"></progress> 3 / 25</div></li></ul>';
+    expect(parseRecompiaHtml(html)).toEqual([{ id: 'relic_1', name: 'Relic Seeker', desc: 'Find a relic.' }, { id: 'dex_25', name: 'Pok&eacute;dex & Co', desc: 'Register 25.' }]);
+  });
+});

@@ -1,8 +1,9 @@
-import { existsSync, readdirSync, statSync, type Dirent } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, type Dirent } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 import type { Adapter, AdapterContext } from './adapters';
 import { readHedgeAch, type Unlock } from './saves';
 import { achId } from './steam';
+import { discoverList } from './discover';
 import { tt } from '@shared/i18n';
 
 /**
@@ -10,19 +11,27 @@ import { tt } from '@shared/i18n';
  * Procura os nomes de arquivo mais usados na pasta do jogo e na pasta do usuário que o recomp cria
  * em AppData, e reconhece o formato pelo conteúdo: ACH-DATA (hedge-dev), linhas de texto, JSON, JSON por linha e INI.
  */
-const NAMES = new Set(['ach-data', 'trophies.txt', 'trophies.jsonl', 'trophies.json', 'achievements.txt', 'achievements.json', 'achievements.ini', 'port_achievements.txt']);
+const NAMES = new Set(['ach-data', 'trophies.txt', 'trophies.jsonl', 'trophies.json', 'achievements.txt', 'achievements.json', 'achievements.ini', 'port_achievements.txt', 'earned.tsv']);
+/** Além dos nomes conhecidos, qualquer arquivo de texto com "achiev"/"troph"/"earned" no nome (o conteúdo diz se é de desbloqueios). */
+const LIKELY = /^(?:.*(?:achiev|troph|cheev)[^.]*|earned|unlocked)\.(?:txt|jsonl|json|ini|tsv)$/i;
+/** Arquivos de nomes/textos/listas são definições, nunca desbloqueios. */
+const DEFS_NAME = /name|text|list|catalog|def|desc|schema|lang|conf|key|iv\b/i;
 const SKIP = /^(steam_settings|node_modules|\.git|shaders?|cache|assets?|data|content|media|music|movies?|video|sound|audio|textures?|game|patched|decrypted|dlc)$/i;
 
-function scan(root: string, maxDepth: number, out: string[]) {
+const SKIP_FUNDO = /^(\.git|node_modules|shaders?|cache|movies?|videos?|textures?)$/i;
+function scan(root: string, maxDepth: number, out: string[], extra?: Set<string>) {
+  // Com nomes vindos do índice, desce mais e entra em game/data/content (onde alguns kits guardam os perfis).
+  if (extra) maxDepth = 5;
+  const skip = extra ? SKIP_FUNDO : SKIP;
   const q: [string, number][] = [[root, 0]];
   let seen = 0;
-  while (q.length && seen < 300) {
+  while (q.length && seen < (extra ? 800 : 300)) {
     const [d, depth] = q.shift()!; seen++;
     let ents: Dirent[] = [];
     try { ents = readdirSync(d, { withFileTypes: true }); } catch { continue; }
     for (const e of ents) {
-      if (e.isFile() && NAMES.has(e.name.toLowerCase())) out.push(join(d, e.name));
-      else if (e.isDirectory() && depth < maxDepth && !SKIP.test(e.name)) q.push([join(d, e.name), depth + 1]);
+      if (e.isFile() && (extra?.has(e.name.toLowerCase()) || NAMES.has(e.name.toLowerCase()) || (LIKELY.test(e.name) && !DEFS_NAME.test(e.name)))) out.push(join(d, e.name));
+      else if (e.isDirectory() && depth < maxDepth && !skip.test(e.name)) q.push([join(d, e.name), depth + 1]);
     }
   }
 }
@@ -38,25 +47,32 @@ function userRoots(ctx: AdapterContext) {
   return [...out];
 }
 const cache = new Map<string, { at: number; files: string[] }>();
-export function recompFiles(ctx: AdapterContext): string[] {
-  const c = cache.get(ctx.installDir);
+export function recompFiles(ctx: AdapterContext, extra?: Set<string>): string[] {
+  const ck = ctx.installDir + (extra ? `|${[...extra].sort().join(',')}` : '');
+  const c = cache.get(ck);
   if (c && Date.now() - c.at < 60_000) return c.files;
-  const files: string[] = [];
-  scan(ctx.installDir, 3, files);
-  for (const r of userRoots(ctx)) scan(r, 3, files);
-  cache.set(ctx.installDir, { at: Date.now(), files });
+  const found: string[] = [];
+  scan(ctx.installDir, 3, found, extra);
+  for (const r of userRoots(ctx)) scan(r, 3, found, extra);
+  // Fica com os de nome conhecido e com os outros que, pelo conteúdo, guardam desbloqueios (não uma lista de definições).
+  const files = found.filter(f => NAMES.has(f.split(/[\\/]/).pop()!.toLowerCase()) || (() => { try { const b = readFileSync(f); return b.length < 2_000_000 && readRecompFile(new Uint8Array(b), f).length > 0; } catch { return false; } })());
+  cache.set(ck, { at: Date.now(), files });
   return files;
 }
+export const recompRoots = (ctx: AdapterContext) => [ctx.installDir, ...userRoots(ctx)];
 
 const toMs = (v: unknown) => {
   const n = typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : typeof v === 'number' ? v : typeof v === 'string' ? Date.parse(v) : NaN;
   if (!Number.isFinite(n) || n <= 0) return null;
   return n > 1e12 ? n : n * 1000;
 };
-const idOf = (v: unknown) => (typeof v === 'number' ? v : typeof v === 'string' && /^\d{1,6}$/.test(v) ? Number(v) : typeof v === 'string' && v ? achId(v) : null);
+export const idOf = (v: unknown) => (typeof v === 'number' ? v : typeof v === 'string' && /^\d{1,6}$/.test(v) ? Number(v) : typeof v === 'string' && v ? achId(v) : null);
 const nameOf = (v: unknown) => (typeof v === 'string' && v && !/^\d+$/.test(v) ? v : undefined);
 function fromObj(o: Record<string, unknown>, key?: string): Unlock | null {
   if (o.unlocked === false || o.earned === false || o.achieved === false || o.achieved === 0) return null;
+  // Um objeto com nome/descrição e sem nenhuma marca de desbloqueio é a definição da conquista, não um desbloqueio.
+  const marked = [o.unlocked, o.earned, o.achieved, o.done, o.completed].some(v => v === true || v === 1 || v === '1') || [o.time, o.unix, o.timestamp, o.unlocked_at, o.unlockedAt, o.earned_time, o.date, o.at].some(v => v != null && v !== 0 && v !== '');
+  if (!marked && ['description', 'desc', 'displayName', 'display_name', 'title', 'icon'].some(k => k in o)) return null;
   const id = idOf(o.id ?? o.trophy ?? o.trophy_id ?? o.trophyId ?? o.achievement ?? o.achievement_id ?? o.key ?? key);
   if (id == null) return null;
   const at = toMs(o.time ?? o.unix ?? o.timestamp ?? o.unlocked_at ?? o.unlockedAt ?? o.earned_time ?? o.date ?? o.at);
@@ -86,9 +102,17 @@ export function readRecompFile(buf: Uint8Array, file = ''): Unlock[] {
   if (/^\s*\[[^\]]+\]/m.test(text) || /^\s*\d+\s*=\s*\S/m.test(text)) {
     let sec: string | null = null;
     for (const line of text.split(/\r?\n/)) {
-      const s = line.match(/^\s*\[(.+)\]\s*$/); if (s) { sec = s[1]!.trim(); continue; }
+      const s = line.match(/^\s*\[(.+)\]\s*$/);
+      if (s) {
+        sec = s[1]!.trim();
+        // rexglue (recomps de Xbox 360): [unlocked.<id>] com filetime (100 ns desde 1601) na linha de baixo.
+        const u = sec.match(/^unlocked\.(.+)$/i); if (u) push({ id: idOf(u[1]!.replace(/^"|"$/g, ''))!, at: null });
+        continue;
+      }
       const m = line.match(/^\s*([^=;#]+?)\s*=\s*(.*?)\s*$/); if (!m) continue;
       const [k, v] = [m[1]!, m[2]!];
+      const un = sec?.match(/^unlocked\.(.+)$/i);
+      if (un && /^filetime$/i.test(k)) { const ft = Number(v); const last = out.find(x => x.id === idOf(un[1]!.replace(/^"|"$/g, ''))); if (last && ft > 0) last.at = ft > 1e16 ? Math.round(ft / 10_000 - 11_644_473_600_000) : toMs(ft); continue; }
       if (sec && /^(achieved|unlocked|earned)$/i.test(k) && /^(1|true)$/i.test(v)) push({ id: idOf(sec)!, at: null, ...(nameOf(sec) ? { name: sec } : {}) });
       else if (!sec && /^\d+$/.test(k) && v && !/^(0|false)$/i.test(v)) push({ id: Number(k), at: toMs(v) });
     }
@@ -110,7 +134,21 @@ export const recompLocal: Adapter = {
   label: tt('Conquistas do recomp'),
   repos: [],
   detect: dir => recompFiles({ installDir: dir, appData: process.env.APPDATA ?? join(dir, '__') }).length > 0,
-  async definitions() { return { list: [], origin: tt('arquivo de conquistas do próprio recomp') }; },
+  async definitions(ctx) {
+    // Sem leitor feito à mão: procura perto dos arquivos do jogo uma lista com nomes que case com o que foi desbloqueado.
+    const wanted = new Set<number>();
+    const f = recompLocal.unlockFile(ctx);
+    if (f) { try { for (const u of readRecompFile(new Uint8Array(readFileSync(f)), f)) wanted.add(u.id); } catch { } }
+    const key = (k: string) => idOf(k);
+    const found = discoverList(recompRoots(ctx), wanted, key);
+    if (!found) return { list: [], origin: tt('arquivo de conquistas do próprio recomp') };
+    const images = new Map<number, Uint8Array>();
+    for (const [k, b] of found.icons) { const i = key(k); if (i != null) images.set(i, b); }
+    const seen = new Set<number>();
+    const list = found.defs.flatMap(d => { const id = key(d.key); if (id == null || seen.has(id)) return []; seen.add(id); return [{ id, name: d.name, description: d.desc, points: null }]; });
+    return { list, images, origin: tt('lista encontrada em {0}', { 0: found.file.split(/[\\/]/).slice(-2).join('/') }) };
+  },
+  refreshDefs: true,
   unlockFile(ctx) {
     const files = recompFiles(ctx);
     let best: [string, number] | null = null;

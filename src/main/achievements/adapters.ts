@@ -10,11 +10,15 @@ import { tt } from '@shared/i18n';
 import { steamEmu, steamLegit } from './steam';
 import { gog } from './gog';
 import { recompLocal } from './recomp';
+import { recompia } from './recompia';
+import { indiceAdapter } from './indice';
 
 export interface AdapterContext {
   installDir: string;
   appData: string;
   title?: string;
+  /** Repositório do GitHub do projeto (do jogo ou do catálogo), para o índice de conquistas. */
+  repo?: string | null;
 }
 export interface AchievementDef { id: number; name: string; description: string; points: number | null; imageId?: number }
 export interface Definitions { list: AchievementDef[]; images?: Map<number, Uint8Array>; origin: string }
@@ -35,6 +39,10 @@ export interface Adapter {
   watchFiles?(ctx: AdapterContext): string[];
   /** Desbloqueios que vêm da internet em vez de um arquivo. */
   remote?(ctx: AdapterContext): Promise<Unlock[]>;
+  /** A lista pode crescer (ex.: mod atualizado): relê ao abrir o Cartucho. */
+  refreshDefs?: boolean;
+  /** Porcentagem de jogadores que desbloqueou cada conquista (0 a 100), quando a origem publica. */
+  rarity?(ctx: AdapterContext): Promise<Map<number, number> | null>;
 }
 
 const hasFile = (dir: string, ...names: string[]) => names.some(n => existsSync(join(dir, n)));
@@ -103,7 +111,7 @@ export const rsdkv4: Adapter = {
   readUnlocks: readRsdkUserdata,
 };
 
-export const ADAPTERS: Adapter[] = [unleashedRecomp, marathonRecomp, sonic3air, rsdkv4, steamLegit, gog, steamEmu, recompLocal];
+export const ADAPTERS: Adapter[] = [unleashedRecomp, marathonRecomp, sonic3air, rsdkv4, steamLegit, gog, recompia, steamEmu, recompLocal, indiceAdapter];
 
 export const adapterForRepo = (repo: string | null | undefined) => {
   const name = (repo ?? '').split('/').pop()?.toLowerCase() ?? '';

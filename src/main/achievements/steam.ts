@@ -5,7 +5,7 @@ import { dirname, isAbsolute, join } from 'node:path';
 import type { Adapter, AdapterContext, AchievementDef, Definitions } from './adapters';
 import type { Unlock } from './saves';
 import { findKey, isMap, num, parseBinaryKV, type KV, type KVMap } from './vdf';
-import { achNet, fetchImages, getJson } from './net';
+import { achNet, fetchImages, getJson, getText } from './net';
 import { steamManifest, steamRoots } from '../steam';
 import { tt } from '@shared/i18n';
 
@@ -140,6 +140,74 @@ async function fromWebApi(appid: string): Promise<Definitions | null> {
   return withIcons(appid, list.map(a => ({ id: achId(a.name), name: a.displayName || a.name, description: a.description ?? '', points: null, iconUrl: a.icon ?? null })), tt('lista da API da Steam'));
 }
 
+/** Linhas da página pública de conquistas de um jogo (steamcommunity.com/stats/<jogo>/achievements), na ordem da página. */
+export function parseCommunityPage(html: string): { name: string; desc: string; icon: string | null; pct: number | null }[] {
+  const out: { name: string; desc: string; icon: string | null; pct: number | null }[] = [];
+  const dec = (s: string) => s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').trim();
+  for (const block of html.split(/<div class="achieveRow\b/).slice(1)) {
+    const name = block.match(/<h3[^>]*>([\s\S]*?)<\/h3>/)?.[1];
+    if (name == null) continue;
+    const desc = block.match(/<h5[^>]*>([\s\S]*?)<\/h5>/)?.[1] ?? '';
+    const icon = block.match(/<img[^>]+src="([^"]+)"/)?.[1] ?? null;
+    const pct = block.match(/achievePercent[^>]*>\s*([\d.,]+)\s*%/)?.[1];
+    out.push({ name: dec(name), desc: dec(desc), icon, pct: pct ? Number(pct.replace(',', '.')) : null });
+  }
+  return out;
+}
+/**
+ * Casa os nomes de API (da porcentagem global, que não pede chave) com os nomes da página pública.
+ * As duas listas vêm da mais desbloqueada para a menos; se os tamanhos e as porcentagens baterem, a ordem casa.
+ */
+export function matchByPercent(api: { name: string; percent: number }[], rows: { name: string; desc: string; icon: string | null; pct: number | null }[]) {
+  if (!api.length || api.length !== rows.length) return null;
+  const a = [...api].sort((x, y) => y.percent - x.percent);
+  for (let i = 0; i < a.length; i++) {
+    const p = rows[i]!.pct;
+    if (p != null && Math.abs(p - a[i]!.percent) > 0.15) return null;
+  }
+  return a.map((x, i) => ({ api: x.name, ...rows[i]! }));
+}
+/**
+ * Página nova de conquistas (steamcommunity.com/achievements/<jogo>): traz embutido, no JSON valve-ssr-data,
+ * o nome de API, o nome, a descrição e o ícone de cada conquista no idioma pedido.
+ */
+export function parseCommunitySsr(html: string): { api: string; name: string; desc: string; icon: string | null }[] {
+  const raw = html.match(/<script[^>]*id="valve-ssr-data"[^>]*>([\s\S]*?)<\/script>/)?.[1];
+  if (!raw) return [];
+  type Ach = { api_name?: string; name?: string; description?: string; icon_achieved?: string };
+  const out: { api: string; name: string; desc: string; icon: string | null }[] = [];
+  try {
+    const d = JSON.parse(raw) as { renderContext?: { queryData?: string } };
+    const q = JSON.parse(d.renderContext?.queryData ?? '{}') as { queries?: { state?: { data?: { groups?: { achievements?: Ach[] }[] } } }[] };
+    for (const x of q.queries ?? []) for (const g of x.state?.data?.groups ?? []) for (const a of g.achievements ?? []) {
+      if (a.api_name && !out.some(o => o.api === a.api_name)) out.push({ api: a.api_name, name: a.name || a.api_name, desc: a.description ?? '', icon: a.icon_achieved || null });
+    }
+  } catch { return []; }
+  return out;
+}
+async function fromCommunity(appid: string): Promise<Definitions | null> {
+  const l = achNet.lang() === 'pt' ? 'brazilian' : 'english';
+  const hdr = { 'Accept-Language': achNet.lang() === 'pt' ? 'pt-BR' : 'en' };
+  const ssr = parseCommunitySsr(await getText(`https://steamcommunity.com/achievements/${appid}?l=${l}`, hdr).catch(() => ''));
+  if (ssr.length) return withIcons(appid, ssr.map(a => ({ id: achId(a.api), name: a.name, description: a.desc, points: null, iconUrl: a.icon ? CDN(appid, a.icon) : null })), tt('lista pública da Steam'));
+  const [g, html] = await Promise.all([
+    getJson<{ achievementpercentages?: { achievements?: { name: string; percent: number | string }[] } }>(`https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid=${appid}`).catch(() => null),
+    getText(`https://steamcommunity.com/stats/${appid}/achievements/?l=${l}`, { 'Accept-Language': achNet.lang() === 'pt' ? 'pt-BR' : 'en' }).catch(() => ''),
+  ]);
+  const api = (g?.achievementpercentages?.achievements ?? []).map(a => ({ name: a.name, percent: Number(a.percent) || 0 }));
+  const m = matchByPercent(api, parseCommunityPage(html));
+  if (!m) return null;
+  return withIcons(appid, m.map(x => ({ id: achId(x.api), name: x.name || x.api, description: x.desc, points: null, iconUrl: x.icon })), tt('lista pública da Steam'));
+}
+
+/** Porcentagem global de cada conquista na Steam (não pede chave). */
+export async function steamRarity(appid: string | null): Promise<Map<number, number> | null> {
+  if (!appid) return null;
+  const g = await getJson<{ achievementpercentages?: { achievements?: { name: string; percent: number | string }[] } }>(`https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid=${appid}`).catch(() => null);
+  const list = g?.achievementpercentages?.achievements ?? [];
+  return list.length ? new Map(list.map(a => [achId(a.name), Math.max(0, Math.min(100, Number(a.percent) || 0))])) : null;
+}
+
 const NO_LIST = () => new Error(tt('A Steam deste PC não tem a lista deste jogo. Coloque uma chave da API da Steam nas configurações (Jogos) para o Cartucho buscar os nomes.'));
 
 export const steamAppId = (ctx: AdapterContext) => steamManifest(ctx.installDir)?.appid ?? null;
@@ -152,8 +220,9 @@ export const steamLegit: Adapter = {
   async definitions(ctx) {
     const appid = steamAppId(ctx);
     if (!appid) throw new Error(tt('não achei o número do jogo na Steam'));
-    return (await fromLocalSchema(ctx.installDir, appid)) ?? (await fromWebApi(appid)) ?? (() => { throw NO_LIST(); })();
+    return (await fromLocalSchema(ctx.installDir, appid)) ?? (await fromWebApi(appid)) ?? (await fromCommunity(appid)) ?? (() => { throw NO_LIST(); })();
   },
+  rarity: ctx => steamRarity(steamAppId(ctx)),
   unlockFile(ctx) {
     const appid = steamAppId(ctx), root = steamRootFor(ctx.installDir);
     return appid && root ? userStatsFile(root, appid) : '';
@@ -168,7 +237,7 @@ export const steamLegit: Adapter = {
 
 // ── Emuladores de Steam (Goldberg, o fork GSE, CODEX, RUNE) ───────────
 
-export interface CrackInfo { appid: string; settings: string[] }
+export interface CrackInfo { appid: string; settings: string[]; tenoke?: string[] }
 const scanCache = new Map<string, CrackInfo | null>();
 const digits = (s: string) => s.match(/\d{2,10}/)?.[0] ?? null;
 
@@ -176,7 +245,7 @@ const digits = (s: string) => s.match(/\d{2,10}/)?.[0] ?? null;
 export function scanCrack(dir: string): CrackInfo | null {
   if (scanCache.has(dir)) return scanCache.get(dir)!;
   let appid: string | null = null;
-  const settings: string[] = [];
+  const settings: string[] = [], tenoke: string[] = [];
   const queue: [string, number][] = [[dir, 0]];
   let seen = 0;
   while (queue.length && seen < 400) {
@@ -188,6 +257,7 @@ export function scanCrack(dir: string): CrackInfo | null {
       try {
         if (e.isFile() && n === 'steam_appid.txt') appid ??= digits(readFileSync(p, 'utf8'));
         else if (e.isFile() && n === 'steam_emu.ini') appid ??= readFileSync(p, 'utf8').match(/^\s*AppId\s*=\s*(\d+)/im)?.[1] ?? null;
+        else if (e.isFile() && n === 'tenoke.ini') { tenoke.push(p); appid ??= readFileSync(p, 'utf8').match(/^\s*id\s*=\s*(\d+)/im)?.[1] ?? null; }
         else if (e.isDirectory() && n === 'steam_settings') {
           settings.push(p);
           const f = join(p, 'steam_appid.txt'); if (existsSync(f)) appid ??= digits(readFileSync(f, 'utf8'));
@@ -195,7 +265,7 @@ export function scanCrack(dir: string): CrackInfo | null {
       } catch { }
     }
   }
-  const r = appid ? { appid, settings } : null;
+  const r = appid ? { appid, settings, ...(tenoke.length ? { tenoke } : {}) } : null;
   scanCache.set(dir, r);
   return r;
 }
@@ -227,6 +297,8 @@ export function crackFiles(ctx: AdapterContext, info: CrackInfo) {
     join(pub, 'Steam', 'CODEX', appid, 'achievements.ini'),
     join(ctx.appData, 'Steam', 'CODEX', appid, 'achievements.ini'),
     join(pub, 'Steam', 'RUNE', appid, 'achievements.ini'),
+    // TENOKE: SteamData/user_stats.ini na pasta do jogo.
+    join(ctx.installDir, 'SteamData', 'user_stats.ini'),
   ];
 }
 
@@ -251,6 +323,13 @@ export function readEmuUnlocks(buf: Uint8Array): Unlock[] {
     }
   };
   for (const line of text.split(/\r?\n/)) {
+    // TENOKE (user_stats.ini): "nome" = {unlocked = true, time = 1761262906}
+    const tk = line.match(/^\s*"?([^"=\s]+)"?\s*=\s*\{([^}]*)\}/);
+    if (tk) {
+      const body = tk[2]!;
+      if (/unlocked\s*=\s*true/i.test(body)) { const t = Number(body.match(/time\s*=\s*(\d+)/i)?.[1]); out.push({ id: achId(tk[1]!), at: t > 0 ? t * 1000 : null, name: tk[1]! }); }
+      continue;
+    }
     const s = line.match(/^\s*\[(.+)\]\s*$/);
     if (s) { flush(); sec = s[1]!.trim(); kv = {}; continue; }
     const m = line.match(/^\s*([^=;#]+?)\s*=\s*(.*?)\s*$/);
@@ -258,6 +337,37 @@ export function readEmuUnlocks(buf: Uint8Array): Unlock[] {
   }
   flush();
   return out;
+}
+
+/** tenoke.ini: [ACHIEVEMENTS.nome] com icon/hidden, e [ACHIEVEMENTS.nome.name] / [.desc] com um texto por idioma. */
+export function parseTenoke(text: string) {
+  const order: string[] = [], info = new Map<string, { icon?: string; name: Record<string, string>; desc: Record<string, string> }>();
+  let cur: { api: string; part: 'main' | 'name' | 'desc' } | null = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/\s+#.*$/, '').trim();
+    const s = line.match(/^\[ACHIEVEMENTS\.(.+?)(?:\.(name|desc))?\]$/);
+    if (s) {
+      const api = s[1]!; if (!info.has(api)) { info.set(api, { name: {}, desc: {} }); order.push(api); }
+      cur = { api, part: (s[2] as 'name' | 'desc' | undefined) ?? 'main' }; continue;
+    }
+    if (/^\[/.test(line)) { cur = null; continue; }
+    const m = cur && line.match(/^([\w-]+)\s*=\s*"?(.*?)"?$/);
+    if (!m || !cur) continue;
+    const a = info.get(cur.api)!;
+    if (cur.part === 'main') { if (m[1] === 'icon') a.icon = m[2]; }
+    else a[cur.part][m[1]!.toLowerCase()] = m[2]!;
+  }
+  const pick = (o: Record<string, string>) => { for (const l of LANGS()) if (o[l]) return o[l]!; return Object.values(o)[0] ?? ''; };
+  return order.map(api => { const a = info.get(api)!; return { api, name: pick(a.name) || api, desc: pick(a.desc), icon: a.icon ?? null }; });
+}
+async function fromTenoke(info: CrackInfo): Promise<Definitions | null> {
+  for (const f of info.tenoke ?? []) {
+    let list: ReturnType<typeof parseTenoke>;
+    try { list = parseTenoke(await readFile(f, 'utf8')); } catch { continue; }
+    if (!list.length) continue;
+    return withIcons(info.appid, list.map(a => ({ id: achId(a.api), name: a.name, description: a.desc, points: null, iconUrl: a.icon ? (/^https?:/i.test(a.icon) ? a.icon : CDN(info.appid, a.icon)) : null })), tt('lista que veio com o jogo (tenoke.ini)'));
+  }
+  return null;
 }
 
 interface GseAch { name: string; displayName?: unknown; description?: unknown; icon?: string }
@@ -290,7 +400,7 @@ export const steamEmu: Adapter = {
   async definitions(ctx) {
     const info = scanCrack(ctx.installDir);
     if (!info) throw new Error(tt('não achei o número do jogo na Steam dentro da pasta'));
-    return (await fromSettings(info)) ?? (await fromLocalSchema(null, info.appid)) ?? (await fromWebApi(info.appid)) ?? (() => { throw NO_LIST(); })();
+    return (await fromTenoke(info)) ?? (await fromSettings(info)) ?? (await fromLocalSchema(null, info.appid)) ?? (await fromWebApi(info.appid)) ?? (await fromCommunity(info.appid)) ?? (() => { throw NO_LIST(); })();
   },
   unlockFile(ctx) {
     const info = scanCrack(ctx.installDir);
@@ -301,5 +411,6 @@ export const steamEmu: Adapter = {
     return best?.[0] ?? files[0]!;
   },
   watchFiles(ctx) { const info = scanCrack(ctx.installDir); return info ? crackFiles(ctx, info) : []; },
+  rarity: ctx => steamRarity(scanCrack(ctx.installDir)?.appid ?? null),
   readUnlocks: buf => readEmuUnlocks(buf),
 };

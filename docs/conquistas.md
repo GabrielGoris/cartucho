@@ -35,9 +35,27 @@ Os arquivos da Steam são KeyValues binário (`src/main/achievements/vdf.ts`). N
 
 ## Recomps com conquistas próprias (leitor genérico)
 
-Em nov/2026 o código dos recomps de Xbox 360, PS3 e PS4 do catálogo (294 projetos) foi varrido atrás de arquivos de conquistas/troféus. Uns 40 gravam um arquivo próprio, cada um do seu jeito. O leitor `recomp-local` (`src/main/achievements/recomp.ts`) procura os nomes mais usados (`ACH-DATA`, `trophies.txt`, `trophies.jsonl`, `trophies.json`, `achievements.txt`, `achievements.json`, `achievements.ini`, `port_achievements.txt`) até 3 níveis dentro da pasta do jogo e na pasta que o recomp cria em AppData com o nome do .exe, e reconhece o formato pelo conteúdo. Arquivos binários próprios (`trophies.dat`, `trophies.bin`, `achievements.dat`) ainda não são lidos: cada um precisa de um leitor feito para ele.
+Cada recomp guarda conquistas do seu jeito, então o leitor `recomp-local` não depende de conhecer o projeto:
 
-Quando o arquivo não traz o nome da conquista, ela aparece como "Conquista #id" até alguém montar a lista daquele jogo.
+1. **Desbloqueios**: procura, até 3 níveis dentro da pasta do jogo e na pasta que o recomp cria em AppData com o nome do .exe, os nomes de arquivo mais usados (`ACH-DATA`, `trophies.txt`, `trophies.jsonl`, `trophies.json`, `achievements.txt/.json/.ini`, `earned.tsv`…) e qualquer arquivo de texto com "achiev", "troph" ou "earned" no nome. O conteúdo decide: só conta se tiver desbloqueios (ids, com ou sem hora, ou objetos marcados como desbloqueados). Arquivos de nomes, textos e listas nunca contam como desbloqueio.
+2. **Lista** (`src/main/achievements/discover.ts`): procura perto dali arquivos que pareçam listas (JSON, HTML, INI/TOML, TSV/CSV/texto) e tira deles nome interno, nome e descrição do jeito que der (texto por idioma incluído). Fica com a lista que mais casa com os desbloqueios e, no empate, a mais comprida. É relida toda vez que o Cartucho abre.
+3. **Ícones**: imagens com o mesmo nome interno da conquista (ex.: `img/relic_1.png`), perto da lista ou nas pastas do jogo.
+4. **Sem lista**: o nome interno vira algo legível ("relic_1" → "Relic 1", "12" → "Conquista 12"), e a tela mostra "N desbloqueadas" sem total.
+
+Arquivos binários próprios (`trophies.dat`, `trophies.bin`, `achievements.dat`) continuam sem leitura.
+
+## Índice de conquistas dos recomps
+
+`conquistas.json`, no ramo `dados` (gerado toda segunda pelo workflow **Índice de conquistas**; uma cópia vai dentro do app em `src/main/achievements/data/indice.json` para funcionar antes da primeira publicação). O Cartucho baixa o índice ao abrir, guarda a última cópia e usa as dicas do projeto de cada jogo, casado pelo repositório do GitHub.
+
+- **Gerado sozinho** (`scripts/conquistas.ts`): baixa só o código-fonte dos recomps de consoles que tinham conquistas ou troféus e procura os nomes dos arquivos de conquista que cada projeto grava (`procurar`). Com esses nomes, o Cartucho desce mais fundo nas pastas do jogo e do usuário (até 5 níveis, inclusive `game/`, `data/`, `content/`).
+- **Escrito à mão** (`scripts/conquistas-manuais.json`): completa ou corrige a varredura com caminhos exatos (`desbloqueios`), a lista (`lista`, de um arquivo ou de uma URL), uma lista escrita no próprio índice (`conquistas`) e o padrão dos ícones (`icones`, com `{id}`).
+
+Caminhos aceitam `{jogo}`, `{appdata}`, `{localappdata}`, `{documentos}`, `{publico}`, `{usuario}`, `{jogos_salvos}` e `*` num trecho. Formatos: `auto`, `hedge`, `linhas`, `jsonl`, `json`, `ini`, `tenoke`, `goldberg`, `earned`, `binario`.
+
+Para pôr um projeto novo, basta uma linha em `conquistas-manuais.json` (ou esperar a varredura da semana); não precisa de versão nova do Cartucho.
+
+Formatos de kits que já são entendidos: hedge-dev (`ACH-DATA`), rexglue (`[unlocked.N]` com `filetime`, e a lista em `[[achievements]]` com `id`/`label`/`description`), TENOKE, Goldberg/GSE, CODEX/RUNE, o mod de conquistas do Recompia, e texto, JSON, JSON por linha, INI e TSV genéricos.
 
 ## RetroAchievements
 

@@ -1,0 +1,45 @@
+name: Índice de conquistas
+
+on:
+  schedule:
+    - cron: '41 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dados
+  cancel-in-progress: false
+
+jobs:
+  indice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Varrer o código dos recomps do catálogo
+        run: node --no-warnings --experimental-transform-types --import ./scripts/ts.mjs scripts/conquistas.ts "$RUNNER_TEMP/conquistas.json"
+      - name: Publicar no ramo dados
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin dados >/dev/null; then
+            git worktree add "$RUNNER_TEMP/dados" origin/dados
+            cd "$RUNNER_TEMP/dados"
+            git checkout -B dados
+          else
+            git worktree add --orphan -b dados "$RUNNER_TEMP/dados"
+            cd "$RUNNER_TEMP/dados"
+          fi
+          cp "$RUNNER_TEMP/conquistas.json" conquistas.json
+          git add conquistas.json
+          if git diff --cached --quiet; then echo "Nada mudou."; exit 0; fi
+          git commit -m "Índice de conquistas $(date -u +%F)"
+          for i in 1 2 3; do git push origin dados && exit 0; git pull --rebase origin dados; done
+          exit 1

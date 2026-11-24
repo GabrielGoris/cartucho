@@ -34,6 +34,8 @@ export interface AchievementView {
   points: number | null;
   unlockedAt: number | null;
   icon: string | null;
+  /** Porcentagem de jogadores que desbloqueou (0 a 100), quando a origem publica. */
+  rarity?: number | null;
 }
 export interface InstalledGame {
   id: string;
@@ -85,6 +87,8 @@ export interface GameAchievements {
 
   errors: string[];
   list: AchievementView[];
+  /** false quando não há a lista do jogo: só se sabe o que já foi desbloqueado. */
+  complete: boolean;
 }
 
 export interface UnlockEvent { gameId: string; gameTitle: string; achId: number; name: string; at: number; description?: string; icon?: string | null; points?: number | null }
