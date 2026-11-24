@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { semArquivos, tileClick } from '@shared/gameclick';
+import { gridStep } from '@shared/library';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AchievementView, ConsoleId, PlayStats, RadarEvent } from '@shared/types';
 import { isSelfInstall, STATUS_LABEL } from '@shared/consoles';
@@ -82,6 +83,8 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
     return q ? base.filter(x => matchesQuery(query, x.title, x.platformName, x.catalog?.developer)) : base;
   }, [sec, lib, data.catalog, data.lib, query]);
   const cur = grid[st.fi] ?? null;
+  // Jogados recentemente numa parte separada no alto da biblioteca (some durante a busca).
+  const split = sec === 'lib' && !q ? data.recent : 0;
   const rows: Row[] = sec === 'news' ? data.feed.map(f => ({ key: String(f.id), f, g: data.catalog.find(y => y.catalog?.id === f.gameId), t: f.title, s: `${FEED[f.kind]}${f.detail && !(self && f.kind === 'new') ? ` · ${f.detail}` : ''}`, v: ago(f.at) }))
     : sec === 'ach' ? lib.map(g => ({ key: g.key, g, t: g.title, v: g.installed?.achievements?.total ? `${g.installed.achievements.unlocked}/${g.installed.achievements.total}` : '—' }))
     : sec === 'time' ? [{ key: 'sum', ic: 'chart' as IconName, t: tt('Resumo'), v: fmtPlay(data.playMs) || '0m' }, ...byPlay.map(g => ({ key: g.key, g, t: g.title, v: fmtPlay(g.installed?.playMs ?? 0) || '0m' }))]
@@ -205,12 +208,8 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
     }
     if (st.zone === 'search') { if (D) mv({ zone: 'main' }); else if (U) mv({ zone: 'tabs' }); return; }
     if (sec === 'lib' || sec === 'cat') {
-      const col = st.fi % COLS;
-      if (R && st.fi < grid.length - 1 && col < COLS - 1) mv({ fi: st.fi + 1 });
-      else if (L && col > 0) mv({ fi: st.fi - 1 });
-      else if (D && st.fi + COLS < grid.length) mv({ fi: st.fi + COLS });
-      else if (D && Math.floor(st.fi / COLS) < Math.floor((grid.length - 1) / COLS)) mv({ fi: grid.length - 1 });
-      else if (U) { if (st.fi >= COLS) mv({ fi: st.fi - COLS }); else mv({ zone: 'search' }); }
+      const to = gridStep(st.fi, grid.length, COLS, split, R ? 'R' : L ? 'L' : U ? 'U' : 'D');
+      if (to === 'top') mv({ zone: 'search' }); else if (to != null && (R || L || U || D)) mv({ fi: to });
       return;
     }
     if (D && st.li < rows.length - 1) mv({ li: st.li + 1 }); else if (U) { if (st.li > 0) mv({ li: st.li - 1 }); else mv({ zone: 'tabs' }); }
@@ -257,16 +256,19 @@ export function PCHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: 
                       onDone={() => up({ zone: 'main', fi: 0 })} />
                     <span className="cnt">{plural(grid.length, tt('jogo'), tt('jogos'))}{sec === 'lib' ? tt(' · {0} no total', { 0: fmtPlay(data.playMs) || '0m' }) : ''}</span>
                   </div>
-                  {grid.length ? (
-                    <div className="pc-grid">{grid.map((x, j) => (
+                  {grid.length ? (split ? [[0, split, tt('Jogados recentemente')], [split, grid.length, tt('Coleção')]] as const : [[0, grid.length, '']] as const).map(([a, b, h]) => a < b && (
+                    <Fragment key={a}>
+                    {h && <h3 className="pc-sh">{h}{a > 0 && <small>{plural(b - a, tt('jogo'), tt('jogos'))}</small>}</h3>}
+                    <div className="pc-grid">{grid.slice(a, b).map((x, j0) => { const j = a + j0; return (
                       <button key={x.key} className={`pc-cap ${st.zone === 'main' && j === st.fi ? 'on' : ''} ${x.installed ? '' : 'ghost'} ${x.installed?.missing ? 'missing' : ''}`}
                         onClick={e => tileClick(e, x, { select: () => { if (st.zone !== 'main' || st.fi !== j) { sfx.play('move'); up({ zone: 'main', fi: j }); } }, page: () => { sfx.play('ok'); openGame(x); }, play: () => run('play', x) })}>
                         <span className="cv-w"><Art g={x} v="cover" />{x.isNew && <span className="pc-tag new">{tt('NOVO')}</span>}{x.installed?.running && <span className="run"><Ic n="play" /></span>}</span>
                         <span className="t">{x.title}</span>
-                        <span className="s">{x.installed ? (x.installed.missing ? (x.installed.uninstalled ? tt('não instalado') : tt('pasta não encontrada')) : fmtPlay(x.installed.playMs) || tt('não jogado')) : x.status ? STATUS_LABEL[x.status] : ''}</span>
+                        <span className="s">{x.installed ? (x.installed.missing ? (x.installed.uninstalled ? tt('não instalado') : tt('pasta não encontrada')) : j < split && x.installed.lastPlayed && !x.installed.running ? ago(x.installed.lastPlayed) : fmtPlay(x.installed.playMs) || tt('não jogado')) : x.status ? STATUS_LABEL[x.status] : ''}</span>
                       </button>
-                    ))}</div>
-                  ) : <div className="pc-empty">{q ? tt('Nada encontrado para “{0}”.', { 0: q }) : sec === 'lib' ? tt('Nenhum jogo instalado. {0} em Descobrir.', { 0: plural(data.catalog.length, tt('jogo'), tt('jogos')) }) : tt('O catálogo ainda não tem nada aqui.')}</div>}
+                    ); })}</div>
+                    </Fragment>
+                  )) : <div className="pc-empty">{q ? tt('Nada encontrado para “{0}”.', { 0: q }) : sec === 'lib' ? tt('Nenhum jogo instalado. {0} em Descobrir.', { 0: plural(data.catalog.length, tt('jogo'), tt('jogos')) }) : tt('O catálogo ainda não tem nada aqui.')}</div>}
                 </>
               )}
               {sec !== 'lib' && (

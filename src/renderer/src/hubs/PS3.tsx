@@ -39,6 +39,7 @@ const FEED = { new: tt('Novo no catálogo'), upd: tt('Versão nova'), up: tt('Mu
 const W = 1920, H = 1080;
 const waveY = (x: number) => 600 + Math.sin(x / 420 + 0.6) * 46;
 const TEXT_TOP = Math.round(waveY(420) - 160);
+const SEC_GAP = 60;
 function place(d: number): [number, number, number] {
   if (d === 0) return [300, waveY(420) - 120, 1];
   const x = d < 0 ? 300 + d * 190 - 40 : 1240 + (d - 1) * 190;
@@ -201,6 +202,21 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   const items = itemsOf(cat);
   const sel = Math.min(st.ii[st.ci] ?? 0, items.length - 1);
   const it = items[sel]!;
+  // Jogos: um vão com um traço separa os jogados recentemente da coleção na fita.
+  const split = cat === 'games' && data.recent < items.length ? data.recent : 0;
+  const placeAt = (i: number): [number, number, number] => {
+    const d = i - sel, [px, py, sc] = place(d);
+    if (!split) return [px, py, sc];
+    const x = d > 0 && i >= split && sel < split ? px + SEC_GAP : d < 0 && i < split && sel >= split ? px - SEC_GAP : px;
+    return [x, x === px ? py : waveY(x + 70) - 60, sc];
+  };
+  const divider = (() => {
+    if (!split) return null;
+    const right = sel < split, d = (right ? split : split - 1) - sel;
+    if (d > 4 || d < -2) return null;
+    const [x, y] = placeAt(right ? split : split - 1);
+    return { x: right ? x - 5 : x + 212, y: y + 60, right };
+  })();
   const g = it.g ?? null;
   const feed = useFeed(data.feed, cat === 'news' && !st.game);
 
@@ -357,8 +373,10 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
               </div>
             )}
             <div className={`p3-rib in-${st.dir}`} key={cat}>
+              {divider && <span className={`p3-sec ${divider.right ? 'r' : 'l'}`} style={{ transform: `translate(${divider.x}px, ${divider.y}px)` }}>
+                {divider.right && <b>{tt('Coleção')}</b>}</span>}
               {items.map((x, i) => {
-                const d = i - sel, [px, py, sc] = place(d), on = d === 0;
+                const d = i - sel, [px, py, sc] = placeAt(i), on = d === 0;
                 const off = cat === 'games' && x.g && !x.g.installed;
                 return (
                   <button key={x.key} className={`p3-it ${on ? 'on' : ''} ${x.g?.installed?.missing ? 'missing' : ''}`} aria-label={x.t}

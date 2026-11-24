@@ -8,6 +8,7 @@ import { askChoice, askConfirm } from '../lib/dialogs';
 import { sfx } from '../lib/sfx';
 import { useAskDeletePrefix } from '../lib/wine';
 import { tt } from '@shared/i18n';
+import { orderLibrary } from '@shared/library';
 
 export interface HubGame {
   key: string;
@@ -41,11 +42,13 @@ export function useHubData(scope: ConsoleId | readonly ConsoleId[] | null) {
     const feed: RadarEvent[] = (radar.data ?? []).filter(e => !set || set.has(e.console));
     const fresh = new Set(feed.filter(e => e.kind === 'new' && Date.now() - e.at < FRESH_MS).map(e => e.gameId));
     const byCat = new Map((cat.data ?? []).map(c => [c.id, c]));
-    const lib: HubGame[] = mine.map(g => {
+    const all: HubGame[] = mine.map(g => {
       const c = g.catalogId ? byCat.get(g.catalogId) ?? null : null;
       return { key: g.id, title: g.title, coverUrl: g.coverUrl ?? c?.coverUrl ?? null, status: c?.status ?? null, installed: g, catalog: c,
         isNew: !!c && fresh.has(c.id), update: updById.get(g.id) ?? null, repo: g.sourceRepo ?? c?.repo ?? null, console: g.console, platformName: c?.platformName ?? null };
-    }).sort((a, b) => Number(a.installed!.missing) - Number(b.installed!.missing) || (b.installed!.lastPlayed ?? b.installed!.addedAt) - (a.installed!.lastPlayed ?? a.installed!.addedAt));
+    });
+    // Jogados recentemente primeiro (parte separada, como na Steam), depois a coleção em ordem alfabética.
+    const { list: lib, recent } = orderLibrary(all);
     const have = new Set(mine.map(g => g.catalogId).filter(Boolean));
     const notInstalled: HubGame[] = (cat.data ?? []).filter(c => !have.has(c.id)).map(c => ({
       key: c.id, title: c.title, coverUrl: c.coverUrl, status: c.status, installed: null, catalog: c, isNew: fresh.has(c.id), update: null, repo: c.repo,
@@ -55,6 +58,8 @@ export function useHubData(scope: ConsoleId | readonly ConsoleId[] | null) {
     return {
       loading: games.isLoading || cat.isLoading,
       lib,
+      /** Quantos dos primeiros de `lib` são os jogados recentemente. */
+      recent,
       notInstalled,
       catalog,
       feed,

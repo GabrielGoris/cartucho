@@ -23,7 +23,7 @@ type Sp = 'cat' | 'news' | 'ach' | 'time' | 'cfg';
 type View = { kind: 'game'; key: string } | { kind: Sp };
 type PZone = 'btns' | 'shots' | 'list';
 interface St { page: number; ci: number; zone: 'grid' | 'bar'; bi: number; view: View | null; stack: { view: View; mi: number }[]; pz: PZone; pb: number; ps: number; mi: number; opt: boolean; oi: number }
-interface Chan { key: string; g?: HubGame; sp?: Sp; l?: string; ic?: IconName; n?: number }
+interface Chan { key: string; g?: HubGame; sp?: Sp; l?: string; ic?: IconName; n?: number; gap?: boolean; recent?: boolean }
 interface Row { key: string; g?: HubGame; ic?: IconName; t: string; s?: string; v?: string; id?: string; feed?: RadarEvent }
 type Opt = { k: string; l: string; ic: IconName };
 type Hint = [Parameters<typeof Glyph>[0]['a'], string];
@@ -75,19 +75,26 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   useEffect(() => {
     if (!game0 || shown.current) return;
     const i = lib.findIndex(g => g.key === game0 || g.catalog?.id === game0);
-    if (i >= 0) { shown.current = true; up({ page: Math.floor(i / PER), ci: i % PER }); open({ kind: 'game', key: lib[i]!.key }); }
+    const c = chans.findIndex(ch => ch.g === lib[i]);
+    if (i >= 0 && c >= 0) { shown.current = true; up({ page: Math.floor(c / PER), ci: c % PER }); open({ kind: 'game', key: lib[i]!.key }); }
   }, [game0, lib.length]);
   const byPlay = useMemo(() => [...lib].sort((a, b) => (b.installed?.playMs ?? 0) - (a.installed?.playMs ?? 0)), [lib]);
   const all = useMemo(() => new Map([...data.lib, ...data.catalog].flatMap(x => [[x.key, x] as const, ...(x.installed && x.catalog ? [[x.catalog.id, x] as const] : [])])), [data.lib, data.catalog]);
   const found = useMemo(() => query.trim() ? [...data.catalog, ...data.lib.filter(x => !x.catalog)].filter(x => matchesQuery(query, x.title, x.platformName, x.catalog?.developer)) : data.catalog, [data.catalog, data.lib, query]);
 
+  // Jogados recentemente nas primeiras fileiras (com um relógio no canto); a coleção começa numa fileira nova.
+  const split = data.recent, pad = split ? (COLS - (split % COLS)) % COLS : 0;
   const chans: Chan[] = [
-    ...lib.map(g => ({ key: g.key, g })),
+    ...lib.slice(0, split).map(g => ({ key: g.key, g, recent: true })),
+    ...Array.from({ length: pad }, (_, j) => ({ key: `gap${j}`, gap: true })),
+    ...lib.slice(split).map(g => ({ key: g.key, g })),
     ...SPECIAL.map(([sp, l, ic]) => ({ key: sp, sp, l, ic, n: sp === 'cat' ? data.catalog.filter(x => x.isNew).length || undefined : undefined })),
   ];
   const pages = Math.max(1, Math.ceil(chans.length / PER));
   const pageChans = chans.slice(st.page * PER, st.page * PER + PER);
-  const curChan = st.zone === 'grid' ? pageChans[st.ci] ?? null : null;
+  const curChan = st.zone === 'grid' && !pageChans[st.ci]?.gap ? pageChans[st.ci] ?? null : null;
+  /** Canal de verdade mais perto (os vãos depois dos recentes não recebem o cursor). */
+  const solid = (ci: number, list = pageChans) => { let j = Math.min(ci, list.length - 1); while (j > 0 && list[j]?.gap) j--; return Math.max(0, j); };
 
   const view = st.view;
   const game = view?.kind === 'game' ? all.get(view.key) ?? null : null;
@@ -215,14 +222,14 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       if (k === 'LB' && st.page > 0) return mv({ page: st.page - 1, ci: 0 });
       if ((k === 'RB' || k === 'Tab') && st.page < pages - 1) return mv({ page: st.page + 1, ci: 0 });
       if (st.zone === 'bar') {
-        if (L && st.bi > 0) mv({ bi: 0 }); else if (R && st.bi < 1) mv({ bi: 1 }); else if (U) mv({ zone: 'grid', ci: Math.min(st.ci, pageChans.length - 1) });
+        if (L && st.bi > 0) mv({ bi: 0 }); else if (R && st.bi < 1) mv({ bi: 1 }); else if (U) mv({ zone: 'grid', ci: solid(st.ci) });
         return;
       }
-      const col = st.ci % COLS, rowI = Math.floor(st.ci / COLS);
-      if (R) { if (col < COLS - 1 && st.ci + 1 < pageChans.length) mv({ ci: st.ci + 1 }); else if (col === COLS - 1 && st.page < pages - 1) mv({ page: st.page + 1, ci: rowI * COLS }); return; }
-      if (L) { if (col > 0) mv({ ci: st.ci - 1 }); else if (st.page > 0) mv({ page: st.page - 1, ci: rowI * COLS + COLS - 1 }); return; }
-      if (U && rowI > 0) return mv({ ci: st.ci - COLS });
-      if (D) { if (st.ci + COLS < pageChans.length) mv({ ci: st.ci + COLS }); else mv({ zone: 'bar', bi: col < 2 ? 0 : 1 }); }
+      const col = st.ci % COLS, rowI = Math.floor(st.ci / COLS), gap = (j: number) => !!pageChans[j]?.gap;
+      if (R) { if (col < COLS - 1 && st.ci + 1 < pageChans.length && !gap(st.ci + 1)) mv({ ci: st.ci + 1 }); else if (col === COLS - 1 && st.page < pages - 1) mv({ page: st.page + 1, ci: rowI * COLS }); return; }
+      if (L) { if (col > 0) mv({ ci: st.ci - 1 }); else if (st.page > 0) { const prev = chans.slice((st.page - 1) * PER, st.page * PER); mv({ page: st.page - 1, ci: solid(rowI * COLS + COLS - 1, prev) }); } return; }
+      if (U && rowI > 0) { let j = st.ci - COLS; while (j >= COLS && gap(j)) j -= COLS; return mv({ ci: gap(j) ? solid(j) : j }); }
+      if (D) { let j = st.ci + COLS; while (j < pageChans.length && gap(j)) j += COLS; if (j < pageChans.length) mv({ ci: j }); else mv({ zone: 'bar', bi: col < 2 ? 0 : 1 }); }
       return;
     }
     if (sp === 'news' && (k === 'X' || k === 'Y')) {
@@ -253,7 +260,7 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
           <div className="wi-grid" key={st.page}>
             {Array.from({ length: PER }, (_, j) => {
               const ch = pageChans[j];
-              if (!ch) return <div key={`e${j}`} className="wi-ch empty" />;
+              if (!ch || ch.gap) return <div key={`e${j}`} className="wi-ch empty" />;
               const on = !view && st.zone === 'grid' && st.ci === j;
               return (
                 <button key={ch.key} className={`wi-ch ${ch.sp ? 'special' : ''} ${on ? 'on' : ''} ${ch.g?.installed?.missing ? 'missing' : ''}`}
@@ -263,7 +270,7 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
                     up({ zone: 'grid', ci: j }); openChan(ch);
                   }}>
                   {ch.g ? <><Art g={ch.g} v="wide" /><span className="shine" /><span className="lbl">{ch.g.title}</span></> : <><Ic n={ch.ic!} /><b>{ch.l}</b></>}
-                  {ch.g?.installed?.running && <span className="run"><Ic n="play" /></span>}
+                  {ch.g?.installed?.running ? <span className="run"><Ic n="play" /></span> : ch.recent ? <span className="rc" title={tt('Jogado recentemente')}><Ic n="clock" /></span> : null}
                   {ch.n ? <span className="n">{ch.n}</span> : null}
                 </button>
               );

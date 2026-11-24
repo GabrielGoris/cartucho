@@ -96,6 +96,12 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
 
   const achTot = lib.reduce((a, g) => a + (g.installed?.achievements?.total ?? 0), 0);
   const achGot = lib.reduce((a, g) => a + (g.installed?.achievements?.unlocked ?? 0), 0);
+  // Jogos: os jogados recentemente ficam numa página só deles; a coleção começa na página seguinte.
+  // `slot` é a posição na grade paginada; `fi` continua sendo o índice do jogo.
+  const split = tk === 'games' ? data.recent : 0;
+  const slotOf = (fi: number) => (split && fi >= split ? fi - split + PER : fi);
+  const itemOf = (slot: number) => (split ? (slot < PER ? Math.min(slot, split - 1) : split + slot - PER) : slot);
+  const slot = slotOf(st.fi);
   const tiles = ((): Tile[] | null => {
     if (tk === 'home') {
       const [g0, g1] = lib, F = data.feed;
@@ -110,9 +116,9 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
       ];
     }
     if (tk === 'games' || tk === 'cat') {
-      const L = tk === 'games' ? lib : found, pg = Math.floor(st.fi / PER);
-      return L.slice(pg * PER, pg * PER + PER).map((g, j) => ({
-        x: (j % 5) * 254, y: Math.floor(j / 5) * 240, w: 244, h: 230, g, idx: pg * PER + j, cap: g.title,
+      const L = tk === 'games' ? lib : found, pg = Math.floor(slot / PER), from = itemOf(pg * PER);
+      return L.slice(from, split && !pg ? split : from + PER).map((g, j) => ({
+        x: (j % 5) * 254, y: Math.floor(j / 5) * 240, w: 244, h: 230, g, idx: from + j, cap: g.title,
         sub: tk === 'cat' ? `${g.status ? STATUS_LABEL[g.status].toLowerCase() : ''}${g.installed ? ' · instalado' : ''}` : g.installed?.missing ? (g.installed?.uninstalled ? tt('não instalado') : tt('pasta não encontrada')) : g.installed?.playMs ? fmtPlay(g.installed.playMs) : tt('ainda não jogado'),
         tag: g.update?.updateAvailable && !self ? tt('versão nova') : g.isNew ? tt('novo') : undefined, tagCls: g.isNew ? 'new' : '',
         cls: tk === 'cat' && !g.installed ? 'off' : g.installed?.missing ? 'off' : '',
@@ -127,10 +133,11 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
     }
     return null;
   })();
-  const total = tk === 'games' ? lib.length : tk === 'cat' ? found.length : tk === 'news' ? data.feed.length : tiles?.length ?? 0;
+  const total = tk === 'games' ? (split ? PER + lib.length - split : lib.length) : tk === 'cat' ? found.length : tk === 'news' ? data.feed.length : tiles?.length ?? 0;
   const per = tk === 'news' ? 6 : PER;
   const paged = tk === 'games' || tk === 'cat' || tk === 'news';
-  const loc = paged ? st.fi % per : st.fi;
+  const loc = paged ? slot % per : st.fi;
+  const secLabel = split ? (slot < PER ? tt('jogados recentemente') : tt('coleção')) : '';
   const cur = tiles ? tiles[loc] ?? null : null;
   const feed = useFeed(data.feed, tk === 'news' && !st.game);
 
@@ -270,11 +277,11 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
       else if (D && tk === 'cat') focusSearch();
       return;
     }
-    const base = paged ? Math.floor(st.fi / per) * per : 0;
+    const base = paged ? Math.floor(slot / per) * per : 0;
     const nx = nearest(tiles, loc, k);
-    if (nx >= 0) return mv({ fi: base + nx });
-    if (paged && R && total > base + per) return mv({ fi: base + per });
-    if (paged && L && base > 0) return mv({ fi: base - per + (per === PER ? 4 : 2) });
+    if (nx >= 0) return mv({ fi: itemOf(base + nx) });
+    if (paged && R && total > base + per) return mv({ fi: itemOf(base + per) });
+    if (paged && L && base > 0) return mv({ fi: itemOf(base - per + (per === PER ? 4 : 2)) });
     if (D && tk === 'cat') { sfx.play('ok'); return focusSearch(); }
     if (U) return mv({ zone: 'tabs' });
     if (R) { sfx.play('move'); return goTab(st.tab + 1, { zone: 'tiles' }); }
@@ -314,7 +321,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
             ))}</nav>
             {tiles ? (
               <>
-                <div className={`x3-pg ${st.dir < 0 ? 'back' : ''}`} key={`${tk}-${Math.floor(st.fi / per)}`}>
+                <div className={`x3-pg ${st.dir < 0 ? 'back' : ''}`} key={`${tk}-${Math.floor(slot / per)}`}>
                   {tiles.length ? tiles.map((t, j) => (
                     <button key={`${t.cap}-${j}`} className={`xt ${t.cls ?? ''} ${st.zone === 'tiles' && j === loc ? 'on' : ''}`} style={{ left: t.x, top: t.y, width: t.w, height: t.h }}
                       onClick={e => {
@@ -337,7 +344,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
                   )}
                 </div>
                 <div className="x3-peek"><div>{TABS[(st.tab + 1) % TABS.length]![1]}</div><div /><div /></div>
-                {pages > 1 && <div className="x3-pages">{Math.floor(st.fi / per) + 1} / {pages}</div>}
+                {(pages > 1 || secLabel) && <div className="x3-pages">{secLabel && <b>{secLabel}</b>}{pages > 1 && `${Math.floor(slot / per) + 1} / ${pages}`}</div>}
               </>
             ) : (
               <div className={`x3-lw ${st.dir < 0 ? 'back' : ''}`} key={tk}>
@@ -377,7 +384,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
     </section>
   );
 
-  function mv2(j: number) { sfx.play('move'); up({ zone: 'tiles', fi: (paged ? Math.floor(st.fi / per) * per : 0) + j }); }
+  function mv2(j: number) { sfx.play('move'); up({ zone: 'tiles', fi: paged ? itemOf(Math.floor(slot / per) * per + j) : j }); }
 }
 
 function Backdrop({ g }: { g: HubGame | null }) {

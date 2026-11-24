@@ -19,6 +19,7 @@ import { semArquivos, tileClick } from '@shared/gameclick';
 import { otherConsoles } from '../stage/consoles';
 import { Obj, SHELLS, shellH, type Kind } from './shells';
 import { tt } from '@shared/i18n';
+import { gridStep } from '@shared/library';
 
 type Tab = 'games' | 'disc' | 'news' | 'ach' | 'time' | 'cfg';
 interface Cfg { kind: Kind; sfx: string; boot: 'retro' | 'soft' | 'white' }
@@ -41,7 +42,7 @@ export const RETRO: Record<string, Cfg> = {
 const TABS: [Tab, string][] = [['games', tt('Meus jogos')], ['disc', tt('Descobrir')], ['news', tt('Novidades')], ['ach', tt('Conquistas')], ['time', tt('Tempo')], ['cfg', tt('Ajustes')]];
 const FEED = { new: tt('Novo no catálogo'), upd: tt('Versão nova'), up: tt('Mudou de status') } as const;
 const CFG_ROWS: Row[] = [{ key: 'dir', id: 'dir', t: tt('Pasta dos jogos') }, { key: 'snd', id: 'snd', t: tt('Sons') }, { key: 'radar', id: 'radar', t: tt('Radar de novidades') }, { key: 'off', id: 'off', t: tt('Voltar ao Cartucho') }];
-const VISIBLE = 7;
+const VISIBLE = 7, SEC_H = 72;
 
 export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: string; tab?: 'lib' | 'cat'; onBack: () => void }) {
   const c = CONSOLES.find(x => x.id === id)!;
@@ -68,6 +69,7 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
   }, []);
 
   const mine = data.lib;
+  const split = data.recent < mine.length ? data.recent : 0;
   const lookup = useMemo(() => new Map([...data.lib, ...data.catalog].flatMap(x => [[x.key, x] as const, ...(x.installed && x.catalog ? [[x.catalog.id, x] as const] : [])])), [data.lib, data.catalog]);
   const shown = useRef(false);
   useEffect(() => {
@@ -143,11 +145,8 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
       if (!g) return;
       if (k === 'X') return openGame(g);
       const n = mine.length, i = st.idx;
-      if (R && i % cols < cols - 1 && i + 1 < n) mv({ idx: i + 1 });
-      else if (L && i % cols > 0) mv({ idx: i - 1 });
-      else if (D && i + cols < n) mv({ idx: i + cols });
-      else if (D && Math.floor(i / cols) < Math.floor((n - 1) / cols)) mv({ idx: n - 1 });
-      else if (U && i >= cols) mv({ idx: i - cols });
+      const to = R || L || U || D ? gridStep(i, n, cols, split, R ? 'R' : L ? 'L' : U ? 'U' : 'D') : null;
+      if (typeof to === 'number') mv({ idx: to });
       else if (k === 'RT') mv({ idx: Math.min(n - 1, i + cols * 2) });
       else if (k === 'LT') mv({ idx: Math.max(0, i - cols * 2) });
       return;
@@ -195,9 +194,23 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
       <span className="rg-s">{line(x)}</span>
     </button>
   );
-  const rowI = Math.floor(st.idx / cols);
+  // Jogados recentemente numa grade própria no alto; a coleção vem embaixo, com um título para cada parte.
+  const yOf = (i: number) => !split ? Math.floor(i / cols) * rh
+    : i < split ? SEC_H + Math.floor(i / cols) * rh
+    : SEC_H * 2 + Math.ceil(split / cols) * rh + Math.floor((i - split) / cols) * rh;
   const viewH = kind === 'nds' ? 790 : 796;
-  const shift = Math.max(0, (rowI + 1) * rh - viewH + 40);
+  const shift = Math.max(0, yOf(st.idx) + rh - viewH + 40);
+  const gridOf = (a: number, b: number) => (
+    <div className="rg-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, gridAutoRows: rh }}>{mine.slice(a, b).map((x, j) => item(x, a + j))}</div>
+  );
+  const games = (
+    <div className="rg-view"><div className="rg-stack" style={{ transform: `translateY(-${shift}px)` }}>
+      {split ? <>
+        <h3 className="rg-sec" style={{ height: SEC_H }}>{tt('Jogados recentemente')}</h3>{gridOf(0, split)}
+        <h3 className="rg-sec" style={{ height: SEC_H }}>{tt('Coleção')}<small>{plural(mine.length - split, tt('jogo'), tt('jogos'))}</small></h3>{gridOf(split, mine.length)}
+      </> : gridOf(0, mine.length)}
+    </div></div>
+  );
 
   const empty = (
     <div className="rw rg-empty">
@@ -219,11 +232,11 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
             </div>
             <div className="ds-hinge" />
             <div className="ds-bot">
-              <div className="rg-view"><div className="rg-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, gridAutoRows: rh, transform: `translateY(-${shift}px)` }}>{mine.map(item)}</div></div>
+              {games}
             </div>
           </>
         ) : mine.length ? (
-          <div className="rg-view"><div className="rg-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, gridAutoRows: rh, transform: `translateY(-${shift}px)` }}>{mine.map(item)}</div></div>
+          games
         ) : empty)}
 
         {tk !== 'games' && tk !== 'disc' && (

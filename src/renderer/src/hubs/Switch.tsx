@@ -244,7 +244,7 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
             ? game && <GameView theme="d-s2" g={game} self={self} opts={gOpts(game)} run={gRun} onBack={closeGame}
                 />
             : st.page === 'home'
-            ? <Home v1={v1} row={row} st={st} feedCount={data.feed.length} updCount={data.withUpdate.length} newCount={data.catalog.filter(g => g.isNew).length}
+            ? <Home v1={v1} row={row} split={data.recent} st={st} feedCount={data.feed.length} updCount={data.withUpdate.length} newCount={data.catalog.filter(g => g.isNew).length}
                 onTile={(i, e) => {
                   const g = row[i];
                   if (e && g) return tileClick(e, g, { select: () => { if (st.zone !== 'row' || st.idx !== i) { sfx.play('move'); up({ zone: 'row', idx: i }); } }, page: () => openHome(g), play: () => doPrimary(g) });
@@ -288,13 +288,15 @@ export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; gam
   );
 }
 
-function Home({ v1, row, st, feedCount, updCount, newCount, onTile, onDock, hints }: {
-  v1: boolean; row: HubGame[]; st: St; feedCount: number; updCount: number; newCount: number; onTile: (i: number, e?: MouseEvent) => void; onDock: (j: number) => void; hints: ReactNode;
+function Home({ v1, row, split, st, feedCount, updCount, newCount, onTile, onDock, hints }: {
+  v1: boolean; row: HubGame[]; split: number; st: St; feedCount: number; updCount: number; newCount: number; onTile: (i: number, e?: MouseEvent) => void; onDock: (j: number) => void; hints: ReactNode;
 }) {
   const me = useProfile();
   const clock = useClock();
   const P = v1 ? 392 : 394, X0 = v1 ? 104 : 150, n = row.length, inDock = st.zone === 'dock', i = st.idx;
-  const shift = Math.max(0, i - 2) * P, x = X0 + i * P - shift, g = row[i];
+  // Jogados recentemente e coleção: um espaço com um traço separa as duas partes da fileira.
+  const gap = (k: number) => (split && k >= split ? SEC_GAP : 0);
+  const shift = Math.max(0, i - 2) * P + gap(Math.max(0, i - 2)), x = X0 + i * P + gap(i) - shift, g = row[i];
   return (
     <>
       <div className="top">
@@ -306,12 +308,13 @@ function Home({ v1, row, st, feedCount, updCount, newCount, onTile, onDock, hint
       </div>
       {!inDock && n > 0 && <div className="tname" style={{ left: x }}>{g ? g.title : tt('Descobrir mais')}</div>}
       <div className="row" style={{ transform: `translateX(-${shift}px)` }}>
-        {row.map((t, k) => <Tile key={t.key} g={t} on={!inDock && k === i} first={k === 0} onClick={e => onTile(k, e)} />)}
+        {row.map((t, k) => <Tile key={t.key} g={t} on={!inDock && k === i} first={k === 0} onClick={e => onTile(k, e)}
+          sec={split && k === 0 ? tt('Jogados recentemente') : split && k === split ? tt('Coleção') : undefined} split={!!split && k === split} />)}
         {n === 0
           ? <button className={`tile all empty ${!inDock ? 'on' : ''}`} onClick={() => onTile(0)}>
               <Ic n="compass" /><b>{tt('Nenhum jogo por aqui ainda')}</b><span>{tt('Descubra recomps para instalar em Descobrir')}</span>
             </button>
-          : <button className={`tile all ${!inDock && i === n ? 'on' : ''}`} onClick={() => onTile(n)}><Ic n="compass" />{tt('Descobrir mais')}</button>}
+          : <button className={`tile all ${!inDock && i === n ? 'on' : ''} ${split && split === n ? 'split' : ''}`} onClick={() => onTile(n)}><Ic n="compass" />{tt('Descobrir mais')}</button>}
       </div>
       {!inDock && g && <Meta g={g} x={x} />}
       <nav className="dock">
@@ -329,11 +332,14 @@ function Home({ v1, row, st, feedCount, updCount, newCount, onTile, onDock, hint
   );
 }
 
-function Tile({ g, on, first, onClick }: { g: HubGame; on: boolean; first: boolean; onClick: (e: MouseEvent) => void }) {
+const SEC_GAP = 56;
+
+function Tile({ g, on, first, onClick, sec, split }: { g: HubGame; on: boolean; first: boolean; onClick: (e: MouseEvent) => void; sec?: string; split?: boolean }) {
   const { initial } = useProfile();
   const p = useGameProgress(g);
   return (
-    <button className={`tile ${g.installed && !g.installed.missing ? '' : 'off'} ${on ? 'on' : ''}`} onClick={onClick} aria-label={g.title}>
+    <button className={`tile ${g.installed && !g.installed.missing ? '' : 'off'} ${on ? 'on' : ''} ${split ? 'split' : ''}`} onClick={onClick} aria-label={g.title}>
+      {sec && <span className="sec">{sec}</span>}
       <Art g={g} v="square" />
       {!g.installed && !p && <span className="dlb"><Ic n="dl" /></span>}
       {first && g.installed?.lastPlayed && !g.installed.running && <span className="cont"><b>{initial}</b>{tt('Continuar')}</span>}

@@ -92,3 +92,6 @@
 .p5-pg.p5-gpage { background: #0d0e12; }
 .p5-pg.p5-gpage .p5-ft { left: auto; right: 120px; top: 56px; bottom: auto; z-index: 3; padding: 10px 20px; border-radius: 16px; background: rgba(13,14,18,.55); backdrop-filter: blur(8px); }
 @keyframes p5bob { 50% { transform: translateY(6px); } }
+.p5-t.sec { margin-left: 44px; }
+.p5-t.sec::before { content: ''; position: absolute; left: -30px; top: 16px; width: 2px; height: 80px; border-radius: 2px; background: rgba(255,255,255,.22); }
+.p5-sec { position: absolute; left: 4px; top: -26px; white-space: nowrap; font-size: 15px; font-weight: 500; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,.6); pointer-events: none; }

@@ -108,3 +108,6 @@
 .p3.psp .p3-tx > p { font-weight: 400; }
 .p3.psp .p3-hn { opacity: .95; text-shadow: 0 1px 4px rgba(0,30,80,.5); }
 @media (prefers-reduced-motion: reduce) { .p3-it.on .p3-gl, .p3-rib, .p3-tx, .p3-opt { animation: none; } .p3-it { transition: none; } }
+.p3-sec { position: absolute; left: 0; top: 0; width: 2px; height: 120px; background: rgba(255,255,255,.35); border-radius: 2px; transition: transform .36s cubic-bezier(.2,.8,.3,1); pointer-events: none; }
+.p3-sec b { position: absolute; top: -34px; white-space: nowrap; font-size: 19px; font-weight: 400; letter-spacing: 2px; text-transform: uppercase; opacity: .75; }
+.p3-sec.r b { left: 14px; }

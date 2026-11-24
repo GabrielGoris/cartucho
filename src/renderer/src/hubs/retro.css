@@ -131,4 +131,8 @@
 .t-nds .dsc.d-retro, .t-gb .dsc.d-retro { --d-line: rgba(0,0,0,.18); --d-dim: color-mix(in srgb, var(--wc) 70%, transparent); }
 .t-ps2 .dsc.d-retro { --d-bg: radial-gradient(ellipse 90% 80% at 22% 18%, #4a4a52 0%, #26262c 50%, #0e0e12 100%); --gv-solid: #18181d; }
 .t-ps2 .dsc.d-retro .dsc-det, .t-ps2 .dsc.d-retro .dsc-menu { backdrop-filter: blur(10px); }
-@media (prefers-reduced-motion: reduce) { .rg-grid, .rg-it .obj { transition: none; animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .rg-grid, .rg-stack, .rg-it .obj { transition: none; animation: none !important; } }
+.rg-stack { transition: transform .3s cubic-bezier(.2,.8,.3,1); }
+.rg-stack .rg-grid { transition: none; }
+.rg-sec { margin: 0; display: flex; align-items: center; gap: 16px; font-size: 24px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; opacity: .75; }
+.rg-sec small { font-size: 19px; font-weight: 400; letter-spacing: 0; text-transform: none; opacity: .8; }

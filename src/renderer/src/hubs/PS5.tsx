@@ -232,7 +232,7 @@ export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
     <section className="view hub sk-p5" style={{ ['--cc' as string]: c.color }}>
       <Fit w={1920} h={1080} className="p5" style={{ ['--cc' as string]: c.color }}>
         {st.page === 'home' ? (
-          <Home c={c.name} g={g} row={row} st={st} self={self} clock={clock} feedCount={data.feed.length} catCount={data.catalog.length}
+          <Home c={c.name} g={g} row={row} split={data.recent} st={st} self={self} clock={clock} feedCount={data.feed.length} catCount={data.catalog.length}
             primary={g ? primaryOf(g).l : tt('Descobrir')} feed={g ? data.feed.find(f => f.gameId === g.catalog?.id) ?? null : null}
             onTile={(i, e) => {
               const x = row[i];
@@ -316,8 +316,11 @@ function PortsDir() {
   return <>{q.data ?? '…'}</>;
 }
 
-function Home({ c, g, row, st, self, clock, feedCount, catCount, primary, feed, onTile, onTop, onAct, onCard, hints, menu }: {
-  c: string; g: HubGame | null; row: HubGame[]; st: St; self: boolean; clock: string; feedCount: number; catCount: number; primary: string;
+/** Espaço entre os jogados recentemente e a coleção na fileira. */
+const SEC_GAP = 44;
+
+function Home({ c, g, row, split, st, self, clock, feedCount, catCount, primary, feed, onTile, onTop, onAct, onCard, hints, menu }: {
+  c: string; g: HubGame | null; row: HubGame[]; split: number; st: St; self: boolean; clock: string; feedCount: number; catCount: number; primary: string;
   feed: { kind: 'new' | 'upd' | 'up'; detail: string; at: number } | null;
   onTile: (i: number, e?: MouseEvent) => void; onTop: (j: number) => void; onAct: (j: number) => void; onCard: (j: number) => void; hints: ReactNode; menu: ReactNode;
 }) {
@@ -339,15 +342,16 @@ function Home({ c, g, row, st, self, clock, feedCount, catCount, primary, feed, 
         <span className="p5-brand">{tt('Cartucho')}</span>
         <span className="p5-clock">{clock}</span>
       </div>
-      <div className="p5-row" style={{ transform: `translateX(-${Math.max(0, i - 2) * 126}px)` }}>
+      <div className="p5-row" style={{ transform: `translateX(-${Math.max(0, i - 2) * 126 + (split && Math.max(0, i - 2) >= split ? SEC_GAP : 0)}px)` }}>
         {row.map((x, k) => (
-          <button key={x.key} className={`p5-t ${k === i ? 'on' : ''} ${x.installed?.missing ? 'missing' : ''}`} aria-label={x.title} onClick={e => onTile(k, e)}>
+          <button key={x.key} className={`p5-t ${k === i ? 'on' : ''} ${x.installed?.missing ? 'missing' : ''} ${split && k === split ? 'sec' : ''}`} aria-label={x.title} onClick={e => onTile(k, e)}>
+            {split > 0 && (k === 0 || k === split) && <span className="p5-sec">{k ? tt('Coleção') : tt('Jogados recentemente')}</span>}
             <Art g={x} v="square" />
             {x.installed?.running && <span className="run"><Ic n="play" /></span>}
             {k === i && z === 'row' && <span className="p5-lab">{x.title}</span>}
           </button>
         ))}
-        <button className={`p5-t add ${i === n ? 'on' : ''}`} aria-label={tt('Descobrir')} onClick={() => onTile(n)}>
+        <button className={`p5-t add ${i === n ? 'on' : ''} ${split && n === split ? 'sec' : ''}`} aria-label={tt('Descobrir')} onClick={() => onTile(n)}>
           <Ic n="plus" />{i === n && z === 'row' && <span className="p5-lab">{tt('Descobrir')}</span>}
         </button>
       </div>

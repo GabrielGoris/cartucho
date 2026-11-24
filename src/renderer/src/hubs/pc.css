@@ -106,3 +106,6 @@
 .pc .stoast { font-size: 26px; padding: 16px 30px; bottom: 110px; font-family: 'Rubik', system-ui, sans-serif; }
 @media (prefers-reduced-motion: reduce) { .pc-pg, .pc-menu, .pc-hero .art img { animation: none; } }
 .pc > .dsc.d-pc:not(.gv) { inset: 96px auto auto 85px; width: 1920px; height: 1080px; transform: scale(.91111); transform-origin: 0 0; background: transparent; }
+.pc-sh { display: flex; align-items: baseline; gap: 14px; margin: 8px 60px 16px; font-size: 22px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #c7d0dc; }
+.pc-sh small { font-size: 17px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--mut); }
+.pc-grid + .pc-sh { margin-top: 40px; }

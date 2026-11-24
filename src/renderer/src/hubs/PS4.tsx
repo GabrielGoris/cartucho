@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import { semArquivos, tileClick } from '@shared/gameclick';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConsoleId, RadarEvent } from '@shared/types';
@@ -41,7 +41,7 @@ const CAT_SIDE: Side[] = [
 ];
 const NEWS_SIDE: Side[] = [{ k: 'all', l: tt('Tudo'), ic: 'bell' }, { k: 'new', l: tt('Novos no catálogo'), ic: 'star' }, { k: 'upd', l: tt('Versões novas'), ic: 'dl' }, { k: 'up', l: tt('Mudou de status'), ic: 'chart' }];
 const CFG_SIDE: Side[] = [{ k: 'dir', l: tt('Pasta dos jogos'), ic: 'folder' }, { k: 'snd', l: tt('Sons da interface'), ic: 'sound' }, { k: 'radar', l: tt('Radar de novidades'), ic: 'bell' }, { k: 'off', l: tt('Voltar ao Cartucho'), ic: 'power' }];
-const ROW_H = 132, SIDE_H = 78, TILE = 220, GAP = 14;
+const ROW_H = 132, SIDE_H = 78, TILE = 220, GAP = 14, SEC_W = 16;
 
 const Art = ({ g, v }: { g: HubGame; v: 'cover' | 'wide' | 'square' }) =>
   <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant={v} done={!!g.installed?.achievements?.complete} />;
@@ -305,7 +305,7 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       <Fit w={1920} h={1080} className="p4" style={{ ['--cc' as string]: c.color }}>
         <Ribbons />
         {st.page === 'home' ? (
-          <Home row={row} g={g} st={st} self={self} clock={clock} catCount={data.catalog.length} cname={c.name} feed={data.feed}
+          <Home row={row} split={data.recent} g={g} st={st} self={self} clock={clock} catCount={data.catalog.length} cname={c.name} feed={data.feed}
             primary={g ? primaryOf(g).l : tt('Abrir')}
             onFn={j => { up({ zone: 'fn', di: j }); fn(j); }}
             onTile={(i, e) => {
@@ -359,8 +359,8 @@ export function PS4Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
   );
 }
 
-function Home({ row, g, st, self, clock, catCount, cname, feed, primary, onFn, onTile, onCard }: {
-  row: HubGame[]; g: HubGame | null; st: St; self: boolean; clock: string; catCount: number; cname: string; feed: RadarEvent[]; primary: string;
+function Home({ row, split, g, st, self, clock, catCount, cname, feed, primary, onFn, onTile, onCard }: {
+  row: HubGame[]; split: number; g: HubGame | null; st: St; self: boolean; clock: string; catCount: number; cname: string; feed: RadarEvent[]; primary: string;
   onFn: (j: number) => void; onTile: (i: number, e?: MouseEvent) => void; onCard: (j: number) => void;
 }) {
   const z = st.zone, i = st.idx, n = row.length;
@@ -385,14 +385,19 @@ function Home({ row, g, st, self, clock, catCount, cname, feed, primary, onFn, o
         <span className="p4-clock">{clock}</span>
       </div>
       <div className="p4-rule" />
-      <div className="p4-row" style={{ transform: `translateX(-${Math.max(0, i - 1) * (TILE + GAP)}px)` }}>
+      <div className="p4-row" style={{ transform: `translateX(-${Math.max(0, i - 1) * (TILE + GAP) + (split && Math.max(0, i - 1) >= split ? SEC_W + GAP : 0)}px)` }}>
+        {split > 0 && <span className="p4-sec">{tt('Jogados recentemente')}</span>}
         {row.map((x, k) => (
+          <Fragment key={x.key}>
+          {split > 0 && k === split && <span className="p4-div"><span className="p4-sec">{tt('Coleção')}</span></span>}
           <button key={x.key} className={`p4-t ${k === i && z !== 'fn' ? 'on' : ''} ${x.installed?.missing ? 'missing' : ''}`} aria-label={x.title} onClick={e => onTile(k, e)}>
             <Art g={x} v="square" />
             {x.installed?.running && <span className="run"><Ic n="play" /></span>}
             <span className="band">{k === i ? primary : ''}</span>
           </button>
+          </Fragment>
         ))}
+        {split > 0 && split === n && <span className="p4-div" />}
         <button className={`p4-t add ${i === n && z !== 'fn' ? 'on' : ''}`} onClick={() => onTile(n)}><Ic n="compass" />{tt('Descobrir')}</button>
       </div>
       {g ? (
