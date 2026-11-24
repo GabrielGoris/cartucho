@@ -22,7 +22,7 @@ export const CONSOLES: StageConsole[] = [
   { id: 'switch', name: 'Nintendo Switch', short: 'NSW', year: 2017, maker: 'Nintendo', color: '#ff4f5e', cm: 24, model: ['nintendo_switch.glb', 0, 1.1] },
   { id: 'switch2', name: 'Nintendo Switch 2', short: 'NS2', year: 2025, maker: 'Nintendo', color: '#ff7a45', cm: 27.2, model: ['nintendo_switch_2.glb', -PI / 2, 1.1] },
   { id: 'ps1', name: 'PlayStation', short: 'PS1', year: 1994, maker: 'Sony', color: '#c7bfe0', cm: 27, model: ['playstation_1.glb', 0, 0] },
-  { id: 'ps2', name: 'PlayStation 2', short: 'PS2', year: 2000, maker: 'Sony', color: '#3d6bff', cm: 30, model: ['ps2_console.glb', PI / 2, 0] },
+  { id: 'ps2', name: 'PlayStation 2', short: 'PS2', year: 2000, maker: 'Sony', color: '#3d6bff', cm: 30, model: ['ps2_console.glb', -PI / 2, 0] },
   { id: 'psp', name: 'PSP', short: 'PSP', year: 2004, maker: 'Sony', color: '#c084fc', cm: 17, model: ['sony_psp.glb', 0, 0] },
   { id: 'ps3', name: 'PlayStation 3', short: 'PS3', year: 2006, maker: 'Sony', color: '#9a86e8', cm: 29, model: ['ps3_slim.glb', PI, 0] },
   { id: 'ps4', name: 'PlayStation 4', short: 'PS4', year: 2013, maker: 'Sony', color: '#4f8dff', cm: 30.5, model: ['playstation_4_original.glb', PI / 2, 0, 0.3, 0.6] },
