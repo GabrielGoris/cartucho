@@ -4,7 +4,7 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { Palette } from '../lib/palettes';
 import { stageSize, type StageConsole } from './consoles';
-import { loadStageModel, setModelFocus, type StageModel } from './models';
+import { loadStageModel, releaseStageModels, setModelFocus, type StageModel } from './models';
 import { tt } from '@shared/i18n';
 
 const PAD_Y = 0.026, PAD_TOP = PAD_Y + 0.04;
@@ -44,7 +44,7 @@ export function Stage(p: Props) {
   const [asleep, setAsleep] = useState(false);
   useEffect(() => {
     if (!p.sleep) { setAsleep(false); return; }
-    const t = window.setTimeout(() => { live.current = null; clearTimeout(retry.current); setAsleep(true); }, SLEEP_AFTER_MS);
+    const t = window.setTimeout(() => { live.current = null; clearTimeout(retry.current); setAsleep(true); setTimeout(releaseStageModels, 0); }, SLEEP_AFTER_MS);
     return () => clearTimeout(t);
   }, [p.sleep]);
   if (asleep) return <div className={`stage stage-${p.mode}`} />;
@@ -60,6 +60,7 @@ export function Stage(p: Props) {
             if (live.current !== el) return;
             live.current = null;
             console.warn('[palco] contexto WebGL perdido, recriando');
+            releaseStageModels();
             clearTimeout(retry.current);
             retry.current = window.setTimeout(() => setGen(g => g + 1), 1200);
           });
@@ -67,6 +68,8 @@ export function Stage(p: Props) {
         flat
         gl={{ antialias: false, powerPreference: 'high-performance' }}
         camera={{ fov: 36, near: 0.1, far: 80, position: geometry(p.list.length).CAM_HOME.toArray() }}
+        // Mesma conta do efeito no Scene: sem isso o Canvas abria com a resolução padrão e o "Palco pixelado" só valia depois de remontar.
+        dpr={p.pixel ? Math.min(1, 520 / Math.max(1, window.innerWidth)) : Math.min(2, window.devicePixelRatio || 1)}
         frameloop={p.mode === 'hidden' ? 'never' : 'always'}
         aria-label={tt('Consoles em 3D girando num palco')}
       >

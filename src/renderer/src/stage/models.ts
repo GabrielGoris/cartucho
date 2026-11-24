@@ -92,5 +92,45 @@ async function loadNow(c: StageConsole): Promise<StageModel> {
   // ex.: a tela do fliperama com o Pac-Man
   let mixer: THREE.AnimationMixer | null = null;
   if (res.animations?.length) { mixer = new THREE.AnimationMixer(o); res.animations.forEach(a => mixer!.clipAction(a).play()); }
-  return { object: inner, mixer };
+
+  // O clique acerta uma caixa invisível do tamanho do console, e não os milhares de triângulos do modelo.
+  const root = new THREE.Group(); root.add(inner);
+  const hb = new THREE.Box3().setFromObject(inner), hs = hb.getSize(new THREE.Vector3());
+  const hit = new THREE.Mesh(new THREE.BoxGeometry(hs.x, hs.y, hs.z), new THREE.MeshBasicMaterial({ visible: false }));
+  hb.getCenter(hit.position); root.add(hit);
+  freeAfterUpload(inner);
+  return { object: root, mixer };
+}
+
+/**
+ * Depois que a geometria e as texturas vão para a placa de vídeo, a cópia na memória da tela não serve
+ * mais: é solta (é a maior parte do que o palco ocupava). Por isso o modelo não pode ser montado de novo
+ * num palco novo: releaseStageModels() faz recarregar do disco.
+ */
+function freeAfterUpload(o: THREE.Object3D) {
+  const free = function (this: THREE.BufferAttribute) { (this as unknown as { array: null }).array = null; };
+  const close = (t: THREE.Texture) => { (t.source.data as { close?: () => void } | null)?.close?.(); };
+  o.traverse(x => {
+    const m = x as THREE.Mesh; if (!m.isMesh) return;
+    const g = m.geometry;
+    g.computeBoundingBox(); g.computeBoundingSphere();
+    for (const a of [...Object.values(g.attributes), g.index]) if (a && (a as THREE.BufferAttribute).isBufferAttribute) (a as THREE.BufferAttribute).onUpload(free);
+    m.raycast = () => {};
+    const ms = (Array.isArray(m.material) ? m.material : [m.material]) as unknown as Record<string, unknown>[];
+    for (const mt of ms) for (const v of Object.values(mt)) if (v instanceof THREE.Texture) v.onUpdate = close;
+  });
+}
+
+/** Solta os modelos carregados (palco desmontado ou contexto do WebGL perdido): o próximo palco recarrega do disco. */
+export function releaseStageModels() {
+  const old = [...cache.values()];
+  cache.clear(); waiting.clear();
+  for (const p of old) void p.then(m => m.object.traverse(x => {
+    const mesh = x as THREE.Mesh; if (!mesh.isMesh) return;
+    mesh.geometry.dispose();
+    for (const mt of (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as unknown as Record<string, unknown>[]) {
+      for (const v of Object.values(mt)) if (v instanceof THREE.Texture) v.dispose();
+      (mt as unknown as THREE.Material).dispose();
+    }
+  }), () => {});
 }
