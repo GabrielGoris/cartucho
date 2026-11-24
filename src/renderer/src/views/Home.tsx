@@ -46,7 +46,7 @@ export function Home({ games, summary, onOpenGame, onPlay, playError, onStage, o
   return (
     <div className="home">
       <div className="hm2-hero">
-        <GameArt title={top.title} console={top.console} fallback={top.coverUrl} />
+        <GameArt title={top.title} console={top.console} fallback={top.coverUrl} done={!!top.achievements?.complete} />
         <div className="hm2-txt">
           <span className="k" style={{ color: color(top.console) }}>{live ? tt('JOGANDO AGORA') : top.lastPlayed ? tt('CONTINUAR') : tt('NA SUA BIBLIOTECA')} · {CONSOLE_NAME[top.console].toUpperCase()}</span>
           <h1>{top.title}</h1>
@@ -67,7 +67,7 @@ export function Home({ games, summary, onOpenGame, onPlay, playError, onStage, o
           {rec.map(g => (
             <button key={g.id} data-hf aria-label={g.title} onClick={() => onOpenGame(g)}
               onMouseEnter={showCap} data-cap={`${g.title} · ${CONSOLE_NAME[g.console]}${g.playMs ? ` · ${fmtPlay(g.playMs)}` : ''}`}>
-              <GameArt title={g.title} console={g.console} fallback={g.coverUrl} />
+              <GameArt title={g.title} console={g.console} fallback={g.coverUrl} done={!!g.achievements?.complete} />
             </button>
           ))}
           <button className="more" data-hf data-cap={tt('Adicionar jogo')} aria-label={tt('Adicionar jogo')} onClick={onAddGame} onMouseEnter={showCap}>+</button>

@@ -512,3 +512,29 @@ body.has-tb .web-ov { top: 36px; }
 .hm-achbar button[data-on], .hm-achbar button:hover { color: var(--ink); border-color: var(--acc); }
 .hm-ach .hm-row { grid-template-columns: 34px 1fr auto auto; }
 .hm-ach .hm-row > i { justify-self: center; }
+
+/* ===== 100% das conquistas: selo na capa e comemoração ===== */
+.cv-done { position: absolute; top: 6px; right: 6px; z-index: 3; padding: 3px 7px 2px; border-radius: 6px; font: 800 11px/1 var(--font-body); letter-spacing: .5px; color: #2a1a00;
+  background: linear-gradient(135deg, #fff1b0, #ffcf4a 45%, #e0a000); box-shadow: 0 0 0 1px rgba(0,0,0,.35), 0 2px 8px rgba(255,190,40,.55); pointer-events: none; }
+.plat { position: fixed; inset: 0; z-index: 62; display: grid; place-items: center; background: radial-gradient(ellipse at center, rgba(40,26,0,.82), rgba(5,3,12,.94) 70%); animation: platIn .35s ease-out; cursor: pointer; }
+.plat-conf { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.plat-conf i { position: absolute; top: -4%; border-radius: 2px; opacity: 0; animation: platFall linear forwards; }
+.plat-box { position: relative; display: flex; align-items: center; gap: 48px; padding: 40px 56px; border-radius: 22px; background: linear-gradient(135deg, rgba(60,40,4,.92), rgba(16,10,2,.95));
+  border: 2px solid #ffcf4a; box-shadow: 0 0 60px rgba(255,190,40,.45), inset 0 0 40px rgba(255,200,80,.12); animation: platPop .7s cubic-bezier(.2,1.5,.4,1) both; overflow: hidden; }
+.plat-rays { position: absolute; inset: -60%; background: repeating-conic-gradient(from 0deg, rgba(255,210,90,.12) 0 8deg, transparent 8deg 20deg); animation: platSpin 18s linear infinite; pointer-events: none; }
+.plat-cover { position: relative; width: 220px; flex: none; border-radius: 10px; box-shadow: 0 0 0 3px #ffcf4a, 0 0 40px rgba(255,200,60,.6); overflow: hidden; animation: platGlow 2.4s ease-in-out infinite; }
+.plat-cover .cv { aspect-ratio: 3 / 4; width: 100%; }
+.plat-cover .cv-done { font-size: 14px; top: 8px; right: 8px; }
+.plat-txt { position: relative; min-width: 320px; max-width: 520px; }
+.plat-k { font: 700 16px var(--font-display); letter-spacing: 3px; color: #ffcf4a; }
+.plat-pct { font: 400 112px/1 var(--font-display); margin: 14px 0 10px; background: linear-gradient(180deg, #fff6c8, #ffcf4a 55%, #d49100); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 4px 18px rgba(255,190,40,.55)); animation: platPct .8s .25s cubic-bezier(.2,1.6,.4,1) both; }
+.plat-g { font-size: 30px; font-weight: 800; color: #fff; }
+.plat-n { margin-top: 8px; font-size: 20px; color: #f4e2b0; opacity: .9; }
+@keyframes platIn { from { opacity: 0; } }
+@keyframes platPop { from { transform: scale(.6); opacity: 0; } }
+@keyframes platPct { from { transform: scale(.3) rotate(-8deg); opacity: 0; } }
+@keyframes platSpin { to { transform: rotate(360deg); } }
+@keyframes platGlow { 50% { box-shadow: 0 0 0 3px #ffe58a, 0 0 70px rgba(255,210,90,.85); } }
+@keyframes platFall { 0% { opacity: 1; transform: translate(0, 0) rotate(0); } 100% { opacity: .9; transform: translate(var(--drift), 108vh) rotate(var(--rot)); } }
+.reduce .plat-box, .reduce .plat-pct, .reduce .plat-rays, .reduce .plat-cover { animation: none; }

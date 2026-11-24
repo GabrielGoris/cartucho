@@ -1,4 +1,9 @@
 export const EN: Record<string, string> = {
+  "100% · TODAS AS {0} CONQUISTAS": "100% · ALL {0} ACHIEVEMENTS",
+  "100% das conquistas": "100% of achievements",
+  "JOGO COMPLETO": "GAME COMPLETE",
+  "Todas as {0} conquistas desbloqueadas": "All {0} achievements unlocked",
+  "100% · {0} conquistas": "100% · {0} achievements",
   "Não deu para mandar {0} para a Lixeira: {1}": "Couldn't move {0} to the Recycle Bin: {1}",
   " Os arquivos do jogo não são apagados.": " The game files aren't deleted.",
   "Apagar tudo: apaga o tempo de jogo e as conquistas do Cartucho e manda para a Lixeira as pastas de saves e conquistas do crack:\n{0}": "Delete everything: deletes the playtime and achievements in Cartucho and moves the crack's save and achievement folders to the Recycle Bin:\n{0}",

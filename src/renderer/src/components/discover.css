@@ -108,6 +108,8 @@
 .gv-achpill { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px 0 10px; border: 0; border-radius: 99px; background: color-mix(in srgb, var(--d-ink) 12%, transparent); color: var(--d-ink); font: inherit; font-size: 20px; font-weight: 500; cursor: pointer; transition: transform .12s, box-shadow .12s, background .12s; }
 .gv-achpill:hover { background: color-mix(in srgb, var(--d-ink) 20%, transparent); }
 .gv-achpill.on { box-shadow: var(--d-focus); transform: scale(1.06); }
+.gv-achpill.done { background: linear-gradient(135deg, #fff1b0, #ffcf4a 45%, #e0a000); color: #2a1a00; font-weight: 800; box-shadow: 0 0 18px rgba(255,190,40,.45); }
+.gv-achpill.done.on { box-shadow: var(--d-focus), 0 0 18px rgba(255,190,40,.6); }
 .gv-achpill-ic { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--d-acc); color: var(--d-on-acc); font-size: 15px; }
 .gv-pills { position: relative; z-index: 9; display: flex; flex-wrap: wrap; gap: 10px; }
 .gv-pills .pill { padding: 7px 16px; border-radius: 8px; font-size: 21px; font-weight: 500; background: var(--d-line); color: var(--d-ink); }

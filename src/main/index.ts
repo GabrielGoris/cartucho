@@ -135,6 +135,8 @@ void app.whenReady().then(async () => {
     lang: () => (getLang() === 'en' ? 'en' : 'pt'),
   });
   player.events.on('play', e => { if (!e.running) setTimeout(() => void ach.refreshRemote(e.gameId), 4000); });
+  // 100% durante o jogo: o aviso aparece por cima dele (a comemoração completa espera o Cartucho voltar).
+  ach.events.on('complete', e => { if (player.isRunning(e.gameId)) ingame.celebrate(e.gameTitle, tt('100% · TODAS AS {0} CONQUISTAS', { 0: e.total })); });
   player.events.on('play', e => log(`jogo ${e.running ? 'aberto' : 'fechado'}:`, e.title, e.sessionMs ? `${Math.round(e.sessionMs / 60000)} min` : ''));
   const gh = createGitHub({ fetch: ((url, init) => net.fetch(url, init as RequestInit)) as Fetch, ...(process.env.CARTUCHO_GITHUB_API ? { api: process.env.CARTUCHO_GITHUB_API } : {}) });
   const defaultPortsDir = join(app.getPath('home'), 'Games', 'Cartucho');

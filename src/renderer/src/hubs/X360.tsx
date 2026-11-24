@@ -37,7 +37,7 @@ const FEED = { new: tt('novo no catálogo'), upd: tt('versão nova'), up: tt('mu
 const PER = 10, LIST_ROWS = 7;
 
 const Art = ({ g, v }: { g: HubGame; v: 'cover' | 'wide' | 'square' }) =>
-  <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant={v} />;
+  <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant={v} done={!!g.installed?.achievements?.complete} />;
 
 function nearest(T: Tile[], fi: number, k: Key) {
   const a = T[fi]; if (!a) return -1;

@@ -6,7 +6,7 @@ import { app, BrowserWindow, clipboard, dialog, shell } from 'electron';
 import { initTRPC } from '@trpc/server';
 import superjson from 'superjson';
 import { z } from 'zod';
-import type { InstallProgress, LibrarySummary, PlayEvent, UnlockEvent } from '@shared/types';
+import type { CompleteEvent, InstallProgress, LibrarySummary, PlayEvent, UnlockEvent } from '@shared/types';
 import { CONSOLE_NAME } from '@shared/consoles';
 import type { DB } from './db';
 import { kvGet, kvSet } from './db';
@@ -441,6 +441,9 @@ export function createRouter(deps: RouterDeps) {
       resync: t.procedure.input(z.object({ id: z.string() })).mutation(({ input }) => ach.resync(input.id)),
       onUnlock: t.procedure.subscription(async function* ({ signal }) {
         for await (const [e] of on(ach.events, 'unlock', { signal })) yield e as UnlockEvent;
+      }),
+      onComplete: t.procedure.subscription(async function* ({ signal }) {
+        for await (const [e] of on(ach.events, 'complete', { signal })) yield e as CompleteEvent;
       }),
       onChanged: t.procedure.subscription(async function* ({ signal }) {
         for await (const [id] of on(ach.events, 'changed', { signal })) yield id as string;

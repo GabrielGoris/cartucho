@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSubscription } from '@trpc/tanstack-react-query';
-import type { ConsoleId, PlayEvent, UnlockEvent } from '@shared/types';
+import type { CompleteEvent, ConsoleId, PlayEvent, UnlockEvent } from '@shared/types';
 import { pushProgress } from './lib/progress';
 import { fmtPlay } from './lib/format';
 import { useTRPC } from './trpc';
@@ -18,6 +18,7 @@ import { sfx } from './lib/sfx';
 import { focusSearch } from './lib/search';
 import { routeConsole, visibleConsoles } from './stage/consoles';
 import { Boot } from './views/Boot';
+import { Platina } from './views/Platina';
 import { Select, type Page } from './views/Select';
 import { HUBS } from './hubs';
 import { TitleBar } from './components/TitleBar';
@@ -123,6 +124,9 @@ export function App() {
   useSubscription(trpc.achievements.onUnlock.subscriptionOptions(undefined, {
     onData: (e: UnlockEvent) => { sfx.achievement(); toast({ k: tt('CONQUISTA DESBLOQUEADA'), n: e.name, g: e.gameTitle, icon: e.icon ?? null, ach: true }); },
   }));
+  // 100% das conquistas: entra na fila e aparece quando o Cartucho está na frente (durante o jogo, o aviso dourado já saiu por cima dele).
+  const [plats, setPlats] = useState<CompleteEvent[]>([]);
+  useSubscription(trpc.achievements.onComplete.subscriptionOptions(undefined, { onData: (e: CompleteEvent) => setPlats(q => [...q, e]) }));
   useSubscription(trpc.ports.onProgress.subscriptionOptions(undefined, {
     onData: p => { pushProgress(p); if (p.done) { void qc.invalidateQueries({ queryKey: trpc.games.pathKey() }); void qc.invalidateQueries({ queryKey: trpc.library.summary.queryKey() }); } },
   }));
@@ -183,6 +187,7 @@ export function App() {
       <Suspense fallback={null}>{settingsOpen && <SettingsPart.C onSupport={() => { setSettingsOpen(false); setGov('support'); }} onClose={() => setSettingsOpen(false)} onPickConsoles={() => { setSettingsOpen(false); setPicker(true); }} />}</Suspense>
       <Suspense fallback={null}>{askPicker && <PickerPart.C first={!s.picked} onClose={() => setPicker(false)} />}</Suspense>
       {booting && <Boot summary={summary.data} onDone={() => setBooting(false)} />}
+      {plats[0] && winFocus && !booting && <Platina key={plats[0].gameId + plats[0].at} e={plats[0]} onClose={() => setPlats(q => q.slice(1))} />}
 
       {(gameOpen || away != null) && <button className="playing" onClick={back}>▶ {Object.values(playing).join(', ') || away ? tt('JOGANDO {g}', { g: (Object.values(playing).join(', ') || away || '').toUpperCase() }) : tt('JOGO ABERTO')}<span className="pl-k"><Glyph a="home" />{tt('voltar para o jogo')}</span></button>}
       <div className="toasts">

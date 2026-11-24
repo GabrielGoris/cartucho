@@ -190,7 +190,7 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
   const item = (x: HubGame, i: number) => (
     <button key={x.key} className={`rg-it ${i === st.idx ? 'on' : ''} ${x.installed?.missing ? 'miss' : ''} ${x.installed?.running ? 'run' : ''}`} aria-label={x.title}
       onClick={e => tileClick(e, x, { select: () => { if (i !== st.idx) { sfx.play('move'); up({ idx: i }); } }, page: () => openGame(x), play: () => run('play', x) })}>
-      <Obj kind={kind}><GameArt title={x.title} console={x.console} platformName={x.platformName} fallback={x.coverUrl} variant="cover" /></Obj>
+      <Obj kind={kind}><GameArt title={x.title} console={x.console} platformName={x.platformName} fallback={x.coverUrl} variant="cover" done={!!x.installed?.achievements?.complete} /></Obj>
       <span className="rg-t">{x.title}</span>
       <span className="rg-s">{line(x)}</span>
     </button>

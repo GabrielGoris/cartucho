@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { hueOf, initials } from '../lib/format';
 import { tt } from '@shared/i18n';
 
-export function Cover({ title, url, className = '' }: { title: string; url?: string | null; className?: string }) {
+export function Cover({ title, url, className = '', done = false }: { title: string; url?: string | null; className?: string; done?: boolean }) {
   const [broken, setBroken] = useState(false);
   const img = url && !broken;
   const h = hueOf(title);
@@ -12,6 +12,7 @@ export function Cover({ title, url, className = '' }: { title: string; url?: str
       {img && <img src={url!} alt="" loading="lazy" onError={() => setBroken(true)} />}
       <span className="ini">{initials(title)}</span>
       <span className="ct">{title}</span>
+      {done && <span className="cv-done" title={tt('100% das conquistas')}>100%</span>}
     </div>
   );
 }

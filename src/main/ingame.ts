@@ -70,7 +70,7 @@ const stamp = (d = new Date()) => {
 const sameRect = (a: Rect, b: Rect) => a.every((v, i) => v === b[i]);
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
-const toastPage = (thumb: string, title: string, label: string) => `<!doctype html><meta charset="utf-8"><style>
+const toastPage = (thumb: string, title: string, label: string, gold = false) => gold ? goldPage(title, label) : `<!doctype html><meta charset="utf-8"><style>
 html,body{margin:0;background:transparent;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif}
 .t{position:absolute;inset:8px;display:flex;align-items:center;gap:14px;padding:10px 18px 10px 10px;border-radius:14px;background:rgba(14,8,26,.94);border:1px solid rgba(255,79,168,.6);box-shadow:0 10px 30px rgba(0,0,0,.5);color:#fff;animation:in .28s cubic-bezier(.2,.9,.3,1.2),out .3s ease-in 2.4s forwards}
 img{height:76px;border-radius:8px;flex:none}
@@ -79,6 +79,22 @@ span{display:block;font-size:14px;opacity:.85;margin-top:3px;white-space:nowrap;
 @keyframes in{from{transform:translateY(30px);opacity:0}}
 @keyframes out{to{transform:translateY(20px);opacity:0}}
 </style><div class="t">${thumb ? `<img src="data:image/jpeg;base64,${thumb}">` : ''}<div><b>${thumb ? '📷 ' : '⚠ '}${esc(label)}</b><span>${esc(title)}</span></div></div>`;
+
+/** Aviso dos 100% por cima do jogo: dourado, com troféu e brilho passando. */
+const goldPage = (title: string, label: string) => `<!doctype html><meta charset="utf-8"><style>
+html,body{margin:0;background:transparent;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif}
+.t{position:absolute;inset:8px;display:flex;align-items:center;gap:16px;padding:12px 22px 12px 16px;border-radius:16px;overflow:hidden;
+background:linear-gradient(135deg,#2a1a02,#120a00 60%,#2a1a02);border:2px solid #ffcf4a;box-shadow:0 0 24px rgba(255,190,40,.55),0 10px 30px rgba(0,0,0,.6);color:#fff;
+animation:in .45s cubic-bezier(.2,.9,.3,1.3),out .4s ease-in 4.6s forwards}
+.t::after{content:'';position:absolute;top:0;bottom:0;width:60px;left:-80px;background:linear-gradient(90deg,transparent,rgba(255,240,180,.55),transparent);transform:skewX(-20deg);animation:shine 1.6s ease-in-out .5s 2}
+.tr{font-size:50px;line-height:1;filter:drop-shadow(0 0 10px rgba(255,200,60,.9));animation:pop .6s cubic-bezier(.2,.9,.3,1.6) .15s both}
+b{display:block;font-size:20px;letter-spacing:1px;color:#ffcf4a}
+span{display:block;font-size:15px;opacity:.9;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:330px}
+@keyframes in{from{transform:translateY(40px) scale(.9);opacity:0}}
+@keyframes out{to{transform:translateY(20px);opacity:0}}
+@keyframes shine{to{left:110%}}
+@keyframes pop{from{transform:scale(.2) rotate(-25deg);opacity:0}}
+</style><div class="t"><div class="tr">🏆</div><div><b>${esc(label)}</b><span>${esc(title)}</span></div></div>`;
 
 export interface InGameDeps {
   root: string;
@@ -320,8 +336,13 @@ export class InGame {
     } finally { this.busy = false; }
   }
 
-  private toast(d: Display, img: NativeImage | null, title: string, label: string) {
-    const W = 460, H = 112, a = d.workArea;
+  /** Fechou os 100% durante o jogo: o aviso dourado aparece por cima dele. */
+  celebrate(title: string, label: string) {
+    try { this.toast(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()), null, title, label, true); } catch { }
+  }
+
+  private toast(d: Display, img: NativeImage | null, title: string, label: string, gold = false) {
+    const W = gold ? 520 : 460, H = gold ? 120 : 112, a = d.workArea;
     const w = new BrowserWindow({
       width: W, height: H, x: Math.round(a.x + (a.width - W) / 2), y: a.y + a.height - H - 48, frame: false, transparent: true, resizable: false, movable: false,
       focusable: false, skipTaskbar: true, alwaysOnTop: true, show: false, hasShadow: false,
@@ -336,12 +357,12 @@ export class InGame {
       if (shown || w.isDestroyed()) return;
       shown = true;
       w.showInactive(); w.setAlwaysOnTop(true, 'screen-saver'); w.moveTop();
-      setTimeout(() => { if (!w.isDestroyed()) w.destroy(); }, 3000);
+      setTimeout(() => { if (!w.isDestroyed()) w.destroy(); }, gold ? 5200 : 3000);
     };
     w.once('ready-to-show', show);
     w.webContents.once('did-finish-load', () => setTimeout(show, 50));
     setTimeout(() => { if (!shown) { log('aviso da captura demorou para abrir'); show(); } }, 1500);
-    void w.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(toastPage(thumb, title, label))}`);
+    void w.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(toastPage(thumb, title, label, gold))}`);
     if (img) void this.d.w32.beep(this.shutter());
   }
 

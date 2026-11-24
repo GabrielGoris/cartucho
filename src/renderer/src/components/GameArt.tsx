@@ -1,8 +1,11 @@
+import { tt } from '@shared/i18n';
 import { useState } from 'react';
 import { useArt } from '../lib/art';
 import { Cover } from './Cover';
 
 interface Props {
+  /** Selo de 100% das conquistas no canto. */
+  done?: boolean;
   title: string;
   console: string | null | undefined;
   platformName?: string | null;
@@ -13,7 +16,7 @@ interface Props {
   className?: string;
 }
 
-export function GameArt({ title, console, platformName, fallback, variant = 'cover', className = '' }: Props) {
+export function GameArt({ title, console, platformName, fallback, variant = 'cover', className = '', done = false }: Props) {
   const a = useArt(console, title, platformName);
   const [bad, setBad] = useState(false);
   if (variant !== 'cover' && a.fanart && !bad) {
@@ -21,8 +24,9 @@ export function GameArt({ title, console, platformName, fallback, variant = 'cov
       <div className={`cv art ${variant} ${className}`}>
         <img className="art-bg" src={a.fanart} alt="" onError={() => setBad(true)} />
         {a.logo ? <img className="art-logo" src={a.logo} alt={title} /> : <span className="art-title">{title}</span>}
+        {done && <span className="cv-done" title={tt('100% das conquistas')}>100%</span>}
       </div>
     );
   }
-  return <Cover title={title} url={a.cover ?? fallback} className={className} />;
+  return <Cover title={title} url={a.cover ?? fallback} className={className} done={done} />;
 }

@@ -44,7 +44,7 @@ const CFG_SIDE: Side[] = [{ k: 'dir', l: tt('Pasta dos jogos'), ic: 'folder' }, 
 const ROW_H = 132, SIDE_H = 78, TILE = 220, GAP = 14;
 
 const Art = ({ g, v }: { g: HubGame; v: 'cover' | 'wide' | 'square' }) =>
-  <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant={v} />;
+  <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant={v} done={!!g.installed?.achievements?.complete} />;
 
 const Ribbons = () => (
   <svg className="p4-rib" viewBox="0 0 1920 1080" preserveAspectRatio="none" aria-hidden="true">

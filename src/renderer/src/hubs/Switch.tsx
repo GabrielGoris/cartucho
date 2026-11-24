@@ -32,7 +32,7 @@ const DOCK: [Page | 'off', string, IconName, string][] = [
 const PAGES: Record<Exclude<Page, 'home' | 'game'>, [string, IconName]> = { cat: [tt('Descobrir'), 'compass'], news: [tt('Novidades'), 'bell'], time: [tt('Tempo de jogo'), 'clock'], upd: [tt('Atualizações'), 'dl'], cfg: [tt('Configurações'), 'gear'] };
 const TAGS = { new: tt('NOVO'), upd: tt('VERSÃO'), up: tt('SUBIU') } as const;
 const Art = ({ g, v }: { g: HubGame; v: 'cover' | 'wide' | 'square' }) =>
-  <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant={v} />;
+  <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant={v} done={!!g.installed?.achievements?.complete} />;
 
 export function SwitchHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: string; tab?: 'lib' | 'cat'; onBack: () => void }) {
   const me = useProfile();

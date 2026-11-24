@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { basename, dirname, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { isSelfInstall } from '@shared/consoles';
-import type { ConsoleId, GameAchievements, InstalledGame, InstalledRelease, RecentUnlock, UnlockEvent } from '@shared/types';
+import type { CompleteEvent, ConsoleId, GameAchievements, InstalledGame, InstalledRelease, RecentUnlock, UnlockEvent } from '@shared/types';
 import { findGameExe, guessProgram } from '../ports/files';
 import { type DB, kvGet, kvSet, tx } from '../db';
 import { absUrl } from '../catalog';
@@ -52,7 +52,7 @@ const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 export class AchievementService {
-  readonly events = new EventEmitter<{ unlock: [UnlockEvent]; changed: [string] }>();
+  readonly events = new EventEmitter<{ unlock: [UnlockEvent]; changed: [string]; complete: [CompleteEvent] }>();
   private watching = new Map<string, { files: string[]; stop: () => void }>();
   private busy = new Map<string, Promise<number[]>>();
 
@@ -67,8 +67,13 @@ export class AchievementService {
   }
   private toGame(r: GameRow): InstalledGame {
     const adapter = adapterById(r.adapter);
-    const counts = adapter ? this.db.prepare(`SELECT (SELECT COUNT(*) FROM achievement_def WHERE game_id = ?) total,
-      (SELECT COUNT(*) FROM achievement_unlock WHERE game_id = ?) unlocked`).get(r.id, r.id) as { total: number; unlocked: number } : null;
+    const c = adapter ? this.db.prepare(`SELECT (SELECT COUNT(*) FROM achievement_def WHERE game_id = ?) total,
+      (SELECT COUNT(*) FROM achievement_unlock WHERE game_id = ?) unlocked,
+      (SELECT COUNT(*) FROM achievement_def WHERE game_id = ? AND sort < ?) listed,
+      (SELECT COUNT(*) FROM achievement_def d WHERE d.game_id = ? AND EXISTS (SELECT 1 FROM achievement_unlock u WHERE u.game_id = d.game_id AND u.ach_id = d.ach_id)) got`)
+      .get(r.id, r.id, r.id, AUTO_SORT, r.id) as { total: number; unlocked: number; listed: number; got: number } : null;
+    // 100% = cada conquista da lista desbloqueada, e só com a lista de verdade: quando só se conhecem as já vistas, "todas" seria mentira.
+    const counts = c ? { total: c.total, unlocked: c.unlocked, complete: c.listed > 0 && c.total > 0 && c.got >= c.total } : null;
     return {
       id: r.id, title: r.title, console: r.console as ConsoleId, platformName: r.platform_name ?? null, installDir: r.install_dir, adapter: r.adapter, adapterLabel: adapter?.label ?? null,
       catalogId: r.catalog_id, coverUrl: absUrl(r.cover_url), addedAt: r.added_at, achievements: counts,
@@ -288,6 +293,7 @@ export class AchievementService {
       }
     });
 
+    let announced = false;
     if (fresh.length) {
       this.events.emit('changed', id);
       if (!opts.silent) {
@@ -299,8 +305,17 @@ export class AchievementService {
           const d = def.get(id, achId) as { name: string; description: string; points: number | null; image: Uint8Array | null } | undefined;
           this.events.emit('unlock', { gameId: id, gameTitle: r.title, achId, name: d?.name ?? tt('Conquista #{0}', { 0: achId }), description: d?.description ?? '', points: d?.points ?? null,
             icon: d?.image ? `data:${imgType(d.image)};base64,${Buffer.from(d.image).toString('base64')}` : null, at: at ?? now });
+          announced = true;
         }
       }
+      // Fechou os 100% agora (com uma conquista que acabou de sair): comemora uma vez por jogo.
+      const g = this.toGame(this.row(id));
+      if (g.achievements?.complete && !kvGet(this.db, `ach.platina.${id}`)) {
+        kvSet(this.db, `ach.platina.${id}`, String(now));
+        if (announced) this.events.emit('complete', { gameId: id, gameTitle: g.title, console: g.console, platformName: g.platformName, coverUrl: g.coverUrl, total: g.achievements.total, at: now });
+      }
+      // Ganhou conquistas novas (DLC, lista atualizada): quando fechar de novo, comemora de novo.
+      else if (!g.achievements?.complete && kvGet(this.db, `ach.platina.${id}`)) kvSet(this.db, `ach.platina.${id}`, '');
     }
     return fresh;
   }

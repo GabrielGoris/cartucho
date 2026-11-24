@@ -32,7 +32,7 @@ const SHORT = { new: tt('Novo'), upd: tt('Versão nova'), up: tt('Status') } as 
 const CFG: Opt[] = [{ k: 'dir', l: tt('Pasta dos jogos'), ic: 'folder' }, { k: 'snd', l: tt('Sons da interface'), ic: 'sound' }, { k: 'radar', l: tt('Radar de novidades'), ic: 'bell' }, { k: 'off', l: tt('Voltar ao Cartucho'), ic: 'power' }];
 
 const Art = ({ g, v }: { g: HubGame; v: 'cover' | 'wide' | 'square' }) =>
-  <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant={v} />;
+  <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant={v} done={!!g.installed?.achievements?.complete} />;
 
 export function PS5Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?: string; tab?: 'lib' | 'cat'; onBack: () => void }) {
   const c = CONSOLES.find(x => x.id === id)!;

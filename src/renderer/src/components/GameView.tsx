@@ -183,12 +183,12 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
       <div className={`gv-bg ${art.fanart ? '' : 'soft'}`}>{bg && <img src={bg} alt="" />}</div>
       <div className="gv-scroll" ref={scroll}>
         <div className="gv-hero">
-          <span className="gv-cover"><GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant="cover" /></span>
+          <span className="gv-cover"><GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant="cover" done={!!inst?.achievements?.complete} /></span>
           <div className="gv-head">
             {logo && art.logo ? <img className="gv-logo" src={art.logo} alt={g.title} /> : <h1>{g.title}</h1>}
             {(meta || achs) && <div className="gv-metarow">{meta && <p className="gv-meta">{meta}</p>}
-              {achs && <button className={`gv-achpill ${zone === 'meta' ? 'on' : ''}`} onClick={() => goSide('meta')}>
-                <span className="gv-achpill-ic">★</span>{achs.complete ? tt('{0}/{1} conquistas', { 0: achs.list.filter(a => a.unlockedAt != null).length, 1: achs.list.length }) : tt('{0} conquistas', { 0: achs.list.filter(a => a.unlockedAt != null).length })}</button>}</div>}
+              {achs && <button className={`gv-achpill ${zone === 'meta' ? 'on' : ''} ${inst?.achievements?.complete ? 'done' : ''}`} onClick={() => goSide('meta')}>
+                <span className="gv-achpill-ic">{inst?.achievements?.complete ? '🏆' : '★'}</span>{inst?.achievements?.complete ? tt('100% · {0} conquistas', { 0: achs.list.length }) : achs.complete ? tt('{0}/{1} conquistas', { 0: achs.list.filter(a => a.unlockedAt != null).length, 1: achs.list.length }) : tt('{0} conquistas', { 0: achs.list.filter(a => a.unlockedAt != null).length })}</button>}</div>}
             <div className="gv-pills">
               {score && (
                 <span className={`pill score ${tone} ${zone === 'score' && topNow === 'score' ? 'on' : ''}`} onClick={openScore}>

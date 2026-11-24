@@ -55,6 +55,16 @@ export const sfx = {
     tone(1760, 0.6, 'sine', v * 0.5, 0.3);
     tone(2637, 0.5, 'sine', v * 0.25, 0.38);
   },
+  /** 100% das conquistas: fanfarra subindo, acorde segurado e brilhos no alto. */
+  platinum() {
+    initAudio();
+    const type: OscillatorType = profile === 'square' ? 'square' : profile === 'tri' ? 'triangle' : 'sine';
+    const v = type === 'square' ? 0.02 : type === 'triangle' ? 0.05 : 0.045;
+    arp([523, 659, 784, 1047], type, v, 0.11, 0.24);
+    for (const f of [1047, 1319, 1568]) tone(f, 1.3, type, v * 0.8, 0.5);
+    tone(2093, 1.1, 'sine', v * 0.45, 0.62);
+    [2637, 3136, 3520, 4186].forEach((f, i) => tone(f, 0.3, 'sine', v * 0.22, 0.9 + i * 0.09));
+  },
   jingle() {
     if (!getSettings().bootSnd) return;
     initAudio();

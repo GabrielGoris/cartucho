@@ -46,7 +46,7 @@ function place(d: number): [number, number, number] {
 }
 
 const Art = ({ g, v }: { g: HubGame; v: 'cover' | 'wide' | 'square' }) =>
-  <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant={v} />;
+  <GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant={v} done={!!g.installed?.achievements?.complete} />;
 
 function Waves({ psp }: { psp: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
