@@ -1,17 +1,13 @@
-## Cartucho 1.5.0
+## Cartucho 1.5.1
 
-### Biblioteca que não esquece
+### Muito menos memória
 
-- **Desinstalar não apaga mais o histórico**: o jogo continua na biblioteca como "Não instalado", com o tempo de jogo, os gráficos e as conquistas.
-- **Reinstalou, voltou**: instalando de novo (pelo catálogo, mostrando a pasta ou adicionando o jogo), o Cartucho reconhece o jogo pelo appid da Steam ou do crack, pelo id da GOG ou pelo nome do .exe e continua de onde parou. O "Instalar de novo" do catálogo reaproveita a mesma pasta e os saves que ficaram nela.
-- **Remover da biblioteca pergunta o que fazer**: *Só tirar da biblioteca* (some da lista, mas tudo fica guardado e volta se o jogo for instalado de novo) ou *Apagar tudo* (apaga o tempo de jogo e as conquistas e manda para a Lixeira as pastas de saves e conquistas do crack que o Cartucho conhece).
-
-### Mais fácil de usar
-
-- **Clique nos jogos**: um clique abre a página do jogo, dois cliques jogam. Jogo desinstalado abre a página, que mostra só a ação principal e o resto em "Mais opções".
-- **Descobrir** rola com a rodinha do mouse.
+- **Palco 3D mais leve:** as texturas dos consoles agora vão para a placa de vídeo já comprimidas, ocupando 4 vezes menos memória com a mesma aparência. Os modelos mais detalhados foram simplificados (o palco desenha um terço dos triângulos de antes) e a cópia de cada modelo que ficava sobrando na memória é solta depois de carregada. Em notebook com placa integrada, o Cartucho usa centenas de MB a menos.
+- **Durante o jogo:** com um jogo aberto e o Cartucho em segundo plano, o palco 3D sai da memória depois de 20 segundos e volta quando você chama o Cartucho.
+- O instalador ficou menor.
 
 ### Correções
 
-- A instalação não acusa mais o Windows Defender quando ele está desligado ou quando outro antivírus está no lugar dele.
-- O selo "INSTALADO" não aparece mais em jogo desinstalado.
+- O PS2 aparecia de costas no palco.
+- O ajuste "Palco pixelado" não funcionava; agora vem desligado e, se ligado, vale sempre.
+- Em placas de vídeo sem suporte a texturas comprimidas (máquinas virtuais, drivers antigos), os consoles aparecem em cinza em vez de pretos.
