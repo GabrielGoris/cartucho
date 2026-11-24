@@ -18,7 +18,7 @@ function geometry(n: number) {
 type Geo = ReturnType<typeof geometry>;
 
 export type StageMode = 'stage' | 'behind' | 'hidden';
-interface Props {
+export interface Props {
   list: StageConsole[];
   sel: number;
   mode: StageMode;

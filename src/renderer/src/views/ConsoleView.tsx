@@ -18,7 +18,7 @@ import { CatalogPage, GamePage } from './GamePages';
 import { tt } from '@shared/i18n';
 
 type Tab = 'lib' | 'cat';
-interface Props { id: ConsoleId; game?: string; tab?: Tab; active: boolean; onBack: () => void }
+export interface Props { id: ConsoleId; game?: string; tab?: Tab; active: boolean; onBack: () => void }
 
 export function ConsoleView({ id, game, tab: tab0, active, onBack }: Props) {
   const c = CONSOLES.find(x => x.id === id)!;

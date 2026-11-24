@@ -1,5 +1,5 @@
 import { useProfile } from '../lib/profile';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConsoleId, InstalledGame } from '@shared/types';
 import { useTRPC } from '../trpc';
@@ -10,7 +10,7 @@ import { clockStr, fmtPlay, plural } from '../lib/format';
 import { initAudio, sfx } from '../lib/sfx';
 import { MAKERS, MAKER_LABEL, otherConsoles, type StageConsole } from '../stage/consoles';
 import { Home, setCaption } from './Home';
-import { MeOverlay, RadarOverlay } from './Overlays';
+import { MePart, RadarPart } from '../lazy';
 import { tt } from '@shared/i18n';
 
 export type Page = 'act' | 'stage';
@@ -143,8 +143,10 @@ export function Select({ active, list, page, setPage, sel, setSel, onEnterConsol
         }}>🎮 {s.pad === 'auto' ? tt('Auto: {0}', { 0: PAD_NAMES[pad] }) : PAD_NAMES[s.pad]}</button>
       </div>
 
-      {ov === 'radar' && <RadarOverlay onClose={() => setOv(null)} onOpenConsole={id => { setOv(null); onEnterConsole(id, { tab: 'cat' }); }} />}
-      {ov === 'me' && <MeOverlay onClose={() => setOv(null)} />}
+      <Suspense fallback={null}>
+        {ov === 'radar' && <RadarPart.C onClose={() => setOv(null)} onOpenConsole={id => { setOv(null); onEnterConsole(id, { tab: 'cat' }); }} />}
+        {ov === 'me' && <MePart.C onClose={() => setOv(null)} />}
+      </Suspense>
     </section>
   );
 }

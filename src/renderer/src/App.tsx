@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSubscription } from '@trpc/tanstack-react-query';
 import type { ConsoleId, PlayEvent, UnlockEvent } from '@shared/types';
@@ -11,21 +11,16 @@ import { Glyph, setGlobalKeys, setShortcutHandler } from './lib/input';
 import { getLang, tt } from '@shared/i18n';
 import { useConfirmReq } from './lib/dialogs';
 import { BindRecHost, CartuchoMenu, ConfirmHost, PickerHost, PlatformHost, DownloadAskHost } from './views/GlobalUI';
-import { MeOverlay, RadarOverlay, SupportOverlay } from './views/Overlays';
+import { AllGamesPart, ConsoleViewPart, MePart, PickerPart, RadarPart, SettingsPart, StagePart, SupportPart, preloadAll } from './lazy';
 import { askConfirm } from './lib/dialogs';
 import { CONSOLES } from './stage/consoles';
 import { sfx } from './lib/sfx';
 import { focusSearch } from './lib/search';
-import { Stage } from './stage/Stage';
 import { routeConsole, visibleConsoles } from './stage/consoles';
 import { Boot } from './views/Boot';
 import { Select, type Page } from './views/Select';
-import { ConsoleView } from './views/ConsoleView';
-import { Settings } from './views/Settings';
-import { ConsolePicker } from './views/ConsolePicker';
 import { HUBS } from './hubs';
 import { TitleBar } from './components/TitleBar';
-import { AllGames } from './views/AllGames';
 import { WebHost } from './components/WebHost';
 
 type Inside = { id: ConsoleId; game?: string; tab?: 'lib' | 'cat'; key: number };
@@ -65,6 +60,8 @@ export function App() {
   const resume = useMutation(trpc.ingame.back.mutationOptions());
   const syncLang = useMutation(trpc.system.setLang.mutationOptions());
   useEffect(() => { syncLang.mutate({ lang: getLang() }); }, []);
+  // A abertura aparece primeiro; o resto (palco 3D, telas dos consoles…) carrega durante a animação.
+  useEffect(() => { const r = requestAnimationFrame(() => setTimeout(preloadAll, 0)); return () => cancelAnimationFrame(r); }, []);
   const [away, setAway] = useState<string | null>(null);
   const [winFocus, setWinFocus] = useState(() => document.hasFocus());
   useEffect(() => { const on = () => setWinFocus(true), off = () => setWinFocus(false); addEventListener('focus', on); addEventListener('blur', off); return () => { removeEventListener('focus', on); removeEventListener('blur', off); }; }, []);
@@ -161,30 +158,30 @@ export function App() {
     <>
     <TitleBar ctx={inside ? CONSOLES.find(c => c.id === inside.id)?.name ?? null : all ? tt('Todos os jogos') : null} onMenu={() => { sfx.play('ok'); setMenu(true); }} />
     <div id="tv" className={tvClass} style={{ ['--crt' as string]: s.crtLvl / 100 }}>
-      <Stage list={list} sel={sel} mode={stageMode} zoom={zoom} palette={palette} pixel={s.pixelStage} sleep={gameOpen && !winFocus} onSelect={i => { sfx.play('move'); setSel(i); }} onEnter={i => enterConsole(list[i]!.id)} />
-      {all && !inside && <AllGames onBack={closeAll} />}
+      <Suspense fallback={<div className={`stage stage-${stageMode}`} />}><StagePart.C list={list} sel={sel} mode={stageMode} zoom={zoom} palette={palette} pixel={s.pixelStage} sleep={gameOpen && !winFocus} onSelect={i => { sfx.play('move'); setSel(i); }} onEnter={i => enterConsole(list[i]!.id)} /></Suspense>
+      <Suspense fallback={null}>{all && !inside && <AllGamesPart.C onBack={closeAll} />}</Suspense>
       {!inside && !all && (
 <Select active={!booting && !settingsOpen && !askPicker && !menu && !gov} list={list} page={page} setPage={setPage} sel={sel} setSel={setSel}
           onEnterConsole={enterConsole} onAll={openAll} onMenu={() => { sfx.play('ok'); setMenu(true); }} onSettings={() => { sfx.play('ok'); setSettingsOpen(true); }} />
       )}
       {inside && (() => {
         const H = HUBS[inside.id];
-        if (H) return <H.component key={inside.key} id={inside.id} game={inside.game} tab={inside.tab} onBack={leaveConsole} />;
-        return <ConsoleView key={inside.key} id={inside.id} game={inside.game} tab={inside.tab} active={!settingsOpen} onBack={leaveConsole} />;
+        if (H) return <Suspense fallback={null}><H.component key={inside.key} id={inside.id} game={inside.game} tab={inside.tab} onBack={leaveConsole} /></Suspense>;
+        return <Suspense fallback={null}><ConsoleViewPart.C key={inside.key} id={inside.id} game={inside.game} tab={inside.tab} active={!settingsOpen} onBack={leaveConsole} /></Suspense>;
       })()}
       {menu && <CartuchoMenu inside={inside ? CONSOLES.find(c => c.id === inside.id)?.name ?? null : all ? tt('Todos os jogos') : null} onClose={() => setMenu(false)}
         onSettings={() => setSettingsOpen(true)} onRadar={() => setGov('radar')} onProfile={() => setGov('me')} onPickConsoles={() => setPicker(true)} onLeave={all ? closeAll : leaveConsole} onAll={openAll} onSupport={() => setGov('support')} />}
-      {gov === 'radar' && <RadarOverlay onClose={() => setGov(null)} onOpenConsole={id => { setGov(null); enterConsole(id, { tab: 'cat' }); }} />}
-      {gov === 'me' && <MeOverlay onClose={() => setGov(null)} />}
-      {gov === 'support' && <SupportOverlay onClose={() => setGov(null)} />}
+      <Suspense fallback={null}>{gov === 'radar' && <RadarPart.C onClose={() => setGov(null)} onOpenConsole={id => { setGov(null); enterConsole(id, { tab: 'cat' }); }} />}</Suspense>
+      <Suspense fallback={null}>{gov === 'me' && <MePart.C onClose={() => setGov(null)} />}</Suspense>
+      <Suspense fallback={null}>{gov === 'support' && <SupportPart.C onClose={() => setGov(null)} />}</Suspense>
       <ConfirmHost />
       <PickerHost />
       <PlatformHost />
       <DownloadAskHost />
       <BindRecHost />
       <WebHost />
-      {settingsOpen && <Settings onSupport={() => { setSettingsOpen(false); setGov('support'); }} onClose={() => setSettingsOpen(false)} onPickConsoles={() => { setSettingsOpen(false); setPicker(true); }} />}
-      {askPicker && <ConsolePicker first={!s.picked} onClose={() => setPicker(false)} />}
+      <Suspense fallback={null}>{settingsOpen && <SettingsPart.C onSupport={() => { setSettingsOpen(false); setGov('support'); }} onClose={() => setSettingsOpen(false)} onPickConsoles={() => { setSettingsOpen(false); setPicker(true); }} />}</Suspense>
+      <Suspense fallback={null}>{askPicker && <PickerPart.C first={!s.picked} onClose={() => setPicker(false)} />}</Suspense>
       {booting && <Boot summary={summary.data} onDone={() => setBooting(false)} />}
 
       {(gameOpen || away != null) && <button className="playing" onClick={back}>▶ {Object.values(playing).join(', ') || away ? tt('JOGANDO {g}', { g: (Object.values(playing).join(', ') || away || '').toUpperCase() }) : tt('JOGO ABERTO')}<span className="pl-k"><Glyph a="home" />{tt('voltar para o jogo')}</span></button>}
