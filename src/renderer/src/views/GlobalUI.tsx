@@ -126,7 +126,7 @@ export function PlatformHost() {
   );
 }
 
-interface Req { id: number; title: string; kind: 'dir' | 'exe'; start: string; explicit?: boolean }
+interface Req { id: number; title: string; kind: 'dir' | 'exe' | 'img'; start: string; explicit?: boolean }
 const LAST_DIR = 'cartucho.lastDir';
 
 export function PickerHost() {
@@ -164,7 +164,7 @@ export function PickerHost() {
     const r = await stat.mutateAsync({ path: t });
     if (!r.exists) { setErr(tt('Não encontrei esse endereço.')); setCol('path'); setTimeout(() => addr.current?.focus(), 0); return; }
     if (r.dir) { sfx.play('ok'); go(r.path); return; }
-    if (req?.kind === 'exe') { sfx.play('ok'); done(r.path); return; }
+    if (req?.kind === 'exe' || req?.kind === 'img') { sfx.play('ok'); done(r.path); return; }
     setErr(tt('Esse endereço é de um arquivo. Escolha uma pasta.')); setCol('path'); setTimeout(() => addr.current?.focus(), 0);
   };
   const paste = () => void clip.mutateAsync().then(t => { const s = (t ?? '').split(/\r?\n/)[0]!.trim(); if (s) { setTyped(s); void goTyped(s); } else setErr(tt('A área de transferência está vazia.')); });
@@ -252,7 +252,7 @@ export function PickerHost() {
                 <span className="ic">{r.kind === 'use' ? '✔' : r.kind === 'up' ? '↰' : r.kind === 'dir' ? '▸' : '◆'}</span>{r.label}
               </button>
             ))}
-            {!q.isLoading && !entries.length && <div className="gl-empty">{req.kind === 'exe' ? tt('Nenhuma pasta ou programa aqui.') : tt('Nenhuma pasta aqui.')}</div>}
+            {!q.isLoading && !entries.length && <div className="gl-empty">{req.kind === 'exe' ? tt('Nenhuma pasta ou programa aqui.') : req.kind === 'img' ? tt('Nenhuma pasta ou imagem aqui.') : tt('Nenhuma pasta aqui.')}</div>}
           </div>
         </div>
         <div className="gl-h">

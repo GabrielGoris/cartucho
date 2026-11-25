@@ -1,14 +1,24 @@
 import { EventEmitter } from 'node:events';
 import { createWriteStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { Fetch } from '../ports/github';
 import { type ArtKind, KINDS, type LaunchBoxInfo, PLATFORMS, createLaunchBox } from './launchbox';
 import { tt } from '@shared/i18n';
 
-export type ArtSet = Partial<Record<ArtKind, string>>;
+export type ArtSet = Partial<Record<ArtKind, string>> & { /** A capa foi escolhida pelo jogador. */ custom?: boolean };
+
+/** Imagem que dá para usar de capa, pelos primeiros bytes (não pela extensão). */
+export function imageType(b: Buffer): 'png' | 'jpg' | 'webp' | 'gif' | null {
+  if (b.length > 8 && b[0] === 0x89 && b.toString('latin1', 1, 4) === 'PNG') return 'png';
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'jpg';
+  if (b.length > 12 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP') return 'webp';
+  if (b.length > 6 && b.toString('latin1', 0, 4) === 'GIF8') return 'gif';
+  return null;
+}
+const COVER_MAX = 25 * 1024 * 1024;
 
 const FORMAT_TAG = /(\.(xiso|iso|cso|chd|rvz|wbfs|nsp|xci|z64|n64|v64|nds|3ds|gba|gbc|gb|sfc|smc|nes))+$/i;
 export const cleanTitle = (n: string) => n.replace(FORMAT_TAG, '').replace(/\s*[([][^)\]]*[)\]]/g, '').replace(/_/g, ' ').replace(/^\d{3,5}\s*-?\s+(?=\S)/, '').replace(/\s+/g, ' ').trim() || n;
@@ -81,6 +91,40 @@ export class Artwork {
 
   private folder(platform: string, kind: ArtKind) { return join(this.dir, platform, kind); }
 
+  // Capa escolhida pelo jogador: _custom/<console>/<jogo>.<ext>, por console e título (vale também com o jogo desinstalado).
+  private customDir(console: string) { return /^[a-z0-9_-]+$/i.test(console) ? join(this.dir, '_custom', console) : null; }
+  private customKey(title: string) { return looseKey(title) || title.replace(/[^a-z0-9]/gi, '').toLowerCase(); }
+  private customFile(console: string, title: string) {
+    const dir = this.customDir(console), key = this.customKey(title);
+    if (!dir || !key || !existsSync(dir)) return null;
+    for (const ext of ['png', 'jpg', 'webp', 'gif']) { const f = join(dir, `${key}.${ext}`); if (existsSync(f)) return f; }
+    return null;
+  }
+  private customCover(console: string, title: string) {
+    const f = this.customFile(console, title);
+    if (!f) return null;
+    let v = 0; try { v = Math.round(statSync(f).mtimeMs); } catch { v = 0; }
+    return `media://art/_custom/${console}/${f.slice(f.lastIndexOf(sep) + 1)}?v=${v}`;
+  }
+  /** Guarda a imagem escolhida como capa do jogo. Erro com a mensagem para o jogador se não for imagem. */
+  async setCover(console: string, title: string, src: string) {
+    const dir = this.customDir(console), key = this.customKey(title);
+    if (!dir || !key) throw new Error(tt('Não dá para trocar a capa deste jogo.'));
+    const st = await fsp.stat(src);
+    if (st.size > COVER_MAX) throw new Error(tt('Imagem grande demais (máximo de 25 MB).'));
+    const b = await fsp.readFile(src), type = imageType(b);
+    if (!type) throw new Error(tt('Esse arquivo não é uma imagem PNG, JPG, WEBP ou GIF.'));
+    await fsp.mkdir(dir, { recursive: true });
+    await this.resetCover(console, title, false);
+    await fsp.writeFile(join(dir, `${key}.${type}`), b);
+    this.changed();
+  }
+  /** Volta para a capa baixada automaticamente. */
+  async resetCover(console: string, title: string, notify = true) {
+    for (let f = this.customFile(console, title); f; f = this.customFile(console, title)) await fsp.rm(f, { force: true });
+    if (notify) this.changed();
+  }
+
   private existing(platform: string, kind: ArtKind, key: string) {
     const f = this.folder(platform, kind);
     if (!existsSync(f)) return null;
@@ -95,9 +139,11 @@ export class Artwork {
   get(console: string, platformName: string | null | undefined, names: string[], kinds: ArtKind[] = ['cover', 'fanart', 'logo']): ArtSet {
     const platform = artPlatform(console, platformName);
     const key = looseKey(names[0] ?? '');
-    if (!platform || !PLATFORMS[platform] || !key) return {};
-    const out: ArtSet = {};
+    const mine = kinds.includes('cover') ? this.customCover(console, names[0] ?? '') : null;
+    if (!platform || !PLATFORMS[platform] || !key) return mine ? { cover: mine, custom: true } : {};
+    const out: ArtSet = mine ? { cover: mine, custom: true } : {};
     for (const kind of kinds) {
+      if (kind === 'cover' && mine) continue;
       const f = this.existing(platform, kind, key);
       if (f) out[kind] = `media://art/${platform}/${kind}/${f}`;
       else if (!this.missingRecently(platform, kind, key)) this.enqueue(platform, kind, key, names);

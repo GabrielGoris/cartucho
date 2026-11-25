@@ -1060,4 +1060,13 @@ export const EN: Record<string, string> = {
   "coleção": "collection",
   "Jogado recentemente": "Recently played",
   "CONQUISTA RARA · {0}% DOS JOGADORES": "RARE ACHIEVEMENT · {0}% OF PLAYERS",
+  "Escolha a nova capa de {0}": "Choose the new cover for {0}",
+  "Não dá para trocar a capa deste jogo.": "This game's cover can't be changed.",
+  "Imagem grande demais (máximo de 25 MB).": "Image too large (25 MB max).",
+  "Esse arquivo não é uma imagem PNG, JPG, WEBP ou GIF.": "That file isn't a PNG, JPG, WEBP or GIF image.",
+  "Nenhuma pasta ou imagem aqui.": "No folders or images here.",
+  "Capa trocada.": "Cover changed.",
+  "Capa original de volta.": "Original cover restored.",
+  "Trocar a capa": "Change cover",
+  "Voltar para a capa original": "Restore original cover",
 };

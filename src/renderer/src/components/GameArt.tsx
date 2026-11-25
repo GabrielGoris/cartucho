@@ -19,7 +19,8 @@ interface Props {
 export function GameArt({ title, console, platformName, fallback, variant = 'cover', className = '', done = false }: Props) {
   const a = useArt(console, title, platformName);
   const [bad, setBad] = useState(false);
-  if (variant !== 'cover' && a.fanart && !bad) {
+  // Com capa escolhida pelo jogador, ela aparece em todo lugar (no lugar da arte de fundo).
+  if (variant !== 'cover' && a.fanart && !a.custom && !bad) {
     return (
       <div className={`cv art ${variant} ${className}`}>
         <img className="art-bg" src={a.fanart} alt="" onError={() => setBad(true)} />

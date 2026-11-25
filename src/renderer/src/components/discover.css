@@ -270,3 +270,7 @@
 .gv-acht small em { font-style: normal; }
 .gv-acht small em.rare { color: var(--d-acc); font-weight: 500; }
 .gv-achsrc { display: block; margin-top: 10px; font-size: 13px; color: var(--d-dim); }
+/* Clicar na capa troca a imagem: aviso aparece ao passar o mouse. */
+.gv-cover[role=button] { cursor: pointer; }
+.gv-cover-edit { position: absolute; left: 50%; bottom: 18px; transform: translate(-50%, 8px); z-index: 3; padding: 8px 16px; border-radius: 999px; white-space: nowrap; font-size: 17px; background: rgba(0,0,0,.72); color: #fff; opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; }
+.gv-cover:hover .gv-cover-edit { opacity: 1; transform: translate(-50%, 0); }

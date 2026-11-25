@@ -55,6 +55,11 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
     });
   };
   const plat = useMutation(trpc.games.changePlatform.mutationOptions({ onSuccess: () => void qc.invalidateQueries() }));
+  // Capa própria: escolher uma imagem do computador ou voltar para a baixada.
+  const coverDone = (msg: string) => { setNote(msg); void qc.invalidateQueries({ queryKey: trpc.art.get.pathKey() }); };
+  const pickCover = useMutation(trpc.art.pickCover.mutationOptions({ onSuccess: ok => { if (ok) coverDone(tt('Capa trocada.')); }, onError: e => setNote(e.message) }));
+  const resetCover = useMutation(trpc.art.resetCover.mutationOptions({ onSuccess: () => coverDone(tt('Capa original de volta.')), onError: e => setNote(e.message) }));
+  const changeCover = () => { if (!g.console || pickCover.isPending) return; sfx.play('ok'); pickCover.mutate({ console: g.console, title: g.title }); };
   const dir = useMutation(trpc.games.relink.mutationOptions({
     onSuccess: r => { if (r) { setNote(tt('Pasta trocada para {0}.', { 0: r.installDir })); void qc.invalidateQueries(); } },
     onError: e => setNote(e.message),
@@ -71,6 +76,8 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
     ...(inst && !inst.missing && inst.exe && navigator.userAgent.includes('Linux') && /\.(exe|bat|cmd|lnk)$/i.test(inst.exe) ? [{ k: '__wine', l: tt('Opções do Wine') }] : []),
     ...(inst && !g.catalog ? [{ k: '__plat', l: tt('Trocar a plataforma') }] : []),
     ...(caps.length ? [{ k: '__shots', l: tt('Abrir pasta das capturas') }] : []),
+    ...(g.console ? [{ k: '__cover', l: tt('Trocar a capa') }] : []),
+    ...(g.console && art.custom ? [{ k: '__coverReset', l: tt('Voltar para a capa original') }] : []),
   ];
   // Desinstalado: só a ação principal aparece; o resto (mostrar a pasta, remover, GitHub…) fica em "Mais opções".
   const isMain = (o: DOpt, j: number) => j === 0 || (!inst?.missing && MAIN.has(o.k) && o.k !== 'remove');
@@ -107,7 +114,7 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
 
   const mv = (f: () => void) => { sfx.play('move'); f(); };
   const goSide = (from: Zone) => { sfx.play('ok'); sideFrom.current = from; setZone('side'); };
-  const runOpt = (o: DOpt | undefined) => { if (!o) return; setMore(false); if (o.k === '__lnk') { sfx.play('ok'); lnk.mutate({ id: inst!.id }); } else if (o.k === '__wine') { sfx.play('ok'); setWine(true); } else if (o.k === '__dir') { sfx.play('ok'); dir.mutate({ id: inst!.id }); } else if (o.k === '__plat') { sfx.play('ok'); plat.mutate({ id: inst!.id }); } else if (o.k === '__shots') { sfx.play('ok'); openShots.mutate({ title: g.title }); } else run(o.k, g); };
+  const runOpt = (o: DOpt | undefined) => { if (!o) return; setMore(false); if (o.k === '__lnk') { sfx.play('ok'); lnk.mutate({ id: inst!.id }); } else if (o.k === '__wine') { sfx.play('ok'); setWine(true); } else if (o.k === '__dir') { sfx.play('ok'); dir.mutate({ id: inst!.id }); } else if (o.k === '__plat') { sfx.play('ok'); plat.mutate({ id: inst!.id }); } else if (o.k === '__shots') { sfx.play('ok'); openShots.mutate({ title: g.title }); } else if (o.k === '__cover') changeCover(); else if (o.k === '__coverReset') { sfx.play('ok'); resetCover.mutate({ console: g.console!, title: g.title }); } else run(o.k, g); };
   const act = (j: number) => { const o = shown[j]; if (o?.k === '__more') { sfx.play(more ? 'back' : 'ok'); setMi(0); setMore(!more); } else runOpt(o); };
 
   useKeys((k: Key) => {
@@ -184,7 +191,7 @@ export function GameView({ theme, g, opts: base, run, onBack, self, logo = true,
       <div className={`gv-bg ${art.fanart ? '' : 'soft'}`}>{bg && <img src={bg} alt="" />}</div>
       <div className="gv-scroll" ref={scroll}>
         <div className="gv-hero">
-          <span className="gv-cover"><GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant="cover" done={!!inst?.achievements?.complete} /></span>
+          <span className="gv-cover" role="button" tabIndex={-1} title={tt('Trocar a capa')} onClick={changeCover}><GameArt title={g.title} console={g.console} platformName={g.platformName} fallback={g.coverUrl} variant="cover" done={!!inst?.achievements?.complete} />{g.console && <span className="gv-cover-edit">{tt('Trocar a capa')}</span>}</span>
           <div className="gv-head">
             {logo && art.logo ? <img className="gv-logo" src={art.logo} alt={g.title} /> : <h1>{g.title}</h1>}
             {(meta || achs) && <div className="gv-metarow">{meta && <p className="gv-meta">{meta}</p>}

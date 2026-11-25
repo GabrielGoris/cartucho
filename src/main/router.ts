@@ -37,13 +37,14 @@ import { bindsFor, cleanBind, readAllBinds, sameBind } from '@shared/binds';
 export interface RouterDeps { gog?: import('./gog').GogAccount; mainWindow?: () => BrowserWindow | null; db: DB; ach: AchievementService; ports: Ports; player: Player; art: Artwork; info?: GameInfoService; ingame?: InGame; web?: WebPane; tr: Translator; defaultPortsDir: string; win?: () => WinCtl | null; bg?: () => Background | null; upd?: () => Updater | null }
 export const portsDirOf = (d: Pick<RouterDeps, 'db' | 'defaultPortsDir'>) => kvGet(d.db, 'portsDir') || d.defaultPortsDir;
 
-export interface PickRequest { id: number; title: string; kind: 'dir' | 'exe'; start: string; explicit: boolean }
+export interface PickRequest { id: number; title: string; kind: 'dir' | 'exe' | 'img'; start: string; explicit: boolean }
 const pickBus = new EventEmitter();
 const pending = new Map<number, (v: string | null) => void>();
 let pickSeq = 0;
 const EXE = new Set(['.exe', '.bat', '.lnk', '.cmd', '.sh', '.appimage', '']);
+const IMG = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 
-function listDir(path: string, kind: 'dir' | 'exe') {
+function listDir(path: string, kind: 'dir' | 'exe' | 'img') {
   const out: { name: string; path: string; dir: boolean }[] = [];
   let names: string[] = [];
   try { names = readdirSync(path); } catch { return out; }
@@ -54,13 +55,14 @@ function listDir(path: string, kind: 'dir' | 'exe') {
     try { dir = statSync(full).isDirectory(); } catch { continue; }
     if (dir) out.push({ name, path: full, dir: true });
     else if (kind === 'exe' && EXE.has(extname(name).toLowerCase()) && (process.platform === 'win32' ? extname(name) !== '' : true)) out.push({ name, path: full, dir: false });
+    else if (kind === 'img' && IMG.has(extname(name).toLowerCase())) out.push({ name, path: full, dir: false });
   }
   return out.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name, 'pt', { sensitivity: 'base' }));
 }
 function places() {
   const home = homedir();
   const L: { name: string; path: string }[] = [{ name: 'Pasta pessoal', path: home }];
-  for (const [n, d] of [[tt('Área de Trabalho'), 'Desktop'], [tt('Downloads'), 'Downloads'], [tt('Documentos'), 'Documents'], [tt('Jogos'), 'Games']] as const) {
+  for (const [n, d] of [[tt('Área de Trabalho'), 'Desktop'], [tt('Downloads'), 'Downloads'], [tt('Documentos'), 'Documents'], [tt('Imagens'), 'Pictures'], [tt('Jogos'), 'Games']] as const) {
     const p = join(home, d); if (existsSync(p)) L.push({ name: n, path: p });
   }
   if (process.platform === 'win32') for (const c of 'CDEFGHIJKLMNOPQRSTUVWXYZ') { const p = `${c}:\\`; if (existsSync(p)) L.push({ name: `Disco ${c}:`, path: p }); }
@@ -79,7 +81,7 @@ async function pick(title: string, props: ('openDirectory' | 'openFile' | 'creat
   if (!pickBus.listenerCount('pick')) return nativePick(title, props, extra);
   const id = ++pickSeq;
   const start = typeof extra.defaultPath === 'string' && existsSync(extra.defaultPath) ? extra.defaultPath : homedir();
-  const res = await new Promise<string | null>(resolve => { pending.set(id, resolve); pickBus.emit('pick', { id, title, kind: props.includes('openFile') ? 'exe' : 'dir', start, explicit: start !== homedir() } satisfies PickRequest); });
+  const res = await new Promise<string | null>(resolve => { pending.set(id, resolve); pickBus.emit('pick', { id, title, kind: !props.includes('openFile') ? 'dir' : extra.filters?.some(f => f.extensions.includes('png')) ? 'img' : 'exe', start, explicit: start !== homedir() } satisfies PickRequest); });
   return res === '\u0000native' ? nativePick(title, props, extra) : res;
 }
 
@@ -146,6 +148,16 @@ export function createRouter(deps: RouterDeps) {
         }),
       status: t.procedure.query(() => art.status),
       refresh: t.procedure.mutation(() => art.refresh()),
+      // Capa escolhida pelo jogador: abre a janela para escolher a imagem; false se cancelou.
+      pickCover: t.procedure.input(z.object({ console: z.string(), title: z.string() })).mutation(async ({ input }) => {
+        const file = await pick(tt('Escolha a nova capa de {0}', { 0: input.title }), ['openFile'], {
+          defaultPath: app.getPath('pictures'), filters: [{ name: tt('Imagens'), extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }],
+        });
+        if (!file) return false;
+        await art.setCover(input.console, input.title, file);
+        return true;
+      }),
+      resetCover: t.procedure.input(z.object({ console: z.string(), title: z.string() })).mutation(({ input }) => art.resetCover(input.console, input.title)),
       onChanged: t.procedure.subscription(async function* ({ signal }) { for await (const _ of on(art.events, 'changed', { signal })) yield Date.now(); }),
       onStatus: t.procedure.subscription(async function* ({ signal }) { for await (const [s] of on(art.events, 'status', { signal })) yield s as string | null; }),
     }),
@@ -242,7 +254,7 @@ export function createRouter(deps: RouterDeps) {
         const f = pending.get(input.id); pending.delete(input.id);
         f?.(input.native ? '\u0000native' : input.path);
       }),
-      list: t.procedure.input(z.object({ path: z.string(), kind: z.enum(['dir', 'exe']) })).query(({ input }) => {
+      list: t.procedure.input(z.object({ path: z.string(), kind: z.enum(['dir', 'exe', 'img']) })).query(({ input }) => {
         const p = parse(input.path);
         return { path: input.path, parent: p.root === input.path ? null : dirname(input.path), entries: listDir(input.path, input.kind), places: places() };
       }),
