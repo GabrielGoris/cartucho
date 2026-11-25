@@ -1,13 +1,16 @@
-## Cartucho 1.5.1
+## Cartucho 1.5.2
 
-### Muito menos memória
+### Jogados recentemente
 
-- **Palco 3D mais leve:** as texturas dos consoles agora vão para a placa de vídeo já comprimidas, ocupando 4 vezes menos memória com a mesma aparência. Os modelos mais detalhados foram simplificados (o palco desenha um terço dos triângulos de antes) e a cópia de cada modelo que ficava sobrando na memória é solta depois de carregada. Em notebook com placa integrada, o Cartucho usa centenas de MB a menos.
-- **Durante o jogo:** com um jogo aberto e o Cartucho em segundo plano, o palco 3D sai da memória depois de 20 segundos e volta quando você chama o Cartucho.
-- O instalador ficou menor.
+- Na biblioteca de cada console, os jogos que você jogou nos últimos 60 dias (até 6) ficam numa parte separada no alto, como na Steam. O resto vira a **Coleção**, em ordem alfabética, com os desinstalados no fim.
+- Cada console mostra do seu jeito: prateleira no PC, um traço separando a fileira no PS5, PS4 e Switch, página própria no Xbox 360, fileiras com um relógio no Wii, um vão na fita do PS3 e títulos nos consoles retrô. O controle anda pelas duas partes.
 
-### Correções
+### Conquistas
 
-- O PS2 aparecia de costas no palco.
-- O ajuste "Palco pixelado" não funcionava; agora vem desligado e, se ligado, vale sempre.
-- Em placas de vídeo sem suporte a texturas comprimidas (máquinas virtuais, drivers antigos), os consoles aparecem em cinza em vez de pretos.
+- **Conquista rara:** quando menos de 5% dos jogadores têm a conquista (Steam, GOG e Recompia), o aviso sai em roxo e ciano, com a porcentagem e um som próprio. Com o jogo aberto, aparece também um aviso por cima do jogo.
+- **100% das conquistas:** ao completar um jogo, o Cartucho comemora com uma tela especial e fanfarra, e um aviso dourado aparece por cima do jogo. A capa ganha o selo de 100%.
+
+### Mais rápido e mais prático
+
+- O Cartucho abre mais rápido: o palco 3D e as telas são carregados à parte, depois da primeira imagem.
+- A rodinha do mouse anda pelos jogos na biblioteca de todos os consoles.
