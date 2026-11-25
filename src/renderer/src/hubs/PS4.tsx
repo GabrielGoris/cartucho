@@ -17,6 +17,7 @@ import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
 import { useFeed, useGameProgress, useHubActions, useHubData, type HubGame, uninstallMsg } from './data';
+import { wheelNav } from './wheel';
 import { tt } from '@shared/i18n';
 
 type Page = 'home' | 'cat' | 'news' | 'ach' | 'time' | 'cfg' | 'game';
@@ -385,7 +386,7 @@ function Home({ row, split, g, st, self, clock, catCount, cname, feed, primary, 
         <span className="p4-clock">{clock}</span>
       </div>
       <div className="p4-rule" />
-      <div className="p4-row" style={{ transform: `translateX(-${Math.max(0, i - 1) * (TILE + GAP) + (split && Math.max(0, i - 1) >= split ? SEC_W + GAP : 0)}px)` }}>
+      <div className="p4-row" onWheel={wheelNav('h')} style={{ transform: `translateX(-${Math.max(0, i - 1) * (TILE + GAP) + (split && Math.max(0, i - 1) >= split ? SEC_W + GAP : 0)}px)` }}>
         {split > 0 && <span className="p4-sec">{tt('Jogados recentemente')}</span>}
         {row.map((x, k) => (
           <Fragment key={x.key}>

@@ -14,6 +14,7 @@ import { GameView } from '../components/GameView';
 import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { useFeed, useHubData, type HubGame } from './data';
+import { wheelNav } from './wheel';
 import { useGameMenu } from './menu';
 import { semArquivos, tileClick } from '@shared/gameclick';
 import { otherConsoles } from '../stage/consoles';
@@ -199,12 +200,14 @@ export function RetroHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game
     : i < split ? SEC_H + Math.floor(i / cols) * rh
     : SEC_H * 2 + Math.ceil(split / cols) * rh + Math.floor((i - split) / cols) * rh;
   const viewH = kind === 'nds' ? 790 : 796;
-  const shift = Math.max(0, yOf(st.idx) + rh - viewH + 40);
+  // Desce o bastante para ver o jogo escolhido inteiro; na primeira fileira de uma parte, mostra também o título dela.
+  const first = !!split && (st.idx < split ? st.idx < cols : st.idx - split < cols);
+  const shift = Math.min(Math.max(0, yOf(st.idx) + rh - viewH + 40), Math.max(0, yOf(st.idx) - (first ? SEC_H : 0)));
   const gridOf = (a: number, b: number) => (
     <div className="rg-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, gridAutoRows: rh }}>{mine.slice(a, b).map((x, j) => item(x, a + j))}</div>
   );
   const games = (
-    <div className="rg-view"><div className="rg-stack" style={{ transform: `translateY(-${shift}px)` }}>
+    <div className="rg-view" onWheel={wheelNav('v')}><div className="rg-stack" style={{ transform: `translateY(-${shift}px)` }}>
       {split ? <>
         <h3 className="rg-sec" style={{ height: SEC_H }}>{tt('Jogados recentemente')}</h3>{gridOf(0, split)}
         <h3 className="rg-sec" style={{ height: SEC_H }}>{tt('Coleção')}<small>{plural(mine.length - split, tt('jogo'), tt('jogos'))}</small></h3>{gridOf(split, mine.length)}

@@ -18,6 +18,7 @@ import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
 import { uninstallMsg, useFeed, useGameProgress, useHubActions, useHubData, type HubGame } from './data';
+import { wheelNav } from './wheel';
 import { tt } from '@shared/i18n';
 
 type Page = 'home' | 'cat' | 'news' | 'time' | 'upd' | 'cfg' | 'game';
@@ -307,7 +308,7 @@ function Home({ v1, row, split, st, feedCount, updCount, newCount, onTile, onDoc
         <span className="clock">{clock}</span>
       </div>
       {!inDock && n > 0 && <div className="tname" style={{ left: x }}>{g ? g.title : tt('Descobrir mais')}</div>}
-      <div className="row" style={{ transform: `translateX(-${shift}px)` }}>
+      <div className="row" onWheel={wheelNav('h')} style={{ transform: `translateX(-${shift}px)` }}>
         {row.map((t, k) => <Tile key={t.key} g={t} on={!inDock && k === i} first={k === 0} onClick={e => onTile(k, e)}
           sec={split && k === 0 ? tt('Jogados recentemente') : split && k === split ? tt('Coleção') : undefined} split={!!split && k === split} />)}
         {n === 0

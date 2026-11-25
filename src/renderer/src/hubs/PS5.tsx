@@ -18,6 +18,7 @@ import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
 import { useFeed, useGameProgress, useHubActions, useHubData, type HubGame, uninstallMsg } from './data';
+import { wheelNav } from './wheel';
 import { tt } from '@shared/i18n';
 
 type Page = 'home' | 'cat' | 'ach' | 'news' | 'cfg' | 'game';
@@ -342,7 +343,7 @@ function Home({ c, g, row, split, st, self, clock, feedCount, catCount, primary,
         <span className="p5-brand">{tt('Cartucho')}</span>
         <span className="p5-clock">{clock}</span>
       </div>
-      <div className="p5-row" style={{ transform: `translateX(-${Math.max(0, i - 2) * 126 + (split && Math.max(0, i - 2) >= split ? SEC_GAP : 0)}px)` }}>
+      <div className="p5-row" onWheel={wheelNav('h')} style={{ transform: `translateX(-${Math.max(0, i - 2) * 126 + (split && Math.max(0, i - 2) >= split ? SEC_GAP : 0)}px)` }}>
         {row.map((x, k) => (
           <button key={x.key} className={`p5-t ${k === i ? 'on' : ''} ${x.installed?.missing ? 'missing' : ''} ${split && k === split ? 'sec' : ''}`} aria-label={x.title} onClick={e => onTile(k, e)}>
             {split > 0 && (k === 0 || k === split) && <span className="p5-sec">{k ? tt('Coleção') : tt('Jogados recentemente')}</span>}

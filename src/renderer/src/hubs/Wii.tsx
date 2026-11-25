@@ -17,6 +17,7 @@ import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
 import { useFeed, useHubActions, useHubData, type HubGame, uninstallMsg } from './data';
+import { wheelNav } from './wheel';
 import { tt } from '@shared/i18n';
 
 type Sp = 'cat' | 'news' | 'ach' | 'time' | 'cfg';
@@ -257,7 +258,7 @@ export function WiiHub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
       <Fit w={1920} h={1080} className="wi" style={{ ['--cc' as string]: c.color }}>
         <div ref={rootRef} className="wi-root" onMouseMove={onMove} onMouseLeave={() => setPtr(null)}
           onMouseDown={() => setPtr(p => p && { ...p, down: true })} onMouseUp={() => setPtr(p => p && { ...p, down: false })}>
-          <div className="wi-grid" key={st.page}>
+          <div className="wi-grid" key={st.page} onWheel={wheelNav('h')}>
             {Array.from({ length: PER }, (_, j) => {
               const ch = pageChans[j];
               if (!ch || ch.gap) return <div key={`e${j}`} className="wi-ch empty" />;

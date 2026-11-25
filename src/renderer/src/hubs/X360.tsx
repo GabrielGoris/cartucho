@@ -18,6 +18,7 @@ import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
 import { useFeed, useHubActions, useHubData, type HubGame, uninstallMsg } from './data';
+import { wheelNav } from './wheel';
 import { tt } from '@shared/i18n';
 
 type Tab = 'home' | 'games' | 'cat' | 'news' | 'ach' | 'time' | 'cfg';
@@ -321,7 +322,7 @@ export function X360Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?
             ))}</nav>
             {tiles ? (
               <>
-                <div className={`x3-pg ${st.dir < 0 ? 'back' : ''}`} key={`${tk}-${Math.floor(slot / per)}`}>
+                <div className={`x3-pg ${st.dir < 0 ? 'back' : ''}`} key={`${tk}-${Math.floor(slot / per)}`} onWheel={wheelNav('h')}>
                   {tiles.length ? tiles.map((t, j) => (
                     <button key={`${t.cap}-${j}`} className={`xt ${t.cls ?? ''} ${st.zone === 'tiles' && j === loc ? 'on' : ''}`} style={{ left: t.x, top: t.y, width: t.w, height: t.h }}
                       onClick={e => {

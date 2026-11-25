@@ -18,6 +18,7 @@ import { CONSOLES } from '../stage/consoles';
 import { BootOverlay, Fit, useClock, useDeviceStatus, useHubToast } from './HubFrame';
 import { Ic, type IconName } from './icons';
 import { useFeed, useGameProgress, useHubActions, useHubData, type HubGame, uninstallMsg } from './data';
+import { wheelNav } from './wheel';
 import { tt } from '@shared/i18n';
 
 type Cat = 'games' | 'cat' | 'news' | 'ach' | 'time' | 'cfg';
@@ -372,7 +373,7 @@ export function PS3Hub({ id, game: game0, tab, onBack }: { id: ConsoleId; game?:
                 <span className="sp" /><span>{date} {clock}</span>
               </div>
             )}
-            <div className={`p3-rib in-${st.dir}`} key={cat}>
+            <div className={`p3-rib in-${st.dir}`} key={cat} onWheel={wheelNav('h')}>
               {divider && <span className={`p3-sec ${divider.right ? 'r' : 'l'}`} style={{ transform: `translate(${divider.x}px, ${divider.y}px)` }}>
                 {divider.right && <b>{tt('Coleção')}</b>}</span>}
               {items.map((x, i) => {
