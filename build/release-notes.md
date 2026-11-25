@@ -1,16 +1,12 @@
-## Cartucho 1.5.2
+## Cartucho 1.5.3
 
-### Jogados recentemente
+### Capa do seu jeito
 
-- Na biblioteca de cada console, os jogos que você jogou nos últimos 60 dias (até 6) ficam numa parte separada no alto, como na Steam. O resto vira a **Coleção**, em ordem alfabética, com os desinstalados no fim.
-- Cada console mostra do seu jeito: prateleira no PC, um traço separando a fileira no PS5, PS4 e Switch, página própria no Xbox 360, fileiras com um relógio no Wii, um vão na fita do PS3 e títulos nos consoles retrô. O controle anda pelas duas partes.
+- Dá para trocar a capa de qualquer jogo: na página do jogo, clique na capa (ou vá em **Mais opções → Trocar a capa**, pelo controle) e escolha uma imagem PNG, JPG, WEBP ou GIF.
+- A capa nova aparece em todo lugar: biblioteca, fileiras dos consoles e página do jogo. Ela continua lá mesmo se você desinstalar e instalar o jogo de novo.
+- **Mais opções → Voltar para a capa original** desfaz a troca.
+- A janela de escolher arquivo do Cartucho, a que funciona com o controle, agora também mostra imagens e tem atalho para a pasta Imagens.
 
-### Conquistas
+### Correções
 
-- **Conquista rara:** quando menos de 5% dos jogadores têm a conquista (Steam, GOG e Recompia), o aviso sai em roxo e ciano, com a porcentagem e um som próprio. Com o jogo aberto, aparece também um aviso por cima do jogo.
-- **100% das conquistas:** ao completar um jogo, o Cartucho comemora com uma tela especial e fanfarra, e um aviso dourado aparece por cima do jogo. A capa ganha o selo de 100%.
-
-### Mais rápido e mais prático
-
-- O Cartucho abre mais rápido: o palco 3D e as telas são carregados à parte, depois da primeira imagem.
-- A rodinha do mouse anda pelos jogos na biblioteca de todos os consoles.
+- Uma capa que falhava ao carregar ficava presa no desenho genérico mesmo quando a imagem chegava depois.
